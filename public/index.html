@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+<meta name="theme-color" content="#070b10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="Real-world hide and seek. Pick a zone, hide, and try to outlast the seekers while your signal pings on a timer.">
+<title>Ghostline</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="map"></div>
+
+<header id="hud" hidden>
+  <div class="hud-left">
+    <span id="hud-phase" class="pill">Lobby</span>
+    <span id="hud-role" class="pill"></span>
+  </div>
+  <div class="hud-timer">
+    <div id="hud-time" class="mono">--:--</div>
+    <div id="hud-sub" class="hud-sub"></div>
+  </div>
+  <div class="hud-right">
+    <button id="btn-chat" class="icon-btn" aria-label="Chat">💬<span id="chat-dot" hidden></span></button>
+    <button id="btn-locate" class="icon-btn" aria-label="Center on me">◎</button>
+  </div>
+</header>
+
+<div id="banner" hidden></div>
+<div id="outzone" hidden role="alert"><div class="oz-t">⛔ OUT OF ZONE</div><div class="oz-n mono" id="oz-n">15</div><div class="oz-s" id="oz-s">Get back inside!</div></div>
+<div id="toasts"></div>
+
+<section id="sheet" hidden></section>
+
+<section id="home" class="overlay">
+  <div class="home-inner">
+    <div class="logo">
+      <svg viewBox="0 0 64 64" width="72" height="72" aria-hidden="true">
+        <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" stroke-width="2" opacity=".35"/>
+        <circle cx="32" cy="32" r="18" fill="none" stroke="currentColor" stroke-width="2" opacity=".6"/>
+        <path d="M32 32 L32 4 A28 28 0 0 1 56 18 Z" fill="currentColor" opacity=".25"/>
+        <circle cx="44" cy="22" r="4" fill="currentColor"/>
+        <circle cx="32" cy="32" r="3" fill="currentColor"/>
+      </svg>
+      <h1>Ghostline</h1>
+      <p class="tag">Hide in the real world. Your signal gives you away.</p>
+    </div>
+    <label class="field"><span>Your name</span>
+      <input id="in-name" maxlength="16" autocomplete="nickname" placeholder="e.g. Mark">
+    </label>
+    <button id="btn-create" class="btn primary big">Create a game</button>
+    <div class="or"><span>or join one</span></div>
+    <div class="join-row">
+      <input id="in-code" class="mono" maxlength="4" placeholder="CODE" autocapitalize="characters" autocomplete="off" spellcheck="false">
+      <button id="btn-join" class="btn big">Join</button>
+    </div>
+    <p id="home-err" class="err" hidden></p>
+    <details class="how">
+      <summary>How it works</summary>
+      <ol>
+        <li>The host draws a play zone on the map and shares the 4-letter code.</li>
+        <li>One player is picked at random to seek. Everyone else gets a head start to hide.</li>
+        <li>Every few minutes, each hider's phone pings their spot to the seekers. Fuzzy, but close.</li>
+        <li>Pick how tags work: GPS range, honor tag (they confirm), or photo tag (snap them, they confirm). The host settles arguments.</li>
+        <li>Mix and match game modes: Infection, Jailbreak, Fugitive, Supply drops, Missions, Capture points, Hot potato, Final sprint and more.</li>
+        <li>The zone closes in over the round. Step out and your phone screams at you. Stay out 15 seconds and you're out.</li>
+        <li>Power-ups like decoy pings, jammers, sonar and radar. Supply drops hold super ones, but everyone can see them.</li>
+      </ol>
+      <p class="fine">Play somewhere safe and public, stay off private property, and watch for traffic. Your location is only shared with players in your game while it runs, and nothing is stored.</p>
+    </details>
+  </div>
+</section>
+
+<div id="modal" class="overlay" hidden><div class="modal-card"></div></div>
+
+<script src="vendor/leaflet.js"></script>
+<script src="vendor/qrcode.js"></script>
+<script src="vendor/supabase.js"></script>
+<script src="config.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

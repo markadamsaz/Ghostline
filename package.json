@@ -1,0 +1,14 @@
+{
+  "name": "ghostline",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Real-world hide and seek with timed location pings",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/sim.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
