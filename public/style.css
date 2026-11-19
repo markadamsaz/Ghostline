@@ -109,6 +109,7 @@ input, select { font: inherit; color: var(--ink); }
 .hud-sub b { color: var(--red); }
 .icon-btn { width: 44px; height: 44px; border-radius: 12px; background: var(--surface-2); border: none; display: grid; place-items: center; position: relative; color: var(--ink); }
 .icon-btn .i { width: 22px; height: 22px; }
+.icon-btn.on { background: var(--red); color: #fff; }
 #chat-dot { position: absolute; top: 7px; right: 7px; width: 10px; height: 10px; border-radius: 10px; background: var(--red); border: 2px solid var(--surface); }
 
 #banner { position: fixed; z-index: 25; top: calc(84px + var(--safe-t)); left: 8px; right: 8px; padding: 11px 14px; border-radius: 14px;

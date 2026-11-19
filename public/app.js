@@ -140,6 +140,7 @@ const chat = [];
 let chatTab = 'all', chatOpen = false, unread = false;
 let sheetCollapsed = false;
 let zoneDraft = null;    // host editing
+let mapView = false;     // lobby: sheet shrinks to just the zone tools so the map is usable
 let replay = null;
 let lastStateSent = 0;
 let hostMissingSince = 0;
@@ -740,6 +741,7 @@ function onState(local) {
 
 function phaseChanged(from, to) {
   if (to === 'hiding') {
+    mapView = false; zoneDraft = null; drawDraft();
     resetLocal();
     replay = null; layers.replay.clearLayers();
     sheetCollapsed = false;
@@ -972,6 +974,7 @@ function renderHud() {
   const p = mine();
   const now = hostNow();
   const phaseEl = $('#hud-phase'), roleEl = $('#hud-role'), t = $('#hud-time'), sub = $('#hud-sub');
+  setMapBtn();
   phaseEl.textContent = { lobby: 'Lobby', hiding: 'Hide phase', hunting: 'Hunt is on', ended: 'Round over' }[S.phase];
   if (p && S.phase !== 'lobby') {
     roleEl.hidden = false;
@@ -1094,7 +1097,7 @@ function renderSheet() {
     setSheet(`<div class="sheet-h"><h2>Joining ${esc(code || '')}…</h2></div><p class="note">Connecting to the game. Keep this screen open.</p><div class="big-actions"><button class="btn" data-act="leave">Back</button></div>`);
     return;
   }
-  if (S.phase === 'lobby') return renderLobby();
+  if (S.phase === 'lobby') return mapView ? renderMapView() : renderLobby();
   if (S.phase === 'ended') return renderEnded();
   renderPlaying();
 }
@@ -1105,24 +1108,48 @@ function geoNote() {
   return '';
 }
 
-function renderLobby() {
-  const host = isHost();
-  const s = S.settings;
-  const ids = Object.keys(S.players).sort((a, b) => S.players[a].joinedAt - S.players[b].joinedAt);
-  const online = ids.filter((id) => peers.has(id));
-  const canStart = host && S.zone && online.length >= 2;
+function zonePanel(host, inMap) {
   const z = S.zone;
   const zoneInfo = z ? `${z.type === 'circle' ? 'Circle, ' + G.fmtDist(z.r) + ' radius' : 'Custom shape, ' + z.pts.length + ' corners'} · ${(G.zoneArea(z) / 1e6).toFixed(2)} km²` : host ? 'No zone yet. Pick one below.' : 'The host is choosing the play zone.';
   const drafting = host && zoneDraft;
   let zoneTools = '';
   if (host) {
-    if (!drafting) zoneTools = `<div class="tools"><button class="btn small" data-act="zoneHere" ${myPos ? '' : 'disabled'}>${ic('locate')}Around me</button><button class="btn small" data-act="drawCircle">${ic('circle')}Pick a circle</button><button class="btn small" data-act="drawPoly">${ic('shape')}Draw a shape</button></div>`;
+    if (drafting && !inMap) zoneTools = `<p class="note">You're drawing a zone.</p><div class="big-actions"><button class="btn small" data-act="zoneCancel">Cancel</button><button class="btn primary small" data-act="openMap">${ic('shape')}Keep drawing on the map</button></div>`;
+    else if (!drafting) zoneTools = `<div class="tools"><button class="btn small" data-act="zoneHere" ${myPos ? '' : 'disabled'}>${ic('locate')}Around me</button><button class="btn small" data-act="drawCircle">${ic('circle')}Pick a circle</button><button class="btn small" data-act="drawPoly">${ic('shape')}Draw a shape</button></div>`;
     else if (zoneDraft.type === 'circle') zoneTools = `<p class="note">${zoneDraft.c ? 'Drag the slider to size it, or tap the map to move it.' : 'Tap the map to drop the center.'}</p>
       <input type="range" class="range" min="50" max="3000" step="25" value="${zoneDraft.r}" data-act="radius" aria-label="Zone radius"><div class="row"><span class="note" style="margin:0">Radius ${G.fmtDist(zoneDraft.r)}</span></div>
       <div class="big-actions"><button class="btn" data-act="zoneCancel">Cancel</button><button class="btn primary" data-act="zoneSave" ${zoneDraft.c ? '' : 'disabled'}>Use this zone</button></div>`;
     else zoneTools = `<p class="note">Tap the map to add corners (${zoneDraft.pts.length} so far, need 3+).</p>
       <div class="big-actions"><button class="btn small" data-act="zoneUndo">Undo</button><button class="btn small" data-act="zoneCancel">Cancel</button><button class="btn primary small" data-act="zoneSave" ${zoneDraft.pts.length >= 3 ? '' : 'disabled'}>Use this zone</button></div>`;
   }
+  return { zoneInfo, zoneTools };
+}
+// map view: the sheet only holds the zone tools, so the map is free to pan, zoom and tap
+function renderMapView() {
+  const { zoneInfo, zoneTools } = zonePanel(isHost(), true);
+  setSheet(`<div class="sheet-h"><h2>Play zone</h2><button class="btn small" data-act="mapDone">Back to lobby</button></div>
+    <p class="note" style="margin:0 0 10px">${zoneInfo}</p>${zoneTools}`, 'map');
+}
+function setMapBtn() {
+  const b = $('#btn-map'); if (!b) return;
+  const on = mapView && !chatOpen;
+  b.hidden = !S || S.phase !== 'lobby';
+  b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
+}
+function setMapView(on) {
+  mapView = on;
+  if (on) { chatOpen = false; sheetCollapsed = false; }
+  renderSheet(); setMapBtn();
+  if (on && S && S.zone && !zoneDraft) requestAnimationFrame(() => fitZone(S.zone));
+}
+
+function renderLobby() {
+  const host = isHost();
+  const s = S.settings;
+  const ids = Object.keys(S.players).sort((a, b) => S.players[a].joinedAt - S.players[b].joinedAt);
+  const online = ids.filter((id) => peers.has(id));
+  const canStart = host && S.zone && online.length >= 2;
+  const { zoneInfo, zoneTools } = zonePanel(host, false);
   // the host gets controls; everyone else gets a plain-English summary of the rules
   const rules = host ? `<div class="settings">
     <label class="set" style="grid-column:1/-1">How tags work${selectHtml('tagMode', s.tagMode, false)}</label>
@@ -1401,9 +1428,11 @@ function act(a, el) {
       break;
     }
     case 'kick': if (isHost() && confirm('Remove ' + P(el.dataset.id)?.name + '?')) hostApply((s) => { delete s.players[el.dataset.id]; s.kicked.push(el.dataset.id); }); break;
-    case 'zoneHere': if (myPos) { hostApply((s) => { s.zone = { type: 'circle', c: myPos.p, r: 300 }; }); fitZone(S.zone); } break;
-    case 'drawCircle': zoneDraft = { type: 'circle', c: null, r: 300 }; toast('Tap the map to set the center'); renderSheet(); break;
-    case 'drawPoly': zoneDraft = { type: 'poly', pts: [] }; toast('Tap the map to add corners'); renderSheet(); break;
+    case 'zoneHere': if (myPos) { mapView = true; hostApply((s) => { s.zone = { type: 'circle', c: myPos.p, r: 300 }; }); setMapBtn(); requestAnimationFrame(() => fitZone(S.zone)); } break;
+    case 'drawCircle': zoneDraft = { type: 'circle', c: null, r: 300 }; toast('Tap the map to set the center'); setMapView(true); break;
+    case 'drawPoly': zoneDraft = { type: 'poly', pts: [] }; toast('Tap the map to add corners'); setMapView(true); break;
+    case 'openMap': setMapView(true); break;
+    case 'mapDone': setMapView(false); break;
     case 'zoneUndo': zoneDraft.pts.pop(); drawDraft(); renderSheet(); break;
     case 'zoneCancel': zoneDraft = null; drawDraft(); renderSheet(); break;
     case 'zoneSave': {
@@ -1453,7 +1482,7 @@ function act(a, el) {
     case 'replay': startReplay(); break;
     case 'replayClose': if (replay) { replay.playing = false; replay = null; layers.replay.clearLayers(); renderEnded(); } break;
     case 'replayPlay': if (replay) { if (replay.playing) { replay.playing = false; renderEnded(); } else { if (replay.pos >= 1) replay.pos = 0; startReplayLoop(); } } break;
-    case 'closeChat': chatOpen = false; renderSheet(); break;
+    case 'closeChat': chatOpen = false; renderSheet(); setMapBtn(); break;
     case 'chatTab': chatTab = el.dataset.tab; renderChat(); break;
   }
 }
@@ -1558,7 +1587,9 @@ function hostRulingsTick() {
 
 map.on('click', (e) => {
   const ll = [e.latlng.lat, e.latlng.lng];
+  if (chatOpen) return; // chat covers the controls, so a stray tap shouldn't drop a point
   if (zoneDraft && isHost() && S.phase === 'lobby') {
+    if (!mapView) return;
     if (zoneDraft.type === 'circle') zoneDraft.c = ll; else zoneDraft.pts.push(ll);
     drawDraft(); renderSheet();
     return;
@@ -1584,7 +1615,8 @@ function drawDraft() {
 }
 
 $('#btn-locate').addEventListener('click', () => { if (myPos) map.setView(myPos.p, Math.max(map.getZoom(), 17)); else toast('No location yet'); });
-$('#btn-chat').addEventListener('click', () => { chatOpen = !chatOpen; unread = false; $('#chat-dot').hidden = true; if (chatOpen) renderChat(); else renderSheet(); });
+$('#btn-chat').addEventListener('click', () => { chatOpen = !chatOpen; unread = false; $('#chat-dot').hidden = true; if (chatOpen) renderChat(); else renderSheet(); setMapBtn(); });
+$('#btn-map').addEventListener('click', () => setMapView(!(mapView && !chatOpen)));
 
 // ---------------- home screen ----------------
 const inName = $('#in-name'), inCode = $('#in-code');
@@ -1620,7 +1652,7 @@ function leave(msg) {
   net = null; S = null; code = null; prevPhase = null; prevRound = 0; zoneDraft = null; replay = null; fittedZone = false;
   processed.clear(); chat.length = 0; resetLocal();
   layers.zone.clearLayers(); layers.marks.clearLayers(); layers.replay.clearLayers(); layers.draft.clearLayers();
-  $('#home').hidden = false; $('#hud').hidden = true; sheet.hidden = true; banner(null);
+  mapView = false; $('#home').hidden = false; $('#hud').hidden = true; sheet.hidden = true; banner(null);
   $('#blindfold')?.remove();
   history.replaceState(null, '', location.pathname);
   if (msg) showHomeErr(msg);
