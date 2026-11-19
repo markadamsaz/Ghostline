@@ -73,6 +73,7 @@ await host.page.click('[data-act="zoneSave"]');
 ok(await until(async () => (await state(others[0]))?.zone?.type === 'circle', 5000, 'zone'), 'zone drawn by host reaches players');
 await G(host, ([c]) => window.__gl.setZone({ type: 'circle', c, r: 400 }), [C]);
 await G(host, () => window.__gl.setSettings({ hideSec: 3, huntSec: 45, pingSec: 9, blurM: 25, tagRadiusM: 15, graceSec: 4, shrinkTo: 0.5, shrinkStyle: 'steps', strictZone: false, drops: false, starter: true, infection: true }));
+await G(host, () => window.__gl.act('mapDone')); // back from the map to the lobby
 if (SHOTS) await host.page.screenshot({ path: SHOTS + '/1-lobby.png' });
 await host.page.click('[data-act="start"]');
 
@@ -323,6 +324,27 @@ await host.page.click('[data-act="again"]');
 ok(await until(async () => (await state(others[0])).phase === 'lobby', 5000, 'again3'), 'back to the lobby');
 await G(host, () => window.__gl.setSettings({ hideSec: 2, huntSec: 120, tagMode: 'photo', fugitive: true, infection: true, jail: false, starter: false, drops: false,
   missions: false, capture: false, potato: false, sprint: false, strictZone: false }));
+// ---- points shop, in the lobby
+st = await state(host);
+ok(all.every((ph) => (st.wallet || {})[ph.pid] === st.totals[ph.pid]), 'everyone can spend exactly what they earned (mid-round points not counted twice)');
+const Wl = async (id) => (((await state(host)).wallet || {})[id] || 0);
+const Bp = all.find((ph) => ph.pid === B.pid);
+await G(host, (id) => window.__gl.setWallet(id, 500), B.pid);
+await until(async () => (await Wl(B.pid)) === 500, 4000, 'fund');
+await Bp.page.click('[data-act="toggleShop"]');
+await Bp.page.click('[data-act="buy"][data-k="cloak"]');
+await until(async () => (await Wl(B.pid)) === 440, 4000, 'buy1');
+await Bp.page.click('[data-act="buy"][data-k="radar"]');
+ok(await until(async () => { const x = (await state(host)).players[B.pid].bank || {}; return x.cloak === 1 && x.radar === 1; }, 4000, 'bank'), 'picks bought in the lobby are saved for later');
+ok((await Wl(B.pid)) === 400, 'cloak (60) and radar (40) come off the balance');
+if (SHOTS) await Bp.page.screenshot({ path: SHOTS + '/14-shop.png' });
+await Bp.page.click('[data-act="buy"][data-k="icon"][data-opt="star"]');
+ok(await until(async () => (await state(host)).players[B.pid].icon === 'star', 4000, 'icon'), 'a badge can be bought');
+await G(host, (id) => window.__gl.setWallet(id, 30), A.pid);
+await until(async () => (await Wl(A.pid)) === 30, 4000, 'fund2');
+await G(A, () => window.__gl.send('buy', { k: 'spotlight' }));
+await sleep(800);
+ok((await Wl(A.pid)) === 30 && !((await state(host)).players[A.pid].bank || {}).spotlight, "you can't buy what you can't afford");
 for (const ph of all) await setPos(ph, C);
 await host.page.click('[data-act="start"]');
 ok(await until(async () => (await state(host)).phase === 'hunting', 8000, 'hunting3'), 'fugitive round starts');
@@ -330,6 +352,49 @@ st = await state(host);
 const runners = all.filter((p) => st.players[p.pid].role === 'hider');
 ok(runners.length === 1, `fugitive: one runner (${runners[0]?.name}), everyone else hunts`);
 const runner = runners[0], hunter = all.find((p) => st.players[p.pid].role === 'seeker');
+// ---- points shop, mid-round
+st = await state(host);
+{
+  const r0 = st.players[runners[0].pid], b0 = st.players[B.pid];
+  ok(b0.role === 'hider' ? (b0.inv.cloak === 1 && b0.bank.radar === 1) : (b0.inv.radar === 1 && b0.bank.cloak === 1), 'saved picks arrive in a round where you have that role, the rest wait');
+}
+{
+  const rn = runners[0], hn = all.find((p) => st.players[p.pid].role === 'seeker');
+  await G(host, (ids) => ids.forEach((id) => window.__gl.setWallet(id, 1000)), [rn.pid, hn.pid]);
+  await until(async () => (await Wl(rn.pid)) === 1000 && (await Wl(hn.pid)) === 1000, 4000, 'fund3');
+  await G(hn, () => window.__gl.send('buy', { k: 'cloak' }));
+  await sleep(800);
+  ok((await Wl(hn.pid)) === 1000, "seekers can't buy hider picks mid-round");
+  await G(rn, () => window.__gl.send('buy', { k: 'peek' }));
+  await until(async () => (await state(rn)).players[rn.pid].inv.peek === 1, 4000, 'peek bought');
+  await G(rn, () => window.__gl.act('item', { dataset: { item: 'peek' } }));
+  ok(await until(async () => (await G(rn, (sp) => window.__gl.local.peekUntil > 0 && !!window.__gl.local.seekerLocs[sp], hn.pid)), 5000, 'peek'), 'peek shows the hider a seeker');
+  await G(hn, () => window.__gl.send('buy', { k: 'trail' }));
+  await until(async () => (await state(hn)).players[hn.pid].inv.trail === 1, 4000, 'trail bought');
+  await G(hn, () => window.__gl.act('item', { dataset: { item: 'trail' } }));
+  ok(await until(async () => (await G(hn, (id) => !!window.__gl.local.trailLocs[id], rn.pid)) && (await hn.page.isVisible('#trail')), 8000, 'trail'), 'hot trail shows the seeker an arrow to the nearest hider');
+  if (SHOTS) await hn.page.screenshot({ path: SHOTS + '/15-hot-trail.png' });
+  await G(hn, () => window.__gl.send('buy', { k: 'lockdown' }));
+  await until(async () => (await state(hn)).players[hn.pid].inv.lockdown === 1, 4000, 'lock bought');
+  await G(hn, () => window.__gl.act('item', { dataset: { item: 'lockdown' } }));
+  ok(await until(async () => (await state(host)).lockdownUntil > Date.now(), 4000, 'lockdown'), 'lockdown starts');
+  await G(rn, () => window.__gl.send('buy', { k: 'cloak' }));
+  await until(async () => ((await state(rn)).players[rn.pid].inv.cloak || 0) >= 1, 4000, 'cloak bought');
+  const nCloak = (await state(host)).players[rn.pid].inv.cloak;
+  await G(rn, () => window.__gl.send('useItem', { item: 'cloak' }));
+  await sleep(800);
+  ok((await state(host)).players[rn.pid].inv.cloak === nCloak, "during lockdown hiders can't use power-ups");
+  await G(hn, () => window.__gl.send('buy', { k: 'spotlight' }));
+  await until(async () => (await state(hn)).players[hn.pid].inv.spotlight === 1, 4000, 'spot bought');
+  await G(hn, (id) => window.__gl.send('useItem', { item: 'spotlight', target: id }), rn.pid);
+  ok(await until(async () => (await G(hn, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'xray' && x.blur === 0), rn.pid)), 6000, 'spotlight'), "spotlight shows the hider's exact spot");
+  await G(rn, () => window.__gl.send('buy', { k: 'pass' }));
+  await until(async () => (await state(rn)).players[rn.pid].inv.pass === 1, 4000, 'pass bought');
+  await G(rn, (sp) => window.__gl.send('caught', { who: window.__gl.me.id, by: sp, how: 'self', p: null }), hn.pid);
+  ok(await until(async () => { const s = await state(host); return s.events.some((e) => e.k === 'passHit' && e.who === rn.pid) && !s.players[rn.pid].caughtAt && !s.players[rn.pid].inv.pass; }, 5000, 'pass'), 'an escape pass gets you out of one catch');
+  ok((await Wl(hn.pid)) === 1000 - 60 - 70 - 80 && (await Wl(rn.pid)) === 1000 - 50 - 60 - 120, 'every buy is charged once by the host');
+}
+
 ok(await hunter.page.isVisible('[data-act="snap"]'), 'seekers get a SNAP TAG button in photo mode');
 const png = makePng(64, 48);
 await hunter.page.setInputFiles('#snap-in', { name: 'tag.png', mimeType: 'image/png', buffer: png });

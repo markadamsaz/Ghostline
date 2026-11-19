@@ -50,6 +50,19 @@ const ICONS = {
   eye: '<path d="M2 12c1.5-3.5 5.5-7 10-7s8.5 3.5 10 7c-1.5 3.5-5.5 7-10 7s-8.5-3.5-10-7z"/><circle cx="12" cy="12" r="3"/>',
   zone: '<circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 2.5"/>',
   hide: '<path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><path d="M9 9h6"/>',
+  cloak: '<path d="M12 3c-4 0-6 3-6 7v10l3-2 3 2 3-2 3 2V10c0-4-2-7-6-7z"/><path d="M4 4l16 16"/>',
+  pass: '<path d="M3 8a2 2 0 0 0 0 4v0a2 2 0 0 1 0 4v2h18v-2a2 2 0 0 1 0-4 2 2 0 0 0 0-4V6H3z"/><path d="M14 6v12" stroke-dasharray="2 2"/>',
+  peek: '<path d="M2 12c1.5-3.5 5.5-7 10-7s8.5 3.5 10 7"/><circle cx="12" cy="12" r="3"/><path d="M12 19v2"/>',
+  trail: '<circle cx="12" cy="12" r="9"/><path d="M12 6l3 7-3-1.5L9 13z"/>',
+  spotlight: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>',
+  lockdown: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  shop: '<path d="M4 7h16l-1.5 12h-13z"/><path d="M9 7a3 3 0 0 1 6 0"/>',
+  star: '<path d="M12 3l2.8 5.8 6.2.9-4.5 4.4 1 6.2L12 17.4 6.5 20.3l1-6.2L3 9.7l6.2-.9z"/>',
+  heart: '<path d="M12 20s-8-4.6-8-10.2A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 8 2.8C20 15.4 12 20 12 20z"/>',
+  diamond: '<path d="M12 3l8 9-8 9-8-9z"/>',
+  flame: '<path d="M12 21a6 6 0 0 0 6-6c0-4-3-6-4-10-2 2-3 4-3 6-1-1-2-2-2-3-2 2-3 4-3 7a6 6 0 0 0 6 6z"/>',
+  bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
 };
 const ic = (name, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 const ROLE_INK = { hider: '#111111', seeker: '#e10600' };
@@ -66,7 +79,30 @@ const ITEM_INFO = {
   blackout: { ic: 'blackout', name: 'Blackout', desc: "Seekers' maps go dark for 45 s", role: 'hider', sup: true },
   xray: { ic: 'xray', name: 'X-ray', desc: 'Every hider pings their exact spot now', role: 'seeker', sup: true },
   tracker: { ic: 'tracker', name: 'Tracker', desc: 'Hiders ping every 15 s for a minute', role: 'seeker', sup: true },
+  // bought in the points shop
+  cloak: { ic: 'cloak', name: 'Cloak', desc: 'No pings of any kind for 30 s', role: 'hider' },
+  pass: { ic: 'pass', name: 'Escape pass', desc: 'Ready: the next time you get caught, you get away', role: 'hider' },
+  peek: { ic: 'peek', name: 'Peek', desc: 'See the nearest seeker for 10 s', role: 'hider' },
+  trail: { ic: 'trail', name: 'Hot trail', desc: 'An arrow points to the nearest hider for 20 s', role: 'seeker' },
+  spotlight: { ic: 'spotlight', name: 'Spotlight', desc: "Pick a hider and see their exact spot for 10 s", role: 'seeker' },
+  lockdown: { ic: 'lockdown', name: 'Lockdown', desc: "Hiders can't use power-ups for 30 s", role: 'seeker' },
 };
+// points shop: spend the points you earn. Bought in the lobby, an item waits until a round where you have that role
+const SHOP = {
+  powerup: { ic: 'starter', name: 'Power-up', desc: 'A random decoy, jammer or sonar', cost: 40, role: 'hider' },
+  peek: { cost: 50, role: 'hider' },
+  cloak: { cost: 60, role: 'hider' },
+  pass: { cost: 120, role: 'hider' },
+  radar: { cost: 40, role: 'seeker' },
+  trail: { cost: 60, role: 'seeker' },
+  lockdown: { cost: 70, role: 'seeker' },
+  spotlight: { cost: 80, role: 'seeker' },
+  icon: { ic: 'star', name: 'Badge', desc: 'Your badge shows instead of your initial. Lasts all game', cost: 25 },
+};
+const BADGES = ['star', 'heart', 'diamond', 'flame', 'bolt', 'moon'];
+const shopInfo = (k) => ({ ...(ITEM_INFO[k] || {}), ...SHOP[k] });
+function giveShop(w, k) { const item = k === 'powerup' ? pick(BASICS.hider) : k; w.inv = w.inv || {}; w.inv[item] = (w.inv[item] || 0) + 1; return item; }
+function credit(s, id, pts) { s.wallet = s.wallet || {}; s.wallet[id] = (s.wallet[id] || 0) + pts; const w = s.players[id]; if (w) w.banked = (w.banked || 0) + pts; }
 const SUPERS = { hider: ['ghost', 'shield', 'swarm', 'blackout'], seeker: ['xray', 'tracker'] };
 const BASICS = { hider: ['decoy', 'jammer', 'sonar'], seeker: ['radar'] };
 const STARTER = { hider: { decoy: 1, jammer: 1, sonar: 1 }, seeker: { radar: 1 } };
@@ -145,13 +181,14 @@ let replay = null;
 let lastStateSent = 0;
 let hostMissingSince = 0;
 
+let shopOpen = false;
 function resetLocal() {
   L_ = {
     pings: [],             // {id, p, blur, kind, n, t}
     lastPingN: -1, warnedN: -1,
     decoyArmed: null, jamArmed: false, placingDecoy: false,
     outSince: null, lastBreach: 0,
-    sonarUntil: 0, seekerLocs: {},
+    sonarUntil: 0, seekerLocs: {}, peekUntil: 0, trailUntil: 0, trailLocs: {}, trailSendUntil: 0, spotUntil: 0,
     tracks: {}, myTrack: [],
     tagCooldown: 0, lastShrinkK: 0,
     swarmArmed: false, lastTrack: 0, lastPotN: -1, sentAt: {}, capStart: {}, capPing: {}, dqSent: false, ozSec: -1,
@@ -322,7 +359,7 @@ async function connect(roomCode, asHost) {
     S = {
       code, v: 1, epoch: 1, hostId: me.id, phase: 'lobby', round: 0,
       settings: { ...DEFAULT_SETTINGS }, zone: null,
-      players: {}, events: [], kicked: [], results: null, totals: {},
+      players: {}, events: [], kicked: [], results: null, totals: {}, wallet: {},
       roundStart: 0, huntStart: 0, huntEnd: 0, endedAt: 0,
     };
     addPlayer(S, me.id, me.name);
@@ -431,6 +468,11 @@ function handle(m, self) {
           s.events.push({ id: evId(), k: 'shieldHit', who: d.who, by, t: now });
           return;
         }
+        if (d.how !== 'zone' && w.inv && w.inv.pass) { // escape pass: shake them off once
+          w.inv.pass--; if (!w.inv.pass) delete w.inv.pass;
+          s.events.push({ id: evId(), k: 'passHit', who: d.who, by, t: now });
+          return;
+        }
         w.caughtAt = now; w.caughtBy = by;
         const hadItems = Object.values(w.inv || {}).some((n) => n > 0);
         w.inv = {}; w.fx = {};
@@ -441,6 +483,7 @@ function handle(m, self) {
           reward = hadItems ? pick(SUPERS.seeker) : 'radar';
           const b = s.players[by]; b.inv = b.inv || {}; b.inv[reward] = (b.inv[reward] || 0) + 1;
         }
+        if (by && s.players[by]) credit(s, by, 50); // catch points can be spent right away
         s.events.push({ id: evId(), k: 'catch', who: d.who, by, how: d.how, p: d.p || null, reward, t: now });
         checkEnd(s);
       });
@@ -449,10 +492,13 @@ function handle(m, self) {
     case 'useItem': {
       if (!isHost() || S.phase !== 'hunting') return;
       const p = S.players[m.from], item = d.item;
-      if (!p || !puOn(S.settings) || !ITEM_INFO[item]) return;
+      if (!p || !ITEM_INFO[item] || item === 'pass') return;
       const needs = ITEM_INFO[item].role;
       if (p.role !== needs || (needs === 'hider' && !alive(p))) return;
       if (!p.inv || (p.inv[item] || 0) < 1) return;
+      if (needs === 'hider' && Date.now() < (S.lockdownUntil || 0)) return;
+      const tgt = S.players[d.target];
+      if (item === 'spotlight' && !(tgt && tgt.role === 'hider' && alive(tgt))) return;
       hostApply((s) => {
         const q = s.players[m.from], now = Date.now();
         q.inv[item]--; if (!q.inv[item]) delete q.inv[item];
@@ -461,7 +507,10 @@ function handle(m, self) {
         if (item === 'shield') q.fx.shield = 1;
         if (item === 'blackout') s.blackoutUntil = now + 45000;
         if (item === 'tracker') s.trackerUntil = now + 60000;
-        if (['radar', 'sonar', 'blackout', 'xray', 'tracker', 'ghost', 'shield'].includes(item)) s.events.push({ id: evId(), k: item, by: m.from, t: now });
+        if (item === 'cloak') q.fx.ghostUntil = Math.max(q.fx.ghostUntil || 0, now + 30000);
+        if (item === 'lockdown') s.lockdownUntil = now + 30000;
+        if (['radar', 'sonar', 'blackout', 'xray', 'tracker', 'ghost', 'shield', 'cloak', 'peek', 'trail', 'lockdown'].includes(item)) s.events.push({ id: evId(), k: item, by: m.from, t: now });
+        if (item === 'spotlight') s.events.push({ id: evId(), k: 'spotlight', by: m.from, target: d.target, t: now });
       });
       break;
     }
@@ -501,7 +550,7 @@ function handle(m, self) {
         if (!q.mission || q.mission.id !== d.id || !ok(q.mission.p)) return;
         hostApply((s) => {
           const w = s.players[m.from];
-          w.bonus = (w.bonus || 0) + 25; w.missionsDone = (w.missionsDone || 0) + 1;
+          w.bonus = (w.bonus || 0) + 25; w.missionsDone = (w.missionsDone || 0) + 1; credit(s, m.from, 25);
           const item = puOn(s.settings) ? pick(BASICS.hider) : null;
           if (item) { w.inv = w.inv || {}; w.inv[item] = (w.inv[item] || 0) + 1; }
           w.mission = { id: 'm' + Math.random().toString(36).slice(2, 7), p: randomSpotIn(finalZone(), d.p, 80) };
@@ -513,7 +562,7 @@ function handle(m, self) {
         if (!f || !ok(f.p) || !(d.held >= 55000)) return;
         hostApply((s) => {
           const x = s.flags.find((y) => y.id === d.id); if (!x || x.by) return;
-          x.by = m.from; const w = s.players[m.from]; w.bonus = (w.bonus || 0) + 50; w.flags = (w.flags || 0) + 1;
+          x.by = m.from; const w = s.players[m.from]; w.bonus = (w.bonus || 0) + 50; w.flags = (w.flags || 0) + 1; credit(s, m.from, 50);
           s.events.push({ id: evId(), k: 'flag', who: m.from, t: now });
         });
       }
@@ -563,6 +612,28 @@ function handle(m, self) {
     case 'ruling': {
       if (!S || m.from !== S.hostId) return;
       if (d.by === me.id && !d.counted) toast(`Host ruled: no catch on <b>${nm(d.target)}</b>.`, 'seeker', 'close');
+      break;
+    }
+    case 'buy': {
+      if (!isHost() || !S) return;
+      const q = S.players[m.from], it = SHOP[d.k], now = Date.now();
+      if (!q || !it || ((S.wallet || {})[m.from] || 0) < it.cost) return;
+      const inRound = S.phase === 'hiding' || S.phase === 'hunting';
+      if (d.k === 'icon') { if (!BADGES.includes(d.opt)) return; }
+      else if (inRound) { if (it.role !== q.role || (q.role === 'hider' && !alive(q))) return; }
+      hostApply((s) => {
+        s.wallet = s.wallet || {}; s.wallet[m.from] -= it.cost;
+        const w = s.players[m.from];
+        let got = d.k, saved = false;
+        if (d.k === 'icon') w.icon = d.opt;
+        else if (inRound) got = giveShop(w, d.k);
+        else { w.bank = w.bank || {}; w.bank[d.k] = (w.bank[d.k] || 0) + 1; saved = true; }
+        s.events.push({ id: evId(), k: 'buy', who: m.from, item: got, saved, t: now });
+      });
+      break;
+    }
+    case 'hiderLoc': {
+      if (hostNow() < (L_.trailUntil || 0) && Array.isArray(d.p)) { L_.trailLocs[m.from] = { p: d.p, t: hostNow() }; updateTrail(); }
       break;
     }
     case 'seekerLoc': {
@@ -640,7 +711,14 @@ function startRound() {
       if (seekers.has(id)) p.seekerCount = (p.seekerCount || 0) + 1; else if (s.settings.fugitive) p.runnerCount = (p.runnerCount || 0) + 1;
       p.caughtAt = null; p.caughtBy = null; p.fx = {}; p.bonus = 0; p.potatoMs = 0; p.extracted = null; p.mission = null; p.flags = 0; p.missionsDone = 0;
       p.inv = s.settings.starter ? { ...STARTER[p.role] } : {};
+      p.banked = 0;
+      for (const [k, n] of Object.entries(p.bank || {})) { // shop items saved for a round with this role
+        if (!SHOP[k] || SHOP[k].role !== p.role) continue;
+        for (let i = 0; i < n; i++) giveShop(p, k);
+        delete p.bank[k];
+      }
     }
+    s.wallet = s.wallet || {}; s.lockdownUntil = 0;
     s.drops = []; s.flags = []; s.jail = null; s.potato = null; s.sprint = null; s.blackoutUntil = 0; s.trackerUntil = 0; s.jailCooldownUntil = 0;
     const now = Date.now();
     s.round++; s.phase = 'hiding';
@@ -710,7 +788,12 @@ function endRound(s, why) {
   }
   for (const e of s.events) if (e.k === 'catch' && e.by && res[e.by]) { res[e.by].catches++; res[e.by].pts += 50; }
   s.results = res;
-  for (const [id, r] of Object.entries(res)) s.totals[id] = (s.totals[id] || 0) + r.pts;
+  s.wallet = s.wallet || {};
+  for (const [id, r] of Object.entries(res)) {
+    s.totals[id] = (s.totals[id] || 0) + r.pts;
+    s.wallet[id] = (s.wallet[id] || 0) + Math.max(0, r.pts - (s.players[id].banked || 0)); // what was not already paid out mid-round
+    s.players[id].banked = 0;
+  }
 }
 function hostTick() {
   if (!isHost()) return;
@@ -805,6 +888,22 @@ function onEvent(e) {
   if (e.k === 'extract') { beep('alarm'); buzz([200, 100, 200, 100, 400]); toast('Extraction point is open. Hiders: reach it for +100. Seekers: guard it.', 'good', 'sprint'); }
   if (e.k === 'extracted') toast(self_(e.who) ? 'You made it out. +100. You are safe.' : `<b>${nm(e.who)}</b> escaped`, self_(e.who) ? 'good' : tone(e.who), 'sprint');
   if (e.k === 'breakout') { beep('alarm'); toast((e.freed || []).includes(me.id) ? `<b>${nm(e.by)}</b> broke you out. Run!` : `<b>${nm(e.by)}</b> broke ${e.freed.length} out of jail`, (e.freed || []).includes(me.id) ? 'good' : tone(e.by), 'jail'); }
+  if (e.k === 'buy' && self_(e.who)) toast(e.item === 'icon' ? 'New badge' : `<b>${shopInfo(e.item).name || e.item}</b> ${e.saved ? 'saved for your next round as ' + (SHOP[e.item]?.role || 'player') : 'is yours'}`, 'good', e.item === 'icon' ? 'star' : shopInfo(e.item).ic || 'shop');
+  if (e.k === 'passHit') { beep('alarm'); toast(self_(e.who) ? 'Escape pass used. You got away. Run!' : `<b>${nm(e.who)}</b> used an escape pass and got away`, self_(e.who) ? 'good' : '', 'pass'); }
+  if (e.k === 'cloak' && self_(e.by)) toast('Cloaked: no pings for 30 s.', 'hider', 'cloak');
+  if (e.k === 'lockdown') { beep('alarm'); toast(p && p.role === 'hider' ? `<b>${nm(e.by)}</b> locked down your power-ups for 30 s` : `Lockdown by <b>${nm(e.by)}</b>: hiders can't use power-ups for 30 s`, p && p.role === 'hider' ? 'hider' : 'seeker', 'lockdown'); }
+  if (e.k === 'peek') {
+    if (p && p.role === 'seeker') { if (myPos) send('seekerLoc', { p: myPos.p }); }
+    else if (self_(e.by)) { L_.peekUntil = hostNow() + 10000; toast('Peek: the nearest seeker shows for 10 s', 'hider', 'peek'); }
+  }
+  if (e.k === 'trail') {
+    if (p && p.role === 'hider' && alive(p)) { L_.trailSendUntil = hostNow() + 20000; L_.lastTrailSend = 0; }
+    if (self_(e.by)) { L_.trailUntil = hostNow() + 20000; L_.trailLocs = {}; toast('Hot trail: follow the arrow for 20 s', 'seeker', 'trail'); }
+  }
+  if (e.k === 'spotlight') {
+    if (self_(e.target) && p && alive(p)) { beep('alarm'); buzz([200, 80, 200]); toast(`<b>${nm(e.by)}</b> put a spotlight on you: exact spot for 10 s`, 'hider', 'spotlight'); L_.spotUntil = hostNow() + 10000; L_.lastSpot = 0; }
+    else if (self_(e.by)) toast(`Spotlight on <b>${nm(e.target)}</b>`, 'seeker', 'spotlight');
+  }
   if (e.k === 'sonar') {
     if (p && p.role === 'seeker') { if (myPos) send('seekerLoc', { p: myPos.p }); toast('A hider used sonar. They can see you for 30 s.', 'seeker', 'sonar'); }
     else { L_.sonarUntil = hostNow() + 30000; toast(`Sonar by <b>${nm(e.by)}</b>: seekers visible for 30 s`, 'hider', 'sonar'); }
@@ -831,16 +930,59 @@ function sendPing(kind = 'scheduled', n = null) {
   send('ping', { kind, n, p: G.randomInDisk(myPos.p, s.blurM), blur: s.blurM });
 }
 
+function bearing(a, b) {
+  const r = Math.PI / 180, y = Math.sin((b[1] - a[1]) * r) * Math.cos(b[0] * r);
+  const x = Math.cos(a[0] * r) * Math.sin(b[0] * r) - Math.sin(a[0] * r) * Math.cos(b[0] * r) * Math.cos((b[1] - a[1]) * r);
+  return (Math.atan2(y, x) / r + 360) % 360;
+}
+function updateTrail() {
+  let el = $('#trail');
+  if (!el) { el = document.createElement('div'); el.id = 'trail'; el.hidden = true; document.body.appendChild(el); }
+  const now = hostNow();
+  let best = null;
+  if (now < (L_.trailUntil || 0) && myPos && S) {
+    for (const [id, x] of Object.entries(L_.trailLocs || {})) {
+      const q = P(id);
+      if (!q || q.role !== 'hider' || !alive(q) || now - x.t > 15000) continue;
+      const dd = G.dist(myPos.p, x.p);
+      if (!best || dd < best.d) best = { d: dd, p: x.p };
+    }
+  }
+  if (!best) { el.hidden = !(now < (L_.trailUntil || 0)); el.innerHTML = `${ic('trail')}<span class="tr-t">Picking up the trail…</span>`; return; }
+  const band = best.d < 100 ? 'very close' : best.d < 300 ? 'close' : best.d < 800 ? 'getting warm' : 'far';
+  el.hidden = false;
+  el.innerHTML = `<span class="tr-a" style="transform:rotate(${Math.round(bearing(myPos.p, best.p))}deg)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 17-7-4-7 4z"/></svg></span><span class="tr-t">Nearest hider · ${band} · ${Math.ceil((L_.trailUntil - now) / 1000)} s</span>`;
+}
+function shopHtml() {
+  const p = mine();
+  if (!p || !S) return '';
+  const bal = (S.wallet || {})[me.id] || 0;
+  const inRound = S.phase === 'hiding' || S.phase === 'hunting';
+  if (inRound && p.role === 'hider' && !alive(p)) return '';
+  const roles = inRound ? [p.role] : ['hider', 'seeker'];
+  const btn = (k) => { const it = shopInfo(k); return `<button class="item shop" data-act="buy" data-k="${k}" ${bal < it.cost ? 'disabled' : ''}>${ic(it.ic)}${it.name}<span class="cost">${it.cost}</span><small>${k === 'pass' ? 'The next time you get caught, you get away' : it.desc}</small></button>`; };
+  const saved = Object.entries(p.bank || {}).filter(([, n]) => n > 0).map(([k, n]) => `${shopInfo(k).name}${n > 1 ? ' ×' + n : ''}`);
+  const body = shopOpen ? `
+    ${roles.map((r) => `${inRound ? '' : `<div class="section-t" style="margin-top:12px">${r === 'hider' ? 'If you hide' : 'If you seek'}</div>`}<div class="items">${Object.keys(SHOP).filter((k) => SHOP[k].role === r).map(btn).join('')}</div>`).join('')}
+    <div class="section-t" style="margin-top:12px">Badge · ${SHOP.icon.cost} pts</div>
+    <div class="row badges">${BADGES.map((b) => `<button class="btn small badge ${p.icon === b ? 'on' : ''}" data-act="buy" data-k="icon" data-opt="${b}" aria-label="${b} badge" ${bal < SHOP.icon.cost || p.icon === b ? 'disabled' : ''}>${ic(b)}</button>`).join('')}</div>
+    ${!inRound ? `<p class="hint" style="text-align:left">Picks you buy now wait for a round where you have that role.${saved.length ? ' Saved: ' + saved.join(', ') + '.' : ''}</p>` : ''}` : '';
+  return `<div class="section shop-box"><button class="btn shop-h" data-act="toggleShop">${ic('shop')}Points shop<span class="bal mono">${bal} pts</span><span class="chev">${shopOpen ? '▴' : '▾'}</span></button>${body}</div>`;
+}
+
 function clientTick() {
   if (!S) return;
   maybeTakeOverHost();
   hostTick();
   const now = hostNow();
+  if (now < (L_.trailUntil || 0) + 1500) updateTrail();
   const p = mine();
   if (S.phase === 'hunting' && p && p.role === 'hider' && alive(p)) {
     const n = Math.floor((now - S.huntStart) / pingMs());
     if (n > L_.lastPingN) { L_.lastPingN = n; sendPing('scheduled', n); if (n > 0) { beep('ping'); buzz(80); toast('You just pinged your location to the seekers.', 'seeker', 'pin'); } }
     if (now < (S.trackerUntil || 0) && now - (L_.lastTrack || 0) >= 15000) { L_.lastTrack = now; sendPing('tracker'); }
+    if (now < (L_.trailSendUntil || 0) && now - (L_.lastTrailSend || 0) >= 5000 && myPos) { L_.lastTrailSend = now; send('hiderLoc', { p: G.randomInDisk(myPos.p, 20) }); }
+    if (now < (L_.spotUntil || 0) && now - (L_.lastSpot || 0) >= 5000) { L_.lastSpot = now; sendPing('xray'); }
     if (S.potato && S.potato.holder === me.id) { // hot potato: an extra ping halfway between the normal ones
       const h = Math.floor((now - S.huntStart) / (pingMs() / 2));
       if (h % 2 === 1 && h > L_.lastPotN) { L_.lastPotN = h; sendPing('potato'); toast('Hot potato ping', 'hider', 'potato'); }
@@ -1011,6 +1153,11 @@ function renderZone() {
 }
 let lastZoneKey = '';
 
+function nearestSeeker() {
+  let best = null, bd = Infinity;
+  for (const [id, x] of Object.entries(L_.seekerLocs)) { if (!myPos || id === me.id) continue; const dd = G.dist(myPos.p, x.p); if (dd < bd) { bd = dd; best = id; } }
+  return best;
+}
 function renderMarks() {
   if (!S) return;
   const zk = S.phase + ':' + scaleAt(hostNow()).toFixed(3) + ':' + JSON.stringify(S.zone);
@@ -1056,7 +1203,7 @@ function renderMarks() {
   // seekers visible to hiders via sonar, or to seeker teammates always
   for (const [id, s] of Object.entries(L_.seekerLocs)) {
     if (id === me.id || !P(id)) continue;
-    if (now < L_.sonarUntil || iSeek) {
+    if (now < L_.sonarUntil || iSeek || (now < L_.peekUntil && id === nearestSeeker())) {
       if (now - s.t > 45000) continue;
       L.marker(s.p, { icon: blipIcon(RED, esc(P(id).name), ago(now - s.t), 'seeker'), zIndexOffset: 600 }).addTo(layers.marks);
     }
@@ -1084,7 +1231,7 @@ function optLabel(key, val) {
   if (/Sec$/.test(key)) return +val % 60 ? `${val} s` : `${val / 60} min`;
   return /M$/.test(key) ? `${val} m` : String(val);
 }
-function avatar(p, cls = '') { return `<span class="av ${cls}">${esc(Array.from((p && p.name) || '?')[0] || '?')}</span>`; }
+function avatar(p, cls = '') { return `<span class="av ${cls}">${p && p.icon && ICONS[p.icon] ? ic(p.icon) : esc(Array.from((p && p.name) || '?')[0] || '?')}</span>`; }
 const roleCls = (r) => (r === 'seeker' ? 'seeker' : r === 'hider' ? 'hider' : '');
 function playerRow(id, extra = '', cls = '', pre = '') {
   const p = P(id); const on = peers.has(id);
@@ -1177,6 +1324,7 @@ function renderLobby() {
     <div class="section"><div class="section-t">Players · ${online.length} here</div><div class="players">
       ${ids.map((id) => playerRow(id, `<span class="meta">${S.totals[id] ? S.totals[id] + ' pts' : ''}</span>${host && id !== me.id ? `<button class="x" data-act="kick" data-id="${id}" aria-label="Remove ${esc(S.players[id].name)}">${ic('close')}</button>` : ''}`)).join('')}
     </div></div>
+    ${shopHtml()}
     <div class="section"><div class="section-t">Play zone</div><p class="note" style="margin:0 0 10px">${zoneInfo}</p>${zoneTools}</div>
     <div class="section"><div class="section-t">${host ? 'Game modes · mix and match' : 'Game modes this round'}</div>${modes}</div>
     <div class="section"><div class="section-t">Rules${host ? '' : ' · set by the host'}</div>${rules}</div>
@@ -1190,17 +1338,19 @@ function renderLobby() {
 
 function itemsHtml(role) {
   const p = mine();
-  if (!puOn(S.settings) || !p) return '';
+  if (!p) return '';
   const inv = p.inv || {}, fx = p.fx || {}, now = hostNow();
+  const locked = role === 'hider' && now < (S.lockdownUntil || 0);
   const armedOf = (k) => (k === 'decoy' && (L_.decoyArmed || L_.placingDecoy)) || (k === 'jammer' && L_.jamArmed) || (k === 'swarm' && L_.swarmArmed)
-    || (k === 'shield' && fx.shield) || (k === 'ghost' && now < (fx.ghostUntil || 0));
+    || (k === 'shield' && fx.shield) || (k === 'ghost' && now < (fx.ghostUntil || 0)) || (k === 'cloak' && now < (fx.ghostUntil || 0)) || (k === 'pass' && (inv.pass || 0) > 0);
   const keys = Object.keys(ITEM_INFO).filter((k) => ITEM_INFO[k].role === role && ((inv[k] || 0) > 0 || armedOf(k)));
   const how = [S.settings.drops && 'grab a supply drop', role === 'seeker' && 'catch someone', role === 'hider' && S.settings.missions && 'finish a mission'].filter(Boolean).join(' or ');
   const head = '<div class="section-t" style="margin-top:18px">Power-ups</div>';
-  if (!keys.length) return `${head}<p class="hint" style="text-align:left;margin:0">None right now.${how ? ' To get one, ' + how + '.' : ''}</p>`;
-  return `${head}<div class="items">${keys.map((k) => {
+  if (!keys.length) return puOn(S.settings) ? `${head}<p class="hint" style="text-align:left;margin:0">None right now.${how ? ' To get one, ' + how + '.' : ''}</p>` : '';
+  const picker = L_.spotPick ? `<div class="section-t" style="margin-top:10px">Spotlight who?</div><div class="row">${Object.entries(S.players).filter(([, x]) => x.role === 'hider' && alive(x)).map(([id, x]) => `<button class="btn small" data-act="spotTarget" data-id="${id}">${esc(x.name)}</button>`).join('')}<button class="btn small ghost" data-act="spotCancel">Cancel</button></div>` : '';
+  return `${head}${locked ? `<p class="hint" style="text-align:left;margin:0;color:var(--red);font-weight:700">Locked down: power-ups unusable for ${fmt(S.lockdownUntil - now)}</p>` : ''}${picker}<div class="items">${keys.map((k) => {
     const n = inv[k] || 0, armed = armedOf(k);
-    return `<button class="item ${armed ? 'armed' : ''} ${ITEM_INFO[k].sup ? 'super' : ''}" data-act="item" data-item="${k}" ${n <= 0 && !(k === 'decoy' && L_.placingDecoy) ? 'disabled' : ''}>${ic(k)}${ITEM_INFO[k].name}${n > 1 ? `<span class="n">×${n}</span>` : ''}<small>${armed && n <= 0 ? 'Active' : ITEM_INFO[k].desc}</small></button>`;
+    return `<button class="item ${armed ? 'armed' : ''} ${ITEM_INFO[k].sup ? 'super' : ''}" data-act="item" data-item="${k}" ${(n <= 0 && !(k === 'decoy' && L_.placingDecoy)) || k === 'pass' || locked ? 'disabled' : ''}>${ic(k)}${ITEM_INFO[k].name}${n > 1 ? `<span class="n">×${n}</span>` : ''}<small>${armed && n <= 0 ? 'Active' : ITEM_INFO[k].desc}</small></button>`;
   }).join('')}</div>`;
 }
 function modeLines(p, now) {
@@ -1254,6 +1404,7 @@ function renderPlaying() {
     ${goalCard(p)}
     ${geoNote()}
     ${body}
+    ${shopHtml()}
     ${hiders.length ? `<div class="section"><div class="section-t">Hiders · ${left} left</div><div class="hiders-row">${status}</div></div>` : ''}
     ${host ? `<div class="big-actions"><button class="btn small ghost" data-act="ruleCatch">Rule a catch</button><button class="btn small ghost" data-act="endNow">End round</button></div>` : ''}
   `, 'play');
@@ -1311,6 +1462,7 @@ function renderEnded() {
     <div class="section"><div class="section-t">Overall</div><div class="lb">
       ${totRank.map((id, i) => line(id, i, S.totals[id] || 0, '', '')).join('')}
     </div></div>
+    ${shopHtml()}
     <div class="section"><div class="section-t">Replay</div>
       <button class="btn" data-act="replay" style="width:100%">${ic('play')}Watch everyone's paths</button></div>
     <div class="big-actions"><button class="btn ghost" data-act="leave">Leave</button>
@@ -1469,11 +1621,16 @@ function act(a, el) {
       if (item === 'decoy') { L_.placingDecoy = !L_.placingDecoy; renderSheet(); if (L_.placingDecoy) toast('Tap the map inside the zone to place your decoy', 'hider', 'decoy'); return; }
       if (item === 'jammer') { if (L_.jamArmed) return; L_.jamArmed = true; send('useItem', { item }); toast('Jammer armed. Your next ping is blocked.', 'hider', 'jammer'); }
       if (item === 'swarm') { if (L_.swarmArmed) return; L_.swarmArmed = true; send('useItem', { item }); toast('Swarm armed. Your next ping shows 4 spots.', 'hider', 'swarm'); }
-      if (['sonar', 'ghost', 'shield', 'blackout', 'xray', 'tracker'].includes(item)) send('useItem', { item });
+      if (['sonar', 'ghost', 'shield', 'blackout', 'xray', 'tracker', 'cloak', 'peek', 'trail', 'lockdown'].includes(item)) send('useItem', { item });
+      if (item === 'spotlight') { L_.spotPick = !L_.spotPick; renderSheet(); return; }
       if (item === 'radar') { send('useItem', { item }); toast('Radar sweep. Every hider pings now.', 'seeker', 'radar'); }
       setTimeout(renderSheet, 50);
       break;
     }
+    case 'buy': send('buy', { k: el.dataset.k, opt: el.dataset.opt }); break;
+    case 'toggleShop': shopOpen = !shopOpen; renderSheet(); break;
+    case 'spotTarget': L_.spotPick = false; send('useItem', { item: 'spotlight', target: el.dataset.id }); setTimeout(renderSheet, 50); break;
+    case 'spotCancel': L_.spotPick = false; renderSheet(); break;
     case 'selfCaught': {
       const seekers = Object.entries(S.players).filter(([, x]) => x.role === 'seeker');
       modal(`<h3>Who caught you?</h3><p>Be honest. It gives them the points.</p><div class="stack">${seekers.map(([id, x]) => `<button class="btn" data-act2="caughtBy" data-id="${id}">${avatar(x, roleCls(x.role))}${esc(x.name)}</button>`).join('')}<button class="btn ghost" data-act="closeModal">Never mind</button></div>`);
@@ -1671,6 +1828,7 @@ window.__gl = {
     tapMap: (lat, lng) => map.fire('click', { latlng: L.latLng(lat, lng) }),
     give: (id, item) => hostApply((s) => { const q = s.players[id]; q.inv = q.inv || {}; q.inv[item] = (q.inv[item] || 0) + 1; }),
     spawnDrop: () => hostApply((s) => spawnDrop(s)),
+    setWallet: (id, n) => hostApply((s) => { s.wallet = s.wallet || {}; s.wallet[id] = n; }),
     openExtraction: () => hostApply((s) => { if (s.sprint) s.sprint.at = Date.now(); }),
   } : {}),
 };

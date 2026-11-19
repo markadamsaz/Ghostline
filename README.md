@@ -10,6 +10,14 @@ Play somewhere safe and public. Locations are only shared with players in your g
 Infection, Jailbreak, Fugitive, Starter power-ups, Supply drops, Missions, Capture points, Hot potato, Final sprint, Shrinking zone, Strict zone.
 Tags: GPS range, honor tag (they confirm) or photo tag (snap them, they confirm). The host settles disputes.
 
+## Points shop
+
+Points you earn (survival minutes, catches, missions, flags, extraction) can be spent. Each player sees picks for their own role during a round; picks bought in the lobby wait for a round where you have that role.
+
+- Hiders: Power-up 40, Peek 50 (see the nearest seeker for 10 s), Cloak 60 (no pings for 30 s), Escape pass 120 (get away from one catch)
+- Seekers: Radar 40, Hot trail 60 (arrow to the nearest hider for 20 s), Lockdown 70 (hiders can't use power-ups for 30 s), Spotlight 80 (one hider's exact spot for 10 s)
+- Anyone: Map icon 25
+
 ## How it works
 - `public/` is a static web app (no build step). Phones sync over Supabase Realtime (broadcast + presence, no tables), set in `public/config.js`.
 - `server.js` serves `public/` and a WebSocket relay for play-testing on your own Wi-Fi: `npm install && npm start`.
