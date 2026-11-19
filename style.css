@@ -24,6 +24,7 @@ input, select { font: inherit; color: var(--text); }
 
 #map { position: fixed; inset: 0; background: #0a1016; z-index: 0; }
 .leaflet-container { background: #0a1016; font-family: inherit; }
+.dark-tiles { filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.9) saturate(.6); }
 .leaflet-control-attribution { background: rgba(7,11,16,.7) !important; color: var(--muted) !important; font-size: 10px; }
 .leaflet-control-attribution a { color: var(--muted) !important; }
 .leaflet-bottom { bottom: calc(var(--sheet-h, 0px) + 4px); transition: bottom .2s; }
