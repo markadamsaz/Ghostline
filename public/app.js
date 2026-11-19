@@ -159,9 +159,9 @@ const buzz = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch {
 
 // ---------------- map ----------------
 const map = L.map('map', { zoomControl: false, attributionControl: true, worldCopyJump: true }).setView([39.5, -98.35], 4);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  subdomains: 'abcd', maxZoom: 20,
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19, className: 'dark-tiles',
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
 }).addTo(map);
 const layers = {
   zone: L.layerGroup().addTo(map),
