@@ -1,0 +1,10 @@
+{
+  "name": "Ghostline",
+  "short_name": "Ghostline",
+  "description": "Real-world hide and seek with timed location pings.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#070b10",
+  "theme_color": "#070b10",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
