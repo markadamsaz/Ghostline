@@ -134,6 +134,33 @@ await setPos(hiders[2], off(700, 0));
 ok(await until(async () => (await G(seeker, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'breach'), hiders[2].pid)), 9000, 'breach'), 'leaving the zone exposes the hider\'s exact spot after the grace period');
 await setPos(hiders[2], spots[2]);
 
+// ---- GPS accuracy: a wild fix is skipped, jitter is averaged out, and the HUD shows accuracy
+const h1 = spots[1];
+await G(hiders[1], ([a, b]) => window.__gl.feedFix(a, b, 6), h1);
+await G(hiders[1], ([a, b]) => window.__gl.feedFix(a + 0.0006, b, 80), h1); // a bad fix ~65 m away
+let gp = await G(hiders[1], () => window.__gl.myPos);
+ok(gp.acc === 6 && Math.abs(gp.p[0] - h1[0]) < 1e-6, 'a poor GPS fix is ignored while a good one is fresh');
+await G(hiders[1], ([a, b]) => window.__gl.feedFix(a + 0.00005, b, 8), h1); // ~5.5 m north
+gp = await G(hiders[1], () => window.__gl.myPos);
+const dN = (gp.p[0] - h1[0]) * 111320;
+ok(dN > 0.5 && dN < 5, `jittery fixes are averaged (moved ${dN.toFixed(1)} m, not 5.5 m)`);
+ok((await hiders[1].page.textContent('#gps-chip')).includes('±6 m'), 'each player sees their GPS accuracy');
+await setPos(hiders[1], h1);
+
+// ---- tagging: range is strict, and a weak fix can't decide a close call
+await setPos(seeker, off(170, 100)); // 20 m from hider 0, range 15 m
+await G(seeker, () => window.__gl.act('tag'));
+await sleep(1500);
+ok(!(await state(host)).players[hiders[0].pid].caughtAt, 'a tag from 20 m does not count with a 15 m range');
+await sleep(1700);
+await G(hiders[0], ([a, b]) => window.__gl.setPos(a, b, 45), spots[0]); // hider's GPS goes weak
+await setPos(seeker, off(162, 100)); // 12 m away
+await G(seeker, () => window.__gl.act('tag'));
+ok(await until(async () => (await seeker.page.textContent('#toasts')).includes('Too close to call'), 5000, 'weak'), 'a close tag on weak GPS asks the seeker to get closer');
+ok(!(await state(host)).players[hiders[0].pid].caughtAt, 'and does not count');
+await G(hiders[0], ([a, b]) => window.__gl.setPos(a, b, 8), spots[0]);
+await sleep(3200); // tag cooldown
+
 // ---- tagging
 await setPos(seeker, off(152, 104)); // ~5 m from hider 0
 await sleep(300);

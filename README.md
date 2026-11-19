@@ -18,6 +18,10 @@ Points you earn (survival minutes, catches, missions, flags, extraction) can be 
 - Seekers: Radar 40, Hot trail 60 (arrow to the nearest hider for 20 s), Lockdown 70 (hiders can't use power-ups for 30 s), Spotlight 80 (one hider's exact spot for 10 s)
 - Anyone: Map icon 25
 
+## GPS accuracy
+
+Phones ask for their most accurate fresh fix. A weak fix (worse than 30 m) is skipped while a recent good one exists, and the last few fixes are averaged to smooth out jitter. Each player sees their accuracy (GPS ±N m) in the top bar. A tag counts inside the tag range plus a few meters for normal GPS error. If either phone's GPS is weak, only a tag inside half the range counts, and the seeker is told to get closer. Phone GPS is about 5 to 10 m outdoors at best and worse indoors, so for small areas use a 20 to 30 m tag range and Exact or 10 m ping fuzz.
+
 ## How it works
 - `public/` is a static web app (no build step). Phones sync over Supabase Realtime (broadcast + presence, no tables), set in `public/config.js`.
 - `server.js` serves `public/` and a WebSocket relay for play-testing on your own Wi-Fi: `npm install && npm start`.

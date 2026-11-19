@@ -106,6 +106,7 @@ function credit(s, id, pts) { s.wallet = s.wallet || {}; s.wallet[id] = (s.walle
 const SUPERS = { hider: ['ghost', 'shield', 'swarm', 'blackout'], seeker: ['xray', 'tracker'] };
 const BASICS = { hider: ['decoy', 'jammer', 'sonar'], seeker: ['radar'] };
 const STARTER = { hider: { decoy: 1, jammer: 1, sonar: 1 }, seeker: { radar: 1 } };
+const GPS_OK = 20, GPS_POOR = 30; // meters: phone accuracy we trust fully / at all
 const REACH_M = 20; // how close you have to get to a drop, flag, jail, mission or extraction point
 // game modes the host can mix and match
 const MODES = [
@@ -128,8 +129,8 @@ const OPTS = {
   hideSec: [[30, '30 s'], [60, '1 min'], [120, '2 min'], [180, '3 min'], [300, '5 min'], [600, '10 min']],
   huntSec: [[300, '5 min'], [600, '10 min'], [900, '15 min'], [1200, '20 min'], [1800, '30 min'], [2700, '45 min'], [3600, '60 min']],
   pingSec: [[30, '30 s'], [60, '1 min'], [120, '2 min'], [180, '3 min'], [300, '5 min'], [600, '10 min']],
-  blurM: [[0, 'Exact'], [25, '25 m'], [50, '50 m'], [100, '100 m']],
-  tagRadiusM: [[10, '10 m'], [15, '15 m'], [25, '25 m'], [40, '40 m']],
+  blurM: [[0, 'Exact'], [10, '10 m'], [25, '25 m'], [50, '50 m'], [100, '100 m']],
+  tagRadiusM: [[10, '10 m'], [15, '15 m'], [20, '20 m'], [25, '25 m'], [30, '30 m'], [40, '40 m']],
   seekers: [[1, '1'], [2, '2'], [3, '3']],
   dropSec: [[60, 'Every 1 min'], [120, 'Every 2 min'], [180, 'Every 3 min'], [300, 'Every 5 min'], [600, 'Every 10 min']],
   shrinkStyle: [['smooth', 'Closes in smoothly'], ['steps', 'Jumps in at each ping']],
@@ -444,14 +445,25 @@ function handle(m, self) {
       if (self || !S || S.phase !== 'hunting') return;
       const p = mine();
       if (!p || p.role !== 'hider' || !alive(p) || !myPos) return;
-      const tol = Math.min(15, Math.max(myPos.acc || 0, d.acc || 0) / 2);
+      // both phones' GPS error counts: a good pair gets a few meters of slack, a weak fix only counts when clearly in range
+      const a = myPos.acc || 0, b = +d.acc || 0, u = Math.hypot(a, b), R = S.settings.tagRadiusM;
+      const weak = Math.max(a, b) > GPS_POOR;
       const dd = G.dist(myPos.p, d.p);
-      if (dd <= S.settings.tagRadiusM + tol) {
+      if ((!weak && dd <= R + Math.min(5, u / 4)) || dd <= R / 2) {
         send('caught', { who: me.id, by: m.from, how: 'tag', p: myPos.p });
+      } else if (weak && dd <= R + u) {
+        send('tagWeak', { to: m.from, acc: Math.round(Math.max(a, b)) });
+        toast(`<b>${nm(m.from)}</b> almost tagged you, but the GPS was too weak to call it.`, 'seeker', 'alert');
+        buzz([40, 40, 40]);
       } else if (dd <= 60) {
         toast(`<b>${nm(m.from)}</b> is close. They just tried a tag ${G.fmtDist(dd)} away.`, 'seeker', 'alert');
         buzz([40, 40, 40]);
       }
+      break;
+    }
+    case 'tagWeak': {
+      if (d.to !== me.id || !S || S.phase !== 'hunting') return;
+      toast(`Too close to call: GPS is weak (±${Math.round(+d.acc || 0)} m). Get closer and tag again.`, 'seeker', 'alert');
       break;
     }
     case 'caught': {
@@ -518,7 +530,7 @@ function handle(m, self) {
       if (!isHost() || S.phase !== 'hunting') return;
       const q = S.players[m.from];
       if (!q || !Array.isArray(d.p) || !d.p.every(Number.isFinite)) return;
-      const ok = (pt) => pt && G.dist(d.p, pt) <= REACH_M + Math.min(15, (+d.acc || 0) / 2);
+      const ok = (pt) => pt && G.dist(d.p, pt) <= REACH_M + Math.min(10, (+d.acc || 0) / 2);
       const now = Date.now();
       if (m.t === 'claim') {
         const dr = (S.drops || []).find((x) => x.id === d.id && !x.claimedBy);
@@ -1001,7 +1013,7 @@ function clientTick() {
   if (Math.floor(now / 1000) !== clientTick.lastSec) { clientTick.lastSec = Math.floor(now / 1000); renderMarks(); if (S.phase === 'hunting' || S.phase === 'hiding') renderDynamicSheet(); }
 }
 
-function near(pt) { return myPos && pt && G.dist(myPos.p, pt) <= REACH_M + Math.min(15, (myPos.acc || 0) / 2); }
+function near(pt) { return myPos && pt && G.dist(myPos.p, pt) <= REACH_M + Math.min(10, (myPos.acc || 0) / 2); }
 function sendOnce(key, t, d, now, gap = 4000) { if ((L_.sentAt[key] || 0) > now - gap) return; L_.sentAt[key] = now; send(t, { ...d, p: myPos.p, acc: myPos.acc }); }
 function reachThings(p, now) {
   if (!myPos) return;
@@ -1081,16 +1093,40 @@ function startGeo() {
   geoWatch = navigator.geolocation.watchPosition(onPos, (err) => {
     geoError = err.code === 1 ? 'Location is blocked. Turn it on for this site to play.' : 'Still looking for GPS…';
     renderSheet();
-  }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
+  }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
 }
+// Fresh fixes only. A poor fix is skipped while a recent good one exists, and the last few
+// fixes that agree are averaged (weighted by accuracy) to take out jitter.
+const fixes = [];
+let rawAcc = null;
 function onPos(pos) {
-  setPos(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+  const c = pos.coords, now = Date.now();
+  if (!Number.isFinite(c.latitude) || !Number.isFinite(c.longitude)) return;
+  const f = { p: [c.latitude, c.longitude], acc: Math.max(3, +c.accuracy || 50), t: now };
+  rawAcc = Math.round(f.acc);
+  if (f.acc > GPS_POOR && myPos && myPos.acc <= GPS_OK && now - myPos.t < 15000) { updateGpsChip(); return; }
+  for (let i = fixes.length - 1; i >= 0; i--) if (now - fixes[i].t > 5000 || G.dist(fixes[i].p, f.p) > fixes[i].acc + f.acc) fixes.splice(i, 1);
+  fixes.push(f); if (fixes.length > 4) fixes.shift();
+  let w = 0, lat = 0, lng = 0;
+  for (const x of fixes) { const k = 1 / (x.acc * x.acc); w += k; lat += x.p[0] * k; lng += x.p[1] * k; }
+  setPos(lat / w, lng / w, Math.min(...fixes.map((x) => x.acc)));
+}
+function updateGpsChip() {
+  const el = $('#gps-chip');
+  if (!el) return;
+  if (!myPos) { el.hidden = true; return; }
+  const acc = Math.max(myPos.acc, Date.now() - myPos.t > 15000 ? rawAcc || 0 : 0);
+  el.hidden = false;
+  el.className = 'gps-chip ' + (acc > GPS_POOR ? 'bad' : acc > GPS_OK ? 'fair' : 'good');
+  el.textContent = `GPS ±${acc} m`;
+  el.title = acc > GPS_POOR ? 'Weak GPS. Step outside, away from buildings.' : 'Location accuracy';
 }
 function setPos(lat, lng, acc = 10) {
   const first = !myPos;
   geoError = null;
   myPos = { p: [lat, lng], acc: Math.round(acc), t: Date.now() };
   updateMeMarker();
+  updateGpsChip();
   if (first && !(S && S.zone)) map.setView(myPos.p, 16);
   if (S && (S.phase === 'hiding' || S.phase === 'hunting')) {
     const last = L_.myTrack[L_.myTrack.length - 1];
@@ -1252,6 +1288,7 @@ function renderSheet() {
 function geoNote() {
   if (geoError) return `<p class="note warn">${ic('pin')}<span>${esc(geoError)}</span></p>`;
   if (!myPos) return `<p class="note">${ic('pin')}<span>Finding your location…</span></p>`;
+  if (myPos.acc > GPS_POOR) return `<p class="note warn">${ic('pin')}<span>Weak GPS (±${myPos.acc} m). Step outside, away from tall buildings, for fair tags.</span></p>`;
   return '';
 }
 
@@ -1612,6 +1649,7 @@ function act(a, el) {
       L_.tagCooldown = Date.now() + 3000;
       send('tag', { p: myPos.p, acc: myPos.acc });
       buzz(40);
+      if (myPos.acc > GPS_POOR) toast(`Your GPS is weak (±${myPos.acc} m), so close tags may not count.`, 'seeker', 'alert');
       toast('TAG sent. Anyone within ' + S.settings.tagRadiusM + ' m is out.', 'seeker', 'tag');
       break;
     }
@@ -1822,7 +1860,7 @@ window.__gl = {
   get S() { return S; }, get me() { return me; }, get peers() { return [...peers]; }, get local() { return L_; },
   get myPos() { return myPos; }, hostNow, currentZone,
   ...(DEBUG ? {
-    setPos, act, send,
+    setPos, act, send, feedFix: (lat, lng, acc) => onPos({ coords: { latitude: lat, longitude: lng, accuracy: acc } }),
     setSettings: (o) => hostApply((s) => { Object.assign(s.settings, o); if (o.jail) s.settings.infection = false; if (o.infection) s.settings.jail = false; }),
     setZone: (z) => hostApply((s) => { s.zone = z; }),
     tapMap: (lat, lng) => map.fire('click', { latlng: L.latLng(lat, lng) }),

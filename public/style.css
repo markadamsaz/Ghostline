@@ -355,3 +355,8 @@ body.blackout::after { content: 'BLACKOUT'; position: fixed; z-index: 15; top: 4
 #trail .tr-a svg { width: 26px; height: 26px; fill: var(--red); }
 #trail .i { width: 22px; height: 22px; }
 #trail .tr-t { font-size: 14px; }
+
+/* GPS accuracy chip */
+.gps-chip { display: inline-flex; align-items: center; font-size: 11px; font-weight: 800; letter-spacing: .04em; padding: 3px 8px; border-radius: 999px; border: 1.5px solid var(--line-2); color: var(--ink-2); background: var(--surface); white-space: nowrap; }
+.gps-chip.fair { border-color: var(--red); color: var(--red); }
+.gps-chip.bad { background: var(--red); border-color: var(--red); color: #fff; }
