@@ -8,19 +8,64 @@ const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug');
+// Line icons (24x24, stroked with currentColor). No emoji anywhere in the UI.
+const ICONS = {
+  decoy: '<path d="M6 20V10a6 6 0 0 1 12 0v10l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5z"/><path d="M10 10h.01M14 10h.01"/>',
+  jammer: '<path d="M3 3l18 18"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M5 12.6a10 10 0 0 1 5-2.5"/><path d="M19 12.6a10 10 0 0 0-2.2-1.6"/><path d="M2 8.8a15 15 0 0 1 4.2-2.6"/><path d="M22 8.8A15 15 0 0 0 11 5"/><path d="M12 20h.01"/>',
+  sonar: '<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/>',
+  radar: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12l6.5-6.5"/>',
+  ghost: '<path d="M3 3l18 18"/><path d="M10.6 5.1A10 10 0 0 1 12 5c5 0 9 4.5 10 7a13 13 0 0 1-3 4"/><path d="M6.6 6.6C4 8.2 2.5 10.6 2 12c1 2.5 5 7 10 7a10 10 0 0 0 4.3-1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
+  shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
+  swarm: '<circle cx="6" cy="7" r="2.5"/><circle cx="17" cy="5.5" r="2.5"/><circle cx="7" cy="17.5" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+  blackout: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+  xray: '<circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.5"/>',
+  tracker: '<path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1.5"/>',
+  infection: '<circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/>',
+  jail: '<rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 3v18M15 3v18M4 10h16"/>',
+  fugitive: '<path d="M4 12h12"/><path d="M12 6l6 6-6 6"/><path d="M4 7h4M4 17h4"/>',
+  starter: '<path d="M6 9a6 6 0 0 1 12 0v11H6z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/><path d="M9 14h6"/>',
+  drops: '<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5l9 4.5 9-4.5"/><path d="M12 12v9"/>',
+  missions: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+  capture: '<path d="M5 21V4"/><path d="M5 4h13l-2.5 4.5L18 13H5"/>',
+  potato: '<path d="M12 3c1 4 6 5.5 6 11a6 6 0 0 1-12 0c0-3 2-4.5 2.5-6.5 1 1.2 2 2 3 2 .3-2.3-.5-4.5.5-6.5z"/>',
+  sprint: '<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v6H4V6h6"/>',
+  shrink: '<path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/>',
+  strictZone: '<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>',
+  crown: '<path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/>',
+  caught: '<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>',
+  pin: '<path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/>',
+  alert: '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.5"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  play: '<path d="M7 4.5v15L19 12z"/>',
+  pause: '<path d="M8 5v14M16 5v14"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13.5" r="3.5"/>',
+  tag: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+  locate: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
+  circle: '<circle cx="12" cy="12" r="8" stroke-dasharray="3 3"/><circle cx="12" cy="12" r="1.5"/>',
+  shape: '<path d="M12 3l8 6-3 11H7L4 9z"/><circle cx="12" cy="3" r="1"/><circle cx="20" cy="9" r="1"/><circle cx="4" cy="9" r="1"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
+  share: '<path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 13v7h14v-7"/>',
+  qr: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/>',
+  eye: '<path d="M2 12c1.5-3.5 5.5-7 10-7s8.5 3.5 10 7c-1.5 3.5-5.5 7-10 7s-8.5-3.5-10-7z"/><circle cx="12" cy="12" r="3"/>',
+  zone: '<circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 2.5"/>',
+  hide: '<path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><path d="M9 9h6"/>',
+};
+const ic = (name, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`;
+const ROLE_INK = { hider: '#111111', seeker: '#e10600' };
 const COLORS = ['#35c8ff', '#ffd23d', '#b98cff', '#3dffb5', '#ff8a3d', '#ff6bd6', '#7dff5a', '#5a8cff', '#ff5a5a', '#5affea', '#d9ff3d', '#ffffff'];
 const ITEM_INFO = {
-  decoy: { ic: '👻', name: 'Decoy', desc: 'Your next ping shows a spot you pick', role: 'hider' },
-  jammer: { ic: '📵', name: 'Jammer', desc: 'Skip your next ping', role: 'hider' },
-  sonar: { ic: '🔊', name: 'Sonar', desc: 'See every seeker for 30 s', role: 'hider' },
-  radar: { ic: '📡', name: 'Radar', desc: 'Force every hider to ping now', role: 'seeker' },
+  decoy: { ic: 'decoy', name: 'Decoy', desc: 'Your next ping shows a spot you pick', role: 'hider' },
+  jammer: { ic: 'jammer', name: 'Jammer', desc: 'Skip your next ping', role: 'hider' },
+  sonar: { ic: 'sonar', name: 'Sonar', desc: 'See every seeker for 30 s', role: 'hider' },
+  radar: { ic: 'radar', name: 'Radar', desc: 'Force every hider to ping now', role: 'seeker' },
   // super power-ups: only from supply drops and seeker rewards
-  ghost: { ic: '🌫️', name: 'Ghost', desc: 'No pings at all for the next 2 rounds', role: 'hider', sup: true },
-  shield: { ic: '🛡️', name: 'Shield', desc: 'Blocks the next tag on you', role: 'hider', sup: true },
-  swarm: { ic: '🐝', name: 'Swarm', desc: 'Next ping shows 4 spots, only 1 is real', role: 'hider', sup: true },
-  blackout: { ic: '🌑', name: 'Blackout', desc: "Seekers' maps go dark for 45 s", role: 'hider', sup: true },
-  xray: { ic: '🔦', name: 'X-ray', desc: 'Every hider pings their exact spot now', role: 'seeker', sup: true },
-  tracker: { ic: '🛰️', name: 'Tracker', desc: 'Hiders ping every 15 s for a minute', role: 'seeker', sup: true },
+  ghost: { ic: 'ghost', name: 'Ghost', desc: 'No pings at all for the next 2 rounds', role: 'hider', sup: true },
+  shield: { ic: 'shield', name: 'Shield', desc: 'Blocks the next tag on you', role: 'hider', sup: true },
+  swarm: { ic: 'swarm', name: 'Swarm', desc: 'Next ping shows 4 spots, only 1 is real', role: 'hider', sup: true },
+  blackout: { ic: 'blackout', name: 'Blackout', desc: "Seekers' maps go dark for 45 s", role: 'hider', sup: true },
+  xray: { ic: 'xray', name: 'X-ray', desc: 'Every hider pings their exact spot now', role: 'seeker', sup: true },
+  tracker: { ic: 'tracker', name: 'Tracker', desc: 'Hiders ping every 15 s for a minute', role: 'seeker', sup: true },
 };
 const SUPERS = { hider: ['ghost', 'shield', 'swarm', 'blackout'], seeker: ['xray', 'tracker'] };
 const BASICS = { hider: ['decoy', 'jammer', 'sonar'], seeker: ['radar'] };
@@ -28,17 +73,17 @@ const STARTER = { hider: { decoy: 1, jammer: 1, sonar: 1 }, seeker: { radar: 1 }
 const REACH_M = 20; // how close you have to get to a drop, flag, jail, mission or extraction point
 // game modes the host can mix and match
 const MODES = [
-  ['infection', '🧟 Infection', 'Caught hiders join the seekers'],
-  ['jail', '⛓️ Jailbreak', 'Caught hiders go to jail. A free hider reaching it frees them all'],
-  ['fugitive', '🏃 Fugitive', 'One runner, everyone else hunts'],
-  ['starter', '🎒 Starter power-ups', 'Everyone starts with a few tricks'],
-  ['drops', '📦 Supply drops', 'Super power-ups land on the map. Everyone can see them'],
-  ['missions', '🎯 Missions', 'Each hider gets secret spots to reach for points and power-ups'],
-  ['capture', '🚩 Capture points', 'Hold a flag for 1 min for +50. You ping while you hold it'],
-  ['potato', '🥔 Hot potato', 'Whoever carries it pings twice as often but scores double'],
-  ['sprint', '🚁 Final sprint', 'An extraction point opens near the end. Reach it for +100'],
-  ['shrink', '🌀 Shrinking zone', 'The zone closes in over the round'],
-  ['strictZone', '⛔ Strict zone', 'Out of the zone for 15 s and you are out'],
+  ['infection', 'Infection', 'Caught hiders join the seekers'],
+  ['jail', 'Jailbreak', 'Caught hiders go to jail. A free hider reaching it frees them all'],
+  ['fugitive', 'Fugitive', 'One runner, everyone else hunts'],
+  ['starter', 'Starter power-ups', 'Everyone starts with a few tricks'],
+  ['drops', 'Supply drops', 'Super power-ups land on the map. Everyone can see them'],
+  ['missions', 'Missions', 'Each hider gets secret spots to reach for points and power-ups'],
+  ['capture', 'Capture points', 'Hold a flag for 1 min for +50. You ping while you hold it'],
+  ['potato', 'Hot potato', 'Whoever carries it pings twice as often but scores double'],
+  ['sprint', 'Final sprint', 'An extraction point opens near the end. Reach it for +100'],
+  ['shrink', 'Shrinking zone', 'The zone closes in over the round'],
+  ['strictZone', 'Strict zone', 'Out of the zone for 15 s and you are out'],
 ];
 const puOn = (st) => !!(st && (st.starter || st.drops || st.missions));
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -133,13 +178,13 @@ function newCode() {
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
 // ---------------- feedback: toasts, sound, vibration ----------------
-function toast(text, cls = '') {
+function toast(text, cls = '', icon = null) {
   const el = document.createElement('div');
   el.className = 'toast ' + cls;
-  el.innerHTML = text;
+  el.innerHTML = (icon ? ic(icon) : '') + `<div>${text}</div>`;
   $('#toasts').appendChild(el);
   setTimeout(() => el.remove(), 4200);
-  while ($('#toasts').children.length > 3) $('#toasts').firstChild.remove();
+  while ($('#toasts').children.length > 2) $('#toasts').firstChild.remove();
 }
 let actx = null;
 function beep(kind) {
@@ -160,7 +205,7 @@ const buzz = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch {
 // ---------------- map ----------------
 const map = L.map('map', { zoomControl: false, attributionControl: true, worldCopyJump: true }).setView([39.5, -98.35], 4);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19, className: 'dark-tiles',
+  maxZoom: 19, className: 'map-tiles',
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
 }).addTo(map);
 const layers = {
@@ -191,11 +236,12 @@ function blipIcon(color, label, sub, cls = '') {
 }
 function updateMeMarker() {
   if (!myPos) return;
-  const col = mine()?.role === 'seeker' ? 'var(--seeker)' : mine()?.role === 'hider' ? 'var(--hider)' : 'var(--accent)';
-  const icon = L.divIcon({ className: '', iconSize: [18, 18], iconAnchor: [9, 9], html: `<div class="me-dot" style="background:${col}"></div>` });
+  const role = mine()?.role;
+  const col = role === 'hider' ? 'var(--hider)' : 'var(--seeker)';
+  const icon = L.divIcon({ className: '', iconSize: [22, 22], iconAnchor: [11, 11], html: `<div class="me-dot ${role === 'seeker' ? 'seeker' : ''}" style="background:${col}"></div>` });
   if (!meMarker) {
     meMarker = L.marker(myPos.p, { icon, zIndexOffset: 1000, interactive: false }).addTo(map);
-    meAcc = L.circle(myPos.p, { radius: myPos.acc, color: '#fff', weight: 1, opacity: .3, fillOpacity: .05, interactive: false }).addTo(map);
+    meAcc = L.circle(myPos.p, { radius: myPos.acc, color: '#111', weight: 1, opacity: .25, fillOpacity: .04, interactive: false }).addTo(map);
   } else { meMarker.setLatLng(myPos.p); meMarker.setIcon(icon); meAcc.setLatLng(myPos.p); meAcc.setRadius(myPos.acc); }
 }
 
@@ -345,11 +391,11 @@ function handle(m, self) {
       const alts = Array.isArray(d.alts) ? d.alts.filter(okPt).slice(0, 3) : null;
       L_.pings.push({ id: m.from, p: okPt(d.p) ? d.p : null, alts, blur: Math.min(+d.blur || 0, 200), kind: d.kind, n: d.n, t: hostNow() });
       if (!self && mine()?.role === 'seeker') {
-        if (d.kind === 'breach') { toast(`🚨 ${nm(m.from)} left the zone. Exact spot showing.`, 'seeker'); beep('alarm'); buzz([80, 60, 80]); }
-        else if (d.kind === 'jam') { toast(`📵 ${nm(m.from)} jammed their signal`, 'seeker'); }
-        else if (d.kind === 'ghost') { toast(`🌫️ ${nm(m.from)} is a ghost. No signal.`, 'seeker'); }
-        else if (d.kind === 'capture') { beep('ping'); toast(`🚩 ${nm(m.from)} is capturing a flag`, 'seeker'); }
-        else if (d.kind === 'nosignal') { toast(`${nm(m.from)} has no GPS fix`, ''); }
+        if (d.kind === 'breach') { toast(`<b>${nm(m.from)}</b> left the zone. Exact spot showing.`, 'seeker', 'alert'); beep('alarm'); buzz([80, 60, 80]); }
+        else if (d.kind === 'jam') { toast(`<b>${nm(m.from)}</b> jammed their signal`, 'seeker', 'jammer'); }
+        else if (d.kind === 'ghost') { toast(`<b>${nm(m.from)}</b> is a ghost. No signal.`, 'seeker', 'ghost'); }
+        else if (d.kind === 'capture') { beep('ping'); toast(`<b>${nm(m.from)}</b> is capturing a flag`, 'seeker', 'capture'); }
+        else if (d.kind === 'nosignal') { toast(`<b>${nm(m.from)}</b> has no GPS fix`, '', 'pin'); }
         else { beep('ping'); buzz(60); }
       }
       renderMarks();
@@ -365,7 +411,7 @@ function handle(m, self) {
       if (dd <= S.settings.tagRadiusM + tol) {
         send('caught', { who: me.id, by: m.from, how: 'tag', p: myPos.p });
       } else if (dd <= 60) {
-        toast(`⚠️ ${nm(m.from)} is close. They just tried a tag ${G.fmtDist(dd)} away.`, 'hider');
+        toast(`<b>${nm(m.from)}</b> is close. They just tried a tag ${G.fmtDist(dd)} away.`, 'seeker', 'alert');
         buzz([40, 40, 40]);
       }
       break;
@@ -506,7 +552,7 @@ function handle(m, self) {
     }
     case 'tagDenied': {
       if (!S) return;
-      if (d.by === me.id) toast(`${nm(m.from)} says your tag missed.${isHost() ? '' : ' The host can overrule.'}`, 'seeker');
+      if (d.by === me.id) toast(`<b>${nm(m.from)}</b> says your tag missed.${isHost() ? '' : ' The host can overrule.'}`, 'seeker', 'close');
       if (isHost() && hostPending[d.reqId] && m.from === hostPending[d.reqId].target) {
         hostPending[d.reqId].status = 'disputed'; hostPending[d.reqId].why = 'denied';
         if ($('#modal').hidden) nextHostRuling();
@@ -515,7 +561,7 @@ function handle(m, self) {
     }
     case 'ruling': {
       if (!S || m.from !== S.hostId) return;
-      if (d.by === me.id && !d.counted) toast(`Host ruled: no catch on ${nm(d.target)}.`, 'seeker');
+      if (d.by === me.id && !d.counted) toast(`Host ruled: no catch on <b>${nm(d.target)}</b>.`, 'seeker', 'close');
       break;
     }
     case 'seekerLoc': {
@@ -529,8 +575,8 @@ function handle(m, self) {
       if (!text) return;
       const sender = P(m.from);
       if (d.team !== 'all' && mine() && d.team !== mine().role && !self) return;
-      chat.push({ from: m.from, name: sender?.name || 'Someone', color: sender?.color || '#fff', text, team: d.team, t: Date.now() });
-      if (!chatOpen && !self) { unread = true; $('#chat-dot').hidden = false; toast(`<b style="color:${sender?.color}">${esc(sender?.name)}</b>: ${esc(text)}`); }
+      chat.push({ from: m.from, name: sender?.name || 'Someone', role: S.phase === 'lobby' ? '' : sender?.role || '', text, team: d.team, t: Date.now() });
+      if (!chatOpen && !self) { unread = true; $('#chat-dot').hidden = false; toast(`<b>${esc(sender?.name)}</b>: ${esc(text)}`, sender?.role === 'seeker' ? 'seeker' : 'hider'); }
       if (chatOpen) renderChat();
       break;
     }
@@ -571,7 +617,7 @@ function maybeTakeOverHost() {
     S.events.forEach((e) => { e.t += shift; });
     clockOffset = 0;
     hostMissingSince = 0;
-    toast(`You're the host now (${esc(S.players[oldHost]?.name || 'host')} dropped).`, 'good');
+    toast(`You're the host now (${esc(S.players[oldHost]?.name || 'host')} dropped).`, 'good', 'crown');
     broadcastState();
     onState(true);
   }
@@ -699,13 +745,13 @@ function phaseChanged(from, to) {
     sheetCollapsed = false;
     const r = mine()?.role;
     beep('start'); buzz([200, 100, 200]);
-    toast(r === 'seeker' ? '🔴 You are the SEEKER. Stay put until the hunt starts.' : '🔵 You are a HIDER. Go hide inside the zone!', r === 'seeker' ? 'seeker' : 'hider');
+    toast(r === 'seeker' ? 'You are a <b>SEEKER</b>. Stay put until the hunt starts.' : 'You are a <b>HIDER</b>. Go hide inside the zone.', r === 'seeker' ? 'seeker' : 'hider', r === 'seeker' ? 'eye' : 'hide');
     requestWake();
     if (S.zone) fitZone(S.zone);
   }
   if (to === 'hunting' && from) {
     beep('alarm'); buzz([300, 100, 300]);
-    toast(mine()?.role === 'seeker' ? 'The hunt is on. Go!' : 'Seekers are moving. Stay hidden.', mine()?.role === 'seeker' ? 'seeker' : 'hider');
+    toast(mine()?.role === 'seeker' ? 'The hunt is on. Go!' : 'Seekers are moving. Stay hidden.', mine()?.role === 'seeker' ? 'seeker' : 'hider', 'clock');
   }
   if (to === 'ended') {
     const pts = compactTrack(L_.myTrack);
@@ -719,46 +765,47 @@ function phaseChanged(from, to) {
 
 function onEvent(e) {
   const p = mine();
+  const IN = (k) => `<b>${ITEM_INFO[k].name}</b>`;
   if (e.k === 'catch') {
-    if (e.who === me.id) { beep('caught'); buzz([500]); toast(S.settings.infection ? '☠️ You got caught. You are a seeker now. Go get them!' : '☠️ You got caught.', 'seeker'); }
-    else if (e.by === me.id) { beep('tag'); buzz([60, 40, 160]); toast(`🎯 You caught ${nm(e.who)}! +50${e.reward ? ` · you got ${ITEM_INFO[e.reward].ic} ${ITEM_INFO[e.reward].name}` : ''}`, 'good'); }
-    else toast(e.how === 'zone' ? `⛔ ${nm(e.who)} left the zone and is out` : `☠️ ${nm(e.who)} was caught${e.by ? ' by ' + nm(e.by) : ''}`, '');
-    if (e.who === me.id && S.jail) setTimeout(() => toast('⛓️ Head to the jail on the map. A free hider can break you out.', 'hider'), 2500);
+    if (e.who === me.id) { beep('caught'); buzz([500]); toast(S.settings.infection ? 'You got caught. You are a seeker now. Go get them.' : 'You got caught.', 'seeker', 'caught'); }
+    else if (e.by === me.id) { beep('tag'); buzz([60, 40, 160]); toast(`You caught <b>${nm(e.who)}</b>. +50${e.reward ? ` and ${IN(e.reward)}` : ''}`, 'good', 'check'); }
+    else toast(e.how === 'zone' ? `<b>${nm(e.who)}</b> left the zone and is out` : `<b>${nm(e.who)}</b> was caught${e.by ? ' by ' + nm(e.by) : ''}`, '', e.how === 'zone' ? 'strictZone' : 'caught');
+    if (e.who === me.id && S.jail) setTimeout(() => toast('Head to the jail on the map. A free hider can break you out.', 'hider', 'jail'), 2500);
   }
   if (e.k === 'radar') {
-    if (p && p.role === 'hider' && alive(p)) { toast(`📡 ${nm(e.by)} ran a radar sweep. You just pinged.`, 'hider'); buzz([100, 50, 100]); sendPing('radar'); }
-    else toast(`📡 Radar sweep by ${nm(e.by)}`, 'seeker');
+    if (p && p.role === 'hider' && alive(p)) { toast(`<b>${nm(e.by)}</b> ran a radar sweep. You just pinged.`, 'seeker', 'radar'); buzz([100, 50, 100]); sendPing('radar'); }
+    else toast(`Radar sweep by <b>${nm(e.by)}</b>`, 'seeker', 'radar');
   }
   const self_ = (id) => id === me.id;
   const tone = (id) => (P(id)?.role === 'seeker' ? 'seeker' : 'hider');
-  if (e.k === 'hunt' && S.settings.shrink && smoothShrink()) setTimeout(() => toast('🌀 The zone is closing in. Stay inside the green line.', ''), 1500);
-  if (e.k === 'drop') { beep('alarm'); buzz([100, 60, 100, 60, 300]); toast('📦 Supply drop landed! Everyone can see it. First one there gets a super power-up.', 'good'); }
+  if (e.k === 'hunt' && S.settings.shrink && smoothShrink()) setTimeout(() => toast('The zone is closing in. Stay inside the red line.', '', 'shrink'), 1500);
+  if (e.k === 'drop') { beep('alarm'); buzz([100, 60, 100, 60, 300]); toast('Supply drop landed. Everyone can see it. First one there gets a super power-up.', 'good', 'drops'); }
   if (e.k === 'claim') {
-    if (self_(e.who)) { beep('tag'); buzz([60, 40, 160]); toast(`📦 You got ${ITEM_INFO[e.item].ic} ${ITEM_INFO[e.item].name}! ${ITEM_INFO[e.item].desc}.`, 'good'); }
-    else toast(`📦 ${nm(e.who)} grabbed the supply drop`, tone(e.who));
+    if (self_(e.who)) { beep('tag'); buzz([60, 40, 160]); toast(`You got ${IN(e.item)}. ${ITEM_INFO[e.item].desc}.`, 'good', e.item); }
+    else toast(`<b>${nm(e.who)}</b> grabbed the supply drop`, tone(e.who), 'drops');
   }
-  if (e.k === 'shieldHit') { beep('alarm'); toast(self_(e.who) ? `🛡️ Your shield blocked ${e.by ? nm(e.by) + "'s" : 'a'} tag. Run!` : `🛡️ ${nm(e.who)}'s shield blocked a tag`, self_(e.who) ? 'good' : ''); }
-  if (e.k === 'shield' && self_(e.by)) toast('🛡️ Shield up. The next tag on you won’t count.', 'hider');
-  if (e.k === 'ghost') toast(self_(e.by) ? '🌫️ Ghost mode: your next 2 pings are blocked.' : `🌫️ ${nm(e.by)} went ghost`, self_(e.by) ? 'hider' : '');
-  if (e.k === 'blackout') { beep('alarm'); toast(p && p.role === 'seeker' ? `🌑 ${nm(e.by)} blacked out your map for 45 s!` : `🌑 Blackout by ${nm(e.by)}: seekers are blind for 45 s`, p && p.role === 'seeker' ? 'seeker' : 'hider'); }
+  if (e.k === 'shieldHit') { beep('alarm'); toast(self_(e.who) ? `Your shield blocked ${e.by ? nm(e.by) + "'s" : 'a'} tag. Run!` : `<b>${nm(e.who)}</b>'s shield blocked a tag`, self_(e.who) ? 'good' : '', 'shield'); }
+  if (e.k === 'shield' && self_(e.by)) toast('Shield up. The next tag on you won’t count.', 'hider', 'shield');
+  if (e.k === 'ghost') toast(self_(e.by) ? 'Ghost mode: your next 2 pings are blocked.' : `<b>${nm(e.by)}</b> went ghost`, self_(e.by) ? 'hider' : '', 'ghost');
+  if (e.k === 'blackout') { beep('alarm'); toast(p && p.role === 'seeker' ? `<b>${nm(e.by)}</b> blacked out your map for 45 s` : `Blackout by <b>${nm(e.by)}</b>: seekers are blind for 45 s`, p && p.role === 'seeker' ? 'seeker' : 'hider', 'blackout'); }
   if (e.k === 'xray') {
-    if (p && p.role === 'hider' && alive(p)) { beep('alarm'); buzz([200, 80, 200]); toast(`🔦 ${nm(e.by)} used X-ray. Your exact spot just pinged.`, 'hider'); sendPing('xray'); }
-    else toast(`🔦 X-ray by ${nm(e.by)}: exact spots incoming`, 'seeker');
+    if (p && p.role === 'hider' && alive(p)) { beep('alarm'); buzz([200, 80, 200]); toast(`<b>${nm(e.by)}</b> used X-ray. Your exact spot just pinged.`, 'seeker', 'xray'); sendPing('xray'); }
+    else toast(`X-ray by <b>${nm(e.by)}</b>: exact spots incoming`, 'seeker', 'xray');
   }
   if (e.k === 'tracker') {
-    if (p && p.role === 'hider' && alive(p)) { beep('alarm'); toast(`🛰️ ${nm(e.by)} launched a tracker: you ping every 15 s for a minute.`, 'hider'); L_.lastTrack = hostNow(); sendPing('tracker'); }
-    else toast(`🛰️ Tracker by ${nm(e.by)}: hiders ping every 15 s for a minute`, 'seeker');
+    if (p && p.role === 'hider' && alive(p)) { beep('alarm'); toast(`<b>${nm(e.by)}</b> launched a tracker: you ping every 15 s for a minute.`, 'seeker', 'tracker'); L_.lastTrack = hostNow(); sendPing('tracker'); }
+    else toast(`Tracker by <b>${nm(e.by)}</b>: hiders ping every 15 s for a minute`, 'seeker', 'tracker');
   }
-  if (e.k === 'mission' && self_(e.who)) { beep('tag'); buzz([60, 40, 160]); toast(`🎯 Mission done! +25${e.item ? ` and ${ITEM_INFO[e.item].ic} ${ITEM_INFO[e.item].name}` : ''}. New target on your map.`, 'good'); }
-  if (e.k === 'flag') toast(self_(e.who) ? '🚩 Flag captured! +50' : `🚩 ${nm(e.who)} captured a flag`, self_(e.who) ? 'good' : tone(e.who));
-  if (e.k === 'potato') { if (self_(e.who)) { toast('🥔 You grabbed the hot potato: double points, but you ping twice as often.', 'good'); sendPing('potato'); } else toast(`🥔 ${nm(e.who)} has the hot potato`, tone(e.who)); }
-  if (e.k === 'potatoDrop' && !self_(e.who)) toast(`🥔 ${nm(e.who)} dropped the hot potato`, '');
-  if (e.k === 'extract') { beep('alarm'); buzz([200, 100, 200, 100, 400]); toast('🚁 Extraction point is open! Hiders: reach it for +100. Seekers: guard it.', 'good'); }
-  if (e.k === 'extracted') toast(self_(e.who) ? '🚁 You made it out! +100. You are safe.' : `🚁 ${nm(e.who)} escaped`, self_(e.who) ? 'good' : tone(e.who));
-  if (e.k === 'breakout') { beep('alarm'); toast((e.freed || []).includes(me.id) ? `⛓️ ${nm(e.by)} broke you out! Run!` : `⛓️ ${nm(e.by)} broke ${e.freed.length} out of jail`, (e.freed || []).includes(me.id) ? 'good' : tone(e.by)); }
+  if (e.k === 'mission' && self_(e.who)) { beep('tag'); buzz([60, 40, 160]); toast(`Mission done. +25${e.item ? ` and ${IN(e.item)}` : ''}. New target on your map.`, 'good', 'missions'); }
+  if (e.k === 'flag') toast(self_(e.who) ? 'Flag captured. +50' : `<b>${nm(e.who)}</b> captured a flag`, self_(e.who) ? 'good' : tone(e.who), 'capture');
+  if (e.k === 'potato') { if (self_(e.who)) { toast('You grabbed the hot potato: double points, but you ping twice as often.', 'good', 'potato'); sendPing('potato'); } else toast(`<b>${nm(e.who)}</b> has the hot potato`, tone(e.who), 'potato'); }
+  if (e.k === 'potatoDrop' && !self_(e.who)) toast(`<b>${nm(e.who)}</b> dropped the hot potato`, '', 'potato');
+  if (e.k === 'extract') { beep('alarm'); buzz([200, 100, 200, 100, 400]); toast('Extraction point is open. Hiders: reach it for +100. Seekers: guard it.', 'good', 'sprint'); }
+  if (e.k === 'extracted') toast(self_(e.who) ? 'You made it out. +100. You are safe.' : `<b>${nm(e.who)}</b> escaped`, self_(e.who) ? 'good' : tone(e.who), 'sprint');
+  if (e.k === 'breakout') { beep('alarm'); toast((e.freed || []).includes(me.id) ? `<b>${nm(e.by)}</b> broke you out. Run!` : `<b>${nm(e.by)}</b> broke ${e.freed.length} out of jail`, (e.freed || []).includes(me.id) ? 'good' : tone(e.by), 'jail'); }
   if (e.k === 'sonar') {
-    if (p && p.role === 'seeker') { if (myPos) send('seekerLoc', { p: myPos.p }); toast('🔊 A hider used sonar. They can see you for 30 s.', 'seeker'); }
-    else { L_.sonarUntil = hostNow() + 30000; toast(`🔊 Sonar by ${nm(e.by)}: seekers visible for 30 s`, 'hider'); }
+    if (p && p.role === 'seeker') { if (myPos) send('seekerLoc', { p: myPos.p }); toast('A hider used sonar. They can see you for 30 s.', 'seeker', 'sonar'); }
+    else { L_.sonarUntil = hostNow() + 30000; toast(`Sonar by <b>${nm(e.by)}</b>: seekers visible for 30 s`, 'hider', 'sonar'); }
   }
 }
 
@@ -775,10 +822,10 @@ function sendPing(kind = 'scheduled', n = null) {
     const z = currentZone() || S.zone;
     const spots = shuffle([G.randomInDisk(myPos.p, s.blurM), randomSpotIn(z, myPos.p, 80), randomSpotIn(z, myPos.p, 80), randomSpotIn(z, myPos.p, 80)]);
     send('ping', { kind, n, p: spots[0], alts: spots.slice(1), blur: s.blurM });
-    toast('🐝 Swarm ping sent: 4 spots, 1 real.', 'hider'); renderSheet(); return;
+    toast('Swarm ping sent: 4 spots, 1 real.', 'hider', 'swarm'); renderSheet(); return;
   }
-  if (kind === 'scheduled' && L_.jamArmed) { L_.jamArmed = false; send('ping', { kind: 'jam', n, p: null }); toast('📵 Jammer used. That ping was blocked.', 'hider'); renderSheet(); return; }
-  if (kind === 'scheduled' && L_.decoyArmed) { const p = L_.decoyArmed; L_.decoyArmed = null; send('ping', { kind, n, p: G.randomInDisk(p, s.blurM), blur: s.blurM, decoy: true }); toast('👻 Decoy ping sent.', 'hider'); renderSheet(); return; }
+  if (kind === 'scheduled' && L_.jamArmed) { L_.jamArmed = false; send('ping', { kind: 'jam', n, p: null }); toast('Jammer used. That ping was blocked.', 'hider', 'jammer'); renderSheet(); return; }
+  if (kind === 'scheduled' && L_.decoyArmed) { const p = L_.decoyArmed; L_.decoyArmed = null; send('ping', { kind, n, p: G.randomInDisk(p, s.blurM), blur: s.blurM, decoy: true }); toast('Decoy ping sent.', 'hider', 'decoy'); renderSheet(); return; }
   send('ping', { kind, n, p: G.randomInDisk(myPos.p, s.blurM), blur: s.blurM });
 }
 
@@ -790,20 +837,20 @@ function clientTick() {
   const p = mine();
   if (S.phase === 'hunting' && p && p.role === 'hider' && alive(p)) {
     const n = Math.floor((now - S.huntStart) / pingMs());
-    if (n > L_.lastPingN) { L_.lastPingN = n; sendPing('scheduled', n); if (n > 0) { beep('ping'); buzz(80); toast('📍 You just pinged your location to the seekers.', 'hider'); } }
+    if (n > L_.lastPingN) { L_.lastPingN = n; sendPing('scheduled', n); if (n > 0) { beep('ping'); buzz(80); toast('You just pinged your location to the seekers.', 'seeker', 'pin'); } }
     if (now < (S.trackerUntil || 0) && now - (L_.lastTrack || 0) >= 15000) { L_.lastTrack = now; sendPing('tracker'); }
     if (S.potato && S.potato.holder === me.id) { // hot potato: an extra ping halfway between the normal ones
       const h = Math.floor((now - S.huntStart) / (pingMs() / 2));
-      if (h % 2 === 1 && h > L_.lastPotN) { L_.lastPotN = h; sendPing('potato'); toast('🥔 Hot potato ping', 'hider'); }
+      if (h % 2 === 1 && h > L_.lastPotN) { L_.lastPotN = h; sendPing('potato'); toast('Hot potato ping', 'hider', 'potato'); }
     }
     const toNext = pingMs() - ((now - S.huntStart) % pingMs());
-    if (toNext <= 10000 && L_.warnedN !== n + 1) { L_.warnedN = n + 1; beep('warn'); buzz([60, 80, 60]); toast('⏱️ Ping in 10 s', 'hider'); }
+    if (toNext <= 10000 && L_.warnedN !== n + 1) { L_.warnedN = n + 1; beep('warn'); buzz([60, 80, 60]); toast('<b>Ping in 10 s.</b> Get under cover.', 'hider', 'clock'); }
   }
   if (S.phase === 'hunting' && p) reachThings(p, now);
   // shrink notices
   if (S.phase === 'hunting' && S.settings.shrink && !smoothShrink()) {
     const k = shrinkStep(now);
-    if (k > L_.lastShrinkK) { L_.lastShrinkK = k; if (k > 0) toast('🟢 The zone just shrank.', ''); }
+    if (k > L_.lastShrinkK) { L_.lastShrinkK = k; if (k > 0) toast('The zone just shrank.', '', 'shrink'); }
   }
   checkZone(now);
   renderHud();
@@ -826,8 +873,8 @@ function reachThings(p, now) {
   if (S.jail && near(S.jail.p) && now >= (S.jailCooldownUntil || 0) && Object.values(S.players).some((x) => x.role === 'hider' && x.caughtAt)) sendOnce('breakout', 'breakout', {}, now, 6000);
   for (const f of S.flags || []) {
     if (f.by) { delete L_.capStart[f.id]; continue; }
-    if (!near(f.p)) { if (L_.capStart[f.id]) toast('🚩 You left the flag. Capture reset.', 'hider'); delete L_.capStart[f.id]; continue; }
-    if (!L_.capStart[f.id]) { L_.capStart[f.id] = now; L_.capPing[f.id] = 0; toast('🚩 Capturing… stay here for 1 minute. Seekers can see you.', 'hider'); }
+    if (!near(f.p)) { if (L_.capStart[f.id]) toast('You left the flag. Capture reset.', 'hider', 'capture'); delete L_.capStart[f.id]; continue; }
+    if (!L_.capStart[f.id]) { L_.capStart[f.id] = now; L_.capPing[f.id] = 0; toast('Capturing… stay here for 1 minute. Seekers can see you.', 'seeker', 'capture'); }
     if (now - (L_.capPing[f.id] || 0) >= 15000) { L_.capPing[f.id] = now; sendPing('capture'); }
     const held = now - L_.capStart[f.id];
     if (held >= 60000) sendOnce('flag' + f.id, 'flag', { id: f.id, held }, now);
@@ -925,17 +972,18 @@ function renderHud() {
   const p = mine();
   const now = hostNow();
   const phaseEl = $('#hud-phase'), roleEl = $('#hud-role'), t = $('#hud-time'), sub = $('#hud-sub');
-  phaseEl.textContent = { lobby: 'Lobby ' + S.code, hiding: 'Hide phase', hunting: 'Hunt', ended: 'Round over' }[S.phase];
+  phaseEl.textContent = { lobby: 'Lobby', hiding: 'Hide phase', hunting: 'Hunt is on', ended: 'Round over' }[S.phase];
   if (p && S.phase !== 'lobby') {
     roleEl.hidden = false;
-    roleEl.className = 'pill ' + (p.caughtAt && !S.settings.infection ? 'caught' : p.role);
-    roleEl.textContent = p.caughtAt ? (S.settings.infection ? 'Caught · seeking' : 'Caught') : p.role;
+    const out = (p.caughtAt && !S.settings.infection) || p.extracted;
+    roleEl.className = 'pill ' + (out ? 'caught' : p.role);
+    roleEl.textContent = p.extracted ? 'Escaped' : p.caughtAt ? (S.settings.infection ? 'Caught · Seeker' : 'Caught') : p.role === 'seeker' ? 'Seeker' : 'Hider';
   } else roleEl.hidden = true;
   if (S.phase === 'hiding') { t.textContent = fmt(S.huntStart - now); sub.innerHTML = 'until seekers are released'; }
   else if (S.phase === 'hunting') {
     t.textContent = fmt(S.huntEnd - now);
     const toNext = pingMs() - ((now - S.huntStart) % pingMs());
-    const left = Object.values(S.players).filter((x) => x.startRole === 'hider' && !x.caughtAt).length;
+    const left = Object.values(S.players).filter((x) => x.startRole === 'hider' && !x.caughtAt && !x.extracted).length;
     sub.innerHTML = `next ping <b>${fmt(toNext)}</b> · ${left} hiding`;
   } else if (S.phase === 'ended') { t.textContent = 'Done'; sub.textContent = `round ${S.round}`; }
   else { t.textContent = S.code; sub.textContent = `${Object.keys(S.players).length} in lobby`; }
@@ -944,7 +992,7 @@ function renderHud() {
   let bf = $('#blindfold');
   if (blind) {
     if (!bf) { bf = document.createElement('div'); bf.id = 'blindfold'; bf.className = 'blindfold'; document.body.appendChild(bf); }
-    bf.innerHTML = `<div><h2>You're seeking</h2><p>Stay where you are. Hiders are on the move.</p><div class="mono">${fmt(S.huntStart - now)}</div><p>The map unlocks when the hunt starts.</p></div>`;
+    bf.innerHTML = `<div><small>Hide phase</small><h2>You're seeking</h2><p>Stay where you are. Hiders are on the move.</p><div class="mono">${fmt(S.huntStart - now)}</div><p>The map unlocks when the hunt starts.</p></div>`;
   } else if (bf) bf.remove();
 }
 
@@ -954,9 +1002,9 @@ function renderZone() {
   const z = currentZone();
   const nz = nextZone();
   const full = S.phase === 'hunting' && S.settings.shrink ? S.zone : null;
-  if (full) zoneLayer(full, { color: '#3dffb5', weight: 1, opacity: .25, fill: false, dashArray: '2 6', interactive: false }).addTo(layers.zone);
-  zoneLayer(z, { color: '#3dffb5', weight: 3, opacity: .9, fillColor: '#3dffb5', fillOpacity: .06, interactive: false }).addTo(layers.zone);
-  if (nz) zoneLayer(nz, { color: '#ffb547', weight: 2, opacity: .8, fill: false, dashArray: '8 8', interactive: false }).addTo(layers.zone);
+  if (full) zoneLayer(full, { color: '#111111', weight: 1.5, opacity: .35, fill: false, dashArray: '2 6', interactive: false }).addTo(layers.zone);
+  zoneLayer(z, { color: '#e10600', weight: 4, opacity: .95, fillColor: '#e10600', fillOpacity: .05, interactive: false }).addTo(layers.zone);
+  if (nz) zoneLayer(nz, { color: '#111111', weight: 2, opacity: .7, fill: false, dashArray: '8 8', interactive: false }).addTo(layers.zone);
 }
 let lastZoneKey = '';
 
@@ -971,15 +1019,16 @@ function renderMarks() {
   const iSeek = p && p.role === 'seeker';
   const blind = iSeek && S.phase === 'hunting' && now < (S.blackoutUntil || 0);
   document.body.classList.toggle('blackout', !!blind);
-  const pin = (pt, html, z = 700, size = 30) => L.marker(pt, { icon: L.divIcon({ className: '', html, iconSize: [size, size], iconAnchor: [size / 2, size / 2] }), zIndexOffset: z, interactive: false }).addTo(layers.marks);
-  const ring = (pt, color) => L.circle(pt, { radius: REACH_M, color, weight: 2, dashArray: '4 4', fillOpacity: .15, interactive: false }).addTo(layers.marks);
+  const pin = (pt, html, z = 700, size = 34) => L.marker(pt, { icon: L.divIcon({ className: '', html, iconSize: [size, size], iconAnchor: [size / 2, size / 2] }), zIndexOffset: z, interactive: false }).addTo(layers.marks);
+  const ring = (pt, color) => L.circle(pt, { radius: REACH_M, color, weight: 2, dashArray: '4 4', fillOpacity: .1, interactive: false }).addTo(layers.marks);
+  const RED = ROLE_INK.seeker, INK = ROLE_INK.hider;
   if (S.phase === 'hunting') {
-    for (const x of S.drops || []) if (!x.claimedBy) { ring(x.p, '#ffd23d'); pin(x.p, '<div class="feat-pin bob">📦</div>'); }
-    for (const f of S.flags || []) { ring(f.p, f.by ? P(f.by)?.color || '#888' : '#ff8a3d'); pin(f.p, `<div class="feat-pin">${f.by ? '🏳️' : '🚩'}</div>`); }
-    if (S.jail) { ring(S.jail.p, '#ff4d6d'); pin(S.jail.p, '<div class="feat-pin">⛓️</div>'); }
-    if (S.potato && !S.potato.holder) { ring(S.potato.p, '#ffb547'); pin(S.potato.p, '<div class="feat-pin bob">🥔</div>'); }
-    if (S.sprint && S.sprint.p) { ring(S.sprint.p, '#3dffb5'); pin(S.sprint.p, '<div class="feat-pin bob">🚁</div>', 800, 34); }
-    if (p && p.mission && alive(p)) { ring(p.mission.p, '#b98cff'); pin(p.mission.p, '<div class="feat-pin">🎯</div>'); }
+    for (const x of S.drops || []) if (!x.claimedBy) { ring(x.p, RED); pin(x.p, `<div class="map-pin solid bob">${ic('drops')}</div>`); }
+    for (const f of S.flags || []) { ring(f.p, f.by ? INK : RED); pin(f.p, `<div class="map-pin ${f.by ? 'dark' : 'red'}">${ic('capture')}</div>`); }
+    if (S.jail) { ring(S.jail.p, INK); pin(S.jail.p, `<div class="map-pin dark">${ic('jail')}</div>`); }
+    if (S.potato && !S.potato.holder) { ring(S.potato.p, RED); pin(S.potato.p, `<div class="map-pin red bob">${ic('potato')}</div>`); }
+    if (S.sprint && S.sprint.p) { ring(S.sprint.p, RED); pin(S.sprint.p, `<div class="map-pin solid bob">${ic('sprint')}</div>`, 800); }
+    if (p && p.mission && alive(p)) { ring(p.mission.p, INK); pin(p.mission.p, `<div class="map-pin">${ic('missions')}</div>`); }
   }
   if (blind) return;
   // latest ping per hider + a short faded trail
@@ -988,38 +1037,37 @@ function renderMarks() {
   for (const [id, list] of Object.entries(byId)) {
     const pl = P(id);
     if (!pl) continue;
-    if (!iSeek && id !== me.id && S.phase !== 'ended' && pl.role === 'hider') {
-      // hiders see teammates' pings too, it's the same info the seekers have
-    }
     const real = list.filter((x) => x.p);
     const last = real[real.length - 1];
-    real.slice(-4, -1).forEach((x) => L.circleMarker(x.p, { radius: 4, color: pl.color, weight: 1, opacity: .4, fillOpacity: .25, interactive: false }).addTo(layers.marks));
+    real.slice(-4, -1).forEach((x) => L.circleMarker(x.p, { radius: 4, color: INK, weight: 1, opacity: .35, fillOpacity: .2, interactive: false }).addTo(layers.marks));
     if (!last || (pl.caughtAt && S.phase !== 'ended')) continue;
     const loud = last.kind === 'breach' || last.kind === 'xray';
     const sub = last.kind === 'breach' ? 'OUT OF ZONE' : last.kind === 'xray' ? 'X-RAY · ' + ago(now - last.t) : (id === me.id ? 'your last ping · ' : '') + ago(now - last.t);
     for (const spot of [last.p, ...(last.alts || [])]) {
-      if (last.blur) L.circle(spot, { radius: last.blur, color: pl.color, weight: 1, opacity: .7, fillOpacity: .12, interactive: false }).addTo(layers.marks);
-      L.marker(spot, { icon: blipIcon(loud ? '#ff3b52' : pl.color, esc(pl.name), sub), zIndexOffset: 500 }).addTo(layers.marks);
+      if (last.blur) L.circle(spot, { radius: last.blur, color: loud ? RED : INK, weight: 1.5, opacity: .6, fillOpacity: .08, interactive: false }).addTo(layers.marks);
+      L.marker(spot, { icon: blipIcon(loud ? RED : INK, esc(pl.name), sub, loud ? 'loud' : ''), zIndexOffset: 500 }).addTo(layers.marks);
     }
   }
   // catches
-  for (const e of S.events) if (e.k === 'catch' && e.p) L.marker(e.p, { icon: L.divIcon({ className: '', html: '<div class="skull">☠️</div>', iconSize: [20, 20], iconAnchor: [10, 10] }), interactive: false }).addTo(layers.marks);
+  for (const e of S.events) if (e.k === 'catch' && e.p) pin(e.p, `<div class="map-pin small dark">${ic('caught')}</div>`, 400, 26);
   // seekers visible to hiders via sonar, or to seeker teammates always
   for (const [id, s] of Object.entries(L_.seekerLocs)) {
     if (id === me.id || !P(id)) continue;
     if (now < L_.sonarUntil || iSeek) {
       if (now - s.t > 45000) continue;
-      L.marker(s.p, { icon: blipIcon('#ff4d6d', esc(P(id).name), ago(now - s.t)), zIndexOffset: 600 }).addTo(layers.marks);
+      L.marker(s.p, { icon: blipIcon(RED, esc(P(id).name), ago(now - s.t), 'seeker'), zIndexOffset: 600 }).addTo(layers.marks);
     }
   }
-  if (L_.decoyArmed) L.marker(L_.decoyArmed, { icon: L.divIcon({ className: '', html: '<div class="decoy-pin">👻</div>', iconSize: [22, 22], iconAnchor: [11, 11] }), interactive: false }).addTo(layers.marks);
+  if (L_.decoyArmed) pin(L_.decoyArmed, `<div class="map-pin small">${ic('decoy')}</div>`, 650, 26);
 }
 
 
 // ---------------- the bottom sheet ----------------
 const sheet = $('#sheet');
-function setSheet(html) {
-  sheet.innerHTML = `<div class="grab" data-act="toggleSheet"></div>` + html;
+let sheetView = '';
+function setSheet(html, view = '') {
+  if (view !== sheetView) { sheetView = view; sheet.scrollTop = 0; } // a new screen starts at the top
+  sheet.innerHTML = `<div class="grab" data-act="toggleSheet" role="button" aria-label="Expand or collapse"></div>` + html;
   sheet.hidden = false;
   sheet.classList.toggle('collapsed', sheetCollapsed);
   requestAnimationFrame(() => document.documentElement.style.setProperty('--sheet-h', (window.innerWidth < 720 ? sheet.offsetHeight : 0) + 'px'));
@@ -1027,9 +1075,17 @@ function setSheet(html) {
 function selectHtml(key, val, disabled) {
   return `<select data-set="${key}" ${disabled ? 'disabled' : ''}>${OPTS[key].map(([v, l]) => `<option value="${v}" ${String(v) === String(val) ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
 }
-function playerRow(id, extra = '') {
+function optLabel(key, val) {
+  const o = OPTS[key].find(([v]) => String(v) === String(val));
+  if (o) return o[1];
+  if (/Sec$/.test(key)) return +val % 60 ? `${val} s` : `${val / 60} min`;
+  return /M$/.test(key) ? `${val} m` : String(val);
+}
+function avatar(p, cls = '') { return `<span class="av ${cls}">${esc(Array.from((p && p.name) || '?')[0] || '?')}</span>`; }
+const roleCls = (r) => (r === 'seeker' ? 'seeker' : r === 'hider' ? 'hider' : '');
+function playerRow(id, extra = '', cls = '', pre = '') {
   const p = P(id); const on = peers.has(id);
-  return `<div class="player ${on ? '' : 'off'}"><span class="dot" style="background:${p.color}"></span><span class="nm">${esc(p.name)}${id === me.id ? ' (you)' : ''}${id === S.hostId ? ' 👑' : ''}</span>${extra}</div>`;
+  return `<div class="player ${on ? '' : 'off'}">${pre}${avatar(p, cls)}<span class="nm"><span style="overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</span>${id === me.id ? '<span class="you">(you)</span>' : ''}${id === S.hostId ? `<span class="host" title="Host">${ic('crown')}</span>` : ''}</span>${extra}</div>`;
 }
 
 function renderSheet() {
@@ -1044,8 +1100,8 @@ function renderSheet() {
 }
 
 function geoNote() {
-  if (geoError) return `<p class="note" style="color:var(--warn)">📍 ${esc(geoError)}</p>`;
-  if (!myPos) return `<p class="note">📍 Finding your location…</p>`;
+  if (geoError) return `<p class="note warn">${ic('pin')}<span>${esc(geoError)}</span></p>`;
+  if (!myPos) return `<p class="note">${ic('pin')}<span>Finding your location…</span></p>`;
   return '';
 }
 
@@ -1056,45 +1112,53 @@ function renderLobby() {
   const online = ids.filter((id) => peers.has(id));
   const canStart = host && S.zone && online.length >= 2;
   const z = S.zone;
-  const zoneInfo = z ? `${z.type === 'circle' ? 'Circle, ' + G.fmtDist(z.r) + ' radius' : 'Custom shape, ' + z.pts.length + ' corners'} · ${(G.zoneArea(z) / 1e6).toFixed(2)} km²` : 'No zone yet';
+  const zoneInfo = z ? `${z.type === 'circle' ? 'Circle, ' + G.fmtDist(z.r) + ' radius' : 'Custom shape, ' + z.pts.length + ' corners'} · ${(G.zoneArea(z) / 1e6).toFixed(2)} km²` : host ? 'No zone yet. Pick one below.' : 'The host is choosing the play zone.';
   const drafting = host && zoneDraft;
   let zoneTools = '';
   if (host) {
-    if (!drafting) zoneTools = `<div class="tools"><button class="btn small" data-act="zoneHere" ${myPos ? '' : 'disabled'}>◎ Circle around me</button><button class="btn small" data-act="drawCircle">◯ Pick a circle</button><button class="btn small" data-act="drawPoly">⬠ Draw a shape</button></div>`;
+    if (!drafting) zoneTools = `<div class="tools"><button class="btn small" data-act="zoneHere" ${myPos ? '' : 'disabled'}>${ic('locate')}Around me</button><button class="btn small" data-act="drawCircle">${ic('circle')}Pick a circle</button><button class="btn small" data-act="drawPoly">${ic('shape')}Draw a shape</button></div>`;
     else if (zoneDraft.type === 'circle') zoneTools = `<p class="note">${zoneDraft.c ? 'Drag the slider to size it, or tap the map to move it.' : 'Tap the map to drop the center.'}</p>
-      <input type="range" class="range" min="50" max="3000" step="25" value="${zoneDraft.r}" data-act="radius"><div class="row"><span class="note" style="margin:0">Radius ${G.fmtDist(zoneDraft.r)}</span></div>
+      <input type="range" class="range" min="50" max="3000" step="25" value="${zoneDraft.r}" data-act="radius" aria-label="Zone radius"><div class="row"><span class="note" style="margin:0">Radius ${G.fmtDist(zoneDraft.r)}</span></div>
       <div class="big-actions"><button class="btn" data-act="zoneCancel">Cancel</button><button class="btn primary" data-act="zoneSave" ${zoneDraft.c ? '' : 'disabled'}>Use this zone</button></div>`;
     else zoneTools = `<p class="note">Tap the map to add corners (${zoneDraft.pts.length} so far, need 3+).</p>
       <div class="big-actions"><button class="btn small" data-act="zoneUndo">Undo</button><button class="btn small" data-act="zoneCancel">Cancel</button><button class="btn primary small" data-act="zoneSave" ${zoneDraft.pts.length >= 3 ? '' : 'disabled'}>Use this zone</button></div>`;
   }
-  const settings = `<div class="settings">
-    <label class="set" style="grid-column:1/-1">How tags work${selectHtml('tagMode', s.tagMode, !host)}</label>
-    <label class="set">Hide time${selectHtml('hideSec', s.hideSec, !host)}</label>
-    <label class="set">Round length${selectHtml('huntSec', s.huntSec, !host)}</label>
-    <label class="set">Ping every${selectHtml('pingSec', s.pingSec, !host)}</label>
-    <label class="set">Ping fuzz${selectHtml('blurM', s.blurM, !host)}</label>
-    ${s.fugitive ? '' : `<label class="set">Seekers${selectHtml('seekers', s.seekers, !host)}</label>`}
-    ${s.tagMode === 'gps' ? `<label class="set">Tag range${selectHtml('tagRadiusM', s.tagRadiusM, !host)}</label>` : ''}
-    ${s.shrink ? `<label class="set">Zone${selectHtml('shrinkStyle', s.shrinkStyle || 'steps', !host)}</label><label class="set">Final zone${selectHtml('shrinkTo', s.shrinkTo, !host)}</label>` : ''}
-    ${s.drops ? `<label class="set" style="grid-column:1/-1">Supply drops${selectHtml('dropSec', s.dropSec, !host)}</label>` : ''}
+  // the host gets controls; everyone else gets a plain-English summary of the rules
+  const rules = host ? `<div class="settings">
+    <label class="set" style="grid-column:1/-1">How tags work${selectHtml('tagMode', s.tagMode, false)}</label>
+    <label class="set">Hide time${selectHtml('hideSec', s.hideSec, false)}</label>
+    <label class="set">Round length${selectHtml('huntSec', s.huntSec, false)}</label>
+    <label class="set">Ping every${selectHtml('pingSec', s.pingSec, false)}</label>
+    <label class="set">Ping fuzz${selectHtml('blurM', s.blurM, false)}</label>
+    ${s.fugitive ? '' : `<label class="set">Seekers${selectHtml('seekers', s.seekers, false)}</label>`}
+    ${s.tagMode === 'gps' ? `<label class="set">Tag range${selectHtml('tagRadiusM', s.tagRadiusM, false)}</label>` : ''}
+    ${s.shrink ? `<label class="set">Zone${selectHtml('shrinkStyle', s.shrinkStyle || 'steps', false)}</label><label class="set">Final zone${selectHtml('shrinkTo', s.shrinkTo, false)}</label>` : ''}
+    ${s.drops ? `<label class="set" style="grid-column:1/-1">Supply drops${selectHtml('dropSec', s.dropSec, false)}</label>` : ''}
+  </div>` : `<div class="mode-lines" style="margin:0">
+    <div>${ic('clock')}<span class="txt"><b>${optLabel('hideSec', s.hideSec)}</b> to hide, then a <b>${optLabel('huntSec', s.huntSec)}</b> hunt</span></div>
+    <div>${ic('pin')}<span class="txt">Hiders ping every <b>${optLabel('pingSec', s.pingSec)}</b>${+s.blurM ? `, fuzzed by ${optLabel('blurM', s.blurM)}` : ', exact spot'}</span></div>
+    <div>${ic('tag')}<span class="txt">${s.tagMode === 'gps' ? `Tag by getting within <b>${optLabel('tagRadiusM', s.tagRadiusM)}</b>` : s.tagMode === 'honor' ? 'Honor tags: tag them for real, they confirm' : 'Photo tags: snap them, they confirm'}</span></div>
+    <div>${ic('eye')}<span class="txt">${s.fugitive ? 'One runner, everyone else seeks' : `<b>${s.seekers}</b> seeker${s.seekers > 1 ? 's' : ''} to start`}</span></div>
   </div>`;
-  const modes = `<div class="modes">${MODES.map(([k, t, d]) => `<label class="set toggle mode ${s[k] ? 'on' : ''}"><span><b>${t}</b><small>${d}</small></span><input type="checkbox" data-set="${k}" ${s[k] ? 'checked' : ''} ${host ? '' : 'disabled'}></label>`).join('')}</div>`;
+  const shown = host ? MODES : MODES.filter(([k]) => s[k]);
+  const modes = shown.length ? `<div class="modes">${shown.map(([k, t, d]) => `<label class="mode ${s[k] ? 'on' : ''} ${host ? '' : 'locked'}"><span class="mi">${ic(k)}</span><span class="mt"><b>${t}</b><small>${d}</small></span>${host ? `<span class="sw"><input type="checkbox" data-set="${k}" ${s[k] ? 'checked' : ''} aria-label="${t}"><span></span></span>` : ''}</label>`).join('')}</div>`
+    : '<p class="note" style="margin:0">Classic hide and seek. No extra modes.</p>';
   setSheet(`
     <div class="sheet-h"><div><div class="section-t" style="margin:0">Game code</div><div class="code-big mono">${esc(S.code)}</div></div>
-      <div class="row"><button class="btn small" data-act="share">Invite</button><button class="btn small" data-act="qr">QR</button></div></div>
+      <div class="row"><button class="btn small" data-act="share">${ic('share')}Invite</button><button class="btn small" data-act="qr">${ic('qr')}QR</button></div></div>
     ${geoNote()}
-    <div class="section"><div class="section-t">Players (${online.length} here)</div><div class="players">
-      ${ids.map((id) => playerRow(id, `<span class="meta">${S.totals[id] ? S.totals[id] + ' pts' : ''}</span>${host && id !== me.id ? `<button class="x" data-act="kick" data-id="${id}" aria-label="Remove">×</button>` : ''}`)).join('')}
+    <div class="section"><div class="section-t">Players · ${online.length} here</div><div class="players">
+      ${ids.map((id) => playerRow(id, `<span class="meta">${S.totals[id] ? S.totals[id] + ' pts' : ''}</span>${host && id !== me.id ? `<button class="x" data-act="kick" data-id="${id}" aria-label="Remove ${esc(S.players[id].name)}">${ic('close')}</button>` : ''}`)).join('')}
     </div></div>
-    <div class="section"><div class="section-t">Play zone</div><p class="note" style="margin:0 0 8px">${zoneInfo}</p>${zoneTools}</div>
-    <div class="section"><div class="section-t">Game modes: mix and match${host ? '' : ' (host sets these)'}</div>${modes}</div>
-    <div class="section"><div class="section-t">Rules${host ? '' : ' (host sets these)'}</div>${settings}</div>
+    <div class="section"><div class="section-t">Play zone</div><p class="note" style="margin:0 0 10px">${zoneInfo}</p>${zoneTools}</div>
+    <div class="section"><div class="section-t">${host ? 'Game modes · mix and match' : 'Game modes this round'}</div>${modes}</div>
+    <div class="section"><div class="section-t">Rules${host ? '' : ' · set by the host'}</div>${rules}</div>
     <div class="big-actions">
       <button class="btn ghost" data-act="leave">Leave</button>
       ${host ? `<button class="btn primary big" data-act="start" ${canStart ? '' : 'disabled'}>Start round</button>` : `<button class="btn big" disabled>Waiting for host</button>`}
     </div>
     ${host && !canStart ? `<p class="hint">${!S.zone ? 'Set a play zone to start.' : 'Need at least 2 players.'}</p>` : ''}
-  `);
+  `, 'lobby');
 }
 
 function itemsHtml(role) {
@@ -1104,28 +1168,39 @@ function itemsHtml(role) {
   const armedOf = (k) => (k === 'decoy' && (L_.decoyArmed || L_.placingDecoy)) || (k === 'jammer' && L_.jamArmed) || (k === 'swarm' && L_.swarmArmed)
     || (k === 'shield' && fx.shield) || (k === 'ghost' && now < (fx.ghostUntil || 0));
   const keys = Object.keys(ITEM_INFO).filter((k) => ITEM_INFO[k].role === role && ((inv[k] || 0) > 0 || armedOf(k)));
-  const how = [S.settings.drops && 'grab a 📦 supply drop', role === 'seeker' && 'catch someone', role === 'hider' && S.settings.missions && 'finish a 🎯 mission'].filter(Boolean).join(' or ');
-  if (!keys.length) return `<p class="hint">No power-ups right now.${how ? ' To get one, ' + how + '.' : ''}</p>`;
-  return `<div class="items">${keys.map((k) => {
+  const how = [S.settings.drops && 'grab a supply drop', role === 'seeker' && 'catch someone', role === 'hider' && S.settings.missions && 'finish a mission'].filter(Boolean).join(' or ');
+  const head = '<div class="section-t" style="margin-top:18px">Power-ups</div>';
+  if (!keys.length) return `${head}<p class="hint" style="text-align:left;margin:0">None right now.${how ? ' To get one, ' + how + '.' : ''}</p>`;
+  return `${head}<div class="items">${keys.map((k) => {
     const n = inv[k] || 0, armed = armedOf(k);
-    return `<button class="item ${armed ? 'armed' : ''} ${ITEM_INFO[k].sup ? 'super' : ''}" data-act="item" data-item="${k}" ${n <= 0 && !(k === 'decoy' && L_.placingDecoy) ? 'disabled' : ''}><span class="ic">${ITEM_INFO[k].ic}</span>${ITEM_INFO[k].name}${n > 1 ? ' ×' + n : ''}<small>${armed && n <= 0 ? 'active' : ITEM_INFO[k].desc}</small></button>`;
+    return `<button class="item ${armed ? 'armed' : ''} ${ITEM_INFO[k].sup ? 'super' : ''}" data-act="item" data-item="${k}" ${n <= 0 && !(k === 'decoy' && L_.placingDecoy) ? 'disabled' : ''}>${ic(k)}${ITEM_INFO[k].name}${n > 1 ? `<span class="n">×${n}</span>` : ''}<small>${armed && n <= 0 ? 'Active' : ITEM_INFO[k].desc}</small></button>`;
   }).join('')}</div>`;
 }
 function modeLines(p, now) {
   const L2 = [];
   const far = (pt) => (myPos ? G.fmtDist(G.dist(myPos.p, pt)) + ' away' : 'see map');
-  if (p.role === 'hider' && p.extracted) return '<p class="note">🚁 You escaped. Sit back and watch.</p>';
-  if (p.role === 'hider' && p.caughtAt && S.jail) return `<p class="note">⛓️ You're in jail (${far(S.jail.p)}). Walk there and wait. A free hider who reaches it breaks everyone out.</p>`;
+  const row = (i, t, x = '') => `<div>${ic(i)}<span class="txt">${t}</span>${x}</div>`;
+  const wrap = (rows) => (rows.length ? `<div class="mode-lines">${rows.join('')}</div>` : '');
+  if (p.role === 'hider' && p.extracted) return wrap([row('sprint', 'You escaped. Sit back and watch.')]);
+  if (p.role === 'hider' && p.caughtAt && S.jail) return wrap([row('jail', `You're in jail (${far(S.jail.p)}). Walk there and wait. A free hider who reaches it breaks everyone out.`)]);
   if (p.role === 'hider' && alive(p)) {
-    if (p.mission) L2.push(`🎯 Secret mission: reach your target, ${far(p.mission.p)}`);
-    for (const f of S.flags || []) if (L_.capStart[f.id]) L2.push(`🚩 Capturing: ${Math.min(100, Math.floor((now - L_.capStart[f.id]) / 600))}% · stay put`);
-    if (S.jail && Object.values(S.players).some((x) => x.role === 'hider' && x.caughtAt)) L2.push(`⛓️ Friends in jail, ${far(S.jail.p)}${now < (S.jailCooldownUntil || 0) ? ' · locked for ' + fmt(S.jailCooldownUntil - now) : ''}`);
-    if (S.potato && S.potato.holder === me.id) L2.push(`🥔 You have the hot potato: double points, extra pings <button class="btn small" data-act="dropPotato">Drop it</button>`);
+    if (p.mission) L2.push(row('missions', `Secret mission: reach your target, ${far(p.mission.p)}`));
+    for (const f of S.flags || []) if (L_.capStart[f.id]) L2.push(row('capture', `Capturing: <b>${Math.min(100, Math.floor((now - L_.capStart[f.id]) / 600))}%</b> · stay put`));
+    if (S.jail && Object.values(S.players).some((x) => x.role === 'hider' && x.caughtAt)) L2.push(row('jail', `Friends in jail, ${far(S.jail.p)}${now < (S.jailCooldownUntil || 0) ? ' · locked for ' + fmt(S.jailCooldownUntil - now) : ''}`));
+    if (S.potato && S.potato.holder === me.id) L2.push(row('potato', 'You have the hot potato: double points, extra pings', '<button class="btn small" data-act="dropPotato">Drop it</button>'));
   }
-  if (S.potato && !S.potato.holder && (p.role === 'seeker' || alive(p))) L2.push('🥔 The hot potato is up for grabs');
-  if (S.sprint && S.sprint.p) L2.push(`🚁 Extraction open, ${far(S.sprint.p)}`);
-  else if (S.sprint && p.role === 'hider' && alive(p)) L2.push(`🚁 Extraction opens in ${fmt(S.sprint.at - now)}`);
-  return L2.length ? `<div class="mode-lines">${L2.map((x) => `<div>${x}</div>`).join('')}</div>` : '';
+  if (S.potato && !S.potato.holder && (p.role === 'seeker' || alive(p))) L2.push(row('potato', 'The hot potato is up for grabs'));
+  if (S.sprint && S.sprint.p) L2.push(row('sprint', `Extraction open, ${far(S.sprint.p)}`));
+  else if (S.sprint && p.role === 'hider' && alive(p)) L2.push(row('sprint', `Extraction opens in ${fmt(S.sprint.at - now)}`));
+  return wrap(L2);
+}
+function goalCard(p) {
+  const hunting = S.phase === 'hunting';
+  const card = (cls, i, t, d) => `<div class="goal ${cls}">${ic(i)}<div><b>${t}</b><span>${d}</span></div></div>`;
+  if (p.role === 'hider' && p.extracted) return card('out', 'sprint', 'Escaped', 'You made it out. Watch the rest of the round.');
+  if (p.role === 'hider' && p.caughtAt) return card('out', 'caught', 'Caught', S.jail ? 'Get to the jail and wait for a rescue.' : 'You are out this round. Watch how it plays out.');
+  if (p.role === 'seeker') return card('seeker', 'eye', p.startRole === 'hider' ? 'Seeker · infected' : 'Seeker', hunting ? 'Follow the pings on the map and tag the hiders.' : 'Stay put. The hunt starts when the timer hits zero.');
+  return card('', 'hide', 'Hider', hunting ? `Stay hidden inside the red line. Your phone shows seekers your rough spot every ${optLabel('pingSec', S.settings.pingSec)}.` : 'Get inside the red line and find a hiding spot before the seekers are released.');
 }
 
 function renderPlaying() {
@@ -1133,26 +1208,28 @@ function renderPlaying() {
   if (!p) { setSheet(`<div class="sheet-h"><h2>Round in progress</h2></div><p class="note">You'll join as a seeker in a moment.</p>`); return; }
   const host = isHost();
   const hiders = Object.entries(S.players).filter(([, x]) => x.startRole === 'hider');
-  const status = hiders.map(([id, x]) => `<span class="pill" style="border-color:${x.color};color:${x.caughtAt ? 'var(--muted)' : x.color}">${x.caughtAt ? '☠️ ' : ''}${esc(x.name)}</span>`).join(' ');
+  const left = hiders.filter(([, x]) => !x.caughtAt && !x.extracted).length;
+  const status = hiders.map(([, x]) => `<span class="chip ${x.caughtAt ? 'out' : ''}">${avatar(x, x.caughtAt ? 'out' : 'hider')}${esc(x.name)}</span>`).join('');
   let body = '';
   if (p.role === 'seeker') {
     const tm = S.settings.tagMode || 'gps';
     body = `<div id="dyn"></div>
-      <button class="tag-btn" data-act="${tm === 'photo' ? 'snap' : 'tag'}" ${S.phase === 'hunting' && (myPos || tm !== 'gps') ? '' : 'disabled'}>${tm === 'photo' ? '📸 SNAP TAG' : 'TAG'}</button>
+      <button class="tag-btn" data-act="${tm === 'photo' ? 'snap' : 'tag'}" ${S.phase === 'hunting' && (myPos || tm !== 'gps') ? '' : 'disabled'}>${ic(tm === 'photo' ? 'camera' : 'tag')}${tm === 'photo' ? 'SNAP TAG' : 'TAG'}</button>
       <input type="file" id="snap-in" accept="image/*" capture="environment" hidden>
       <p class="hint">${TAG_HINT[tm](S.settings)}</p>
       ${itemsHtml('seeker')}`;
   } else {
     body = `<div id="dyn"></div>${alive(p) ? itemsHtml('hider') : ''}
-      ${L_.placingDecoy ? `<p class="hint" style="color:var(--accent)">Tap the map inside the zone to place your decoy.</p>` : ''}
+      ${L_.placingDecoy ? `<p class="hint" style="color:var(--red);font-weight:700">Tap the map inside the zone to place your decoy.</p>` : ''}
       ${alive(p) ? '<div class="big-actions"><button class="btn small" data-act="selfCaught">I got caught</button></div>' : ''}`;
   }
   setSheet(`
-    <div class="row" style="justify-content:space-between;margin-bottom:8px"><div class="row">${status}</div></div>
+    ${goalCard(p)}
     ${geoNote()}
     ${body}
+    ${hiders.length ? `<div class="section"><div class="section-t">Hiders · ${left} left</div><div class="hiders-row">${status}</div></div>` : ''}
     ${host ? `<div class="big-actions"><button class="btn small ghost" data-act="ruleCatch">Rule a catch</button><button class="btn small ghost" data-act="endNow">End round</button></div>` : ''}
-  `);
+  `, 'play');
   renderDynamicSheet();
 }
 
@@ -1171,25 +1248,25 @@ function renderDynamicSheet() {
       const d = myPos ? G.dist(myPos.p, x.p) : null;
       if (!best || (d !== null && d < best.d)) best = { id, d, t: x.t };
     }
-    el.innerHTML = `<div class="stat-row" style="margin-bottom:10px">
+    el.innerHTML = `<div class="stat-row" style="margin-bottom:12px">
       <div class="stat"><b>${best && best.d !== null ? G.fmtDist(best.d) : '—'}</b><span>${best ? 'to ' + nm(best.id) + "'s last ping" : 'no pings yet'}</span></div>
       <div class="stat"><b class="mono">${S.phase === 'hunting' ? fmt(pingMs() - ((now - S.huntStart) % pingMs())) : fmt(S.huntStart - now)}</b><span>${S.phase === 'hunting' ? 'until next ping' : 'until the hunt'}</span></div></div>${modeLines(p, now)}`;
   } else if (p.caughtAt) {
-    el.innerHTML = p.extracted || S.jail ? modeLines(p, now) : `<p class="note">You were caught. ${S.settings.infection ? '' : 'Watch the rest of the round.'}</p>`;
+    el.innerHTML = p.extracted || S.jail ? modeLines(p, now) : '';
   } else {
     const z = currentZone(now);
     const ed = myPos && z ? G.edgeDistance(myPos.p, z) : null;
     el.innerHTML = `<div class="stat-row" style="margin-bottom:4px">
       <div class="stat"><b class="mono">${S.phase === 'hunting' ? fmt(pingMs() - ((now - S.huntStart) % pingMs())) : fmt(S.huntStart - now)}</b><span>${S.phase === 'hunting' ? 'until you ping' : 'to hide'}</span></div>
-      <div class="stat"><b>${ed === null ? '—' : ed >= 0 ? G.fmtDist(ed) : 'OUT'}</b><span>${ed === null || ed >= 0 ? 'to the zone edge' : 'of the zone!'}</span></div></div>${modeLines(p, now)}`;
+      <div class="stat ${ed !== null && ed < 0 ? 'alert' : ''}"><b>${ed === null ? '—' : ed >= 0 ? G.fmtDist(ed) : 'OUT'}</b><span>${ed === null || ed >= 0 ? 'to the zone edge' : 'of the zone!'}</span></div></div>${modeLines(p, now)}`;
   }
 }
 
 function renderEnded() {
   if (replay) {
     setSheet(`<div class="sheet-h"><h2>Replay · round ${S.round}</h2><button class="btn small" data-act="replayClose">Scores</button></div>
-      <div class="replay"><button class="btn small" data-act="replayPlay">${replay.playing ? '❚❚' : '▶'}</button><input type="range" min="0" max="1000" value="${Math.round(replay.pos * 1000)}" data-act="replaySeek"><span class="mono note" style="margin:0" id="rp-t"></span></div>
-      <p class="note">☠️ marks where people got caught. Paths show up as each phone sends them in.</p>`);
+      <div class="replay"><button class="btn small" data-act="replayPlay" aria-label="${replay.playing ? 'Pause' : 'Play'}">${ic(replay.playing ? 'pause' : 'play')}</button><input type="range" min="0" max="1000" value="${Math.round(replay.pos * 1000)}" data-act="replaySeek" aria-label="Replay position"><span class="mono note" style="margin:0" id="rp-t"></span></div>
+      <p class="note">Black paths are hiders, red paths are seekers. X markers show where people got caught. Paths show up as each phone sends them in.</p>`, 'replay');
     return;
   }
   const r = S.results || {};
@@ -1198,20 +1275,20 @@ function renderEnded() {
   const totRank = ids.slice().sort((a, b) => (S.totals[b] || 0) - (S.totals[a] || 0));
   const survivors = ids.filter((id) => r[id]?.survived);
   const headline = S.endWhy === 'allCaught' ? 'Seekers win. Everyone got caught.' : survivors.length ? `Hiders win: ${survivors.map(nm).join(', ')} made it` : S.settings.sprint ? 'Seekers win. Nobody reached extraction.' : 'Round over';
-  const line = (id, i, pts, meta) => playerRow(id, `<span class="meta">${meta}</span><span class="pts">${pts}</span>`).replace('<span class="dot"', `<span class="rk">${i + 1}</span><span class="dot"`);
+  const line = (id, i, pts, meta, cls) => playerRow(id, `<span class="meta">${meta}</span><span class="pts">${pts}</span>`, cls, `<span class="rk">${i + 1}</span>`);
   setSheet(`
-    <div class="sheet-h"><h2>${headline}</h2></div>
-    <div class="section"><div class="section-t">Round ${S.round}</div><div class="lb">
-      ${roundRank.map((id, i) => { const x = r[id] || {}; const meta = x.startRole === 'hider' ? (x.extracted ? 'escaped' : x.survived ? 'survived' : 'hid ' + fmt(x.survivedMs)) : (x.catches ? x.catches + ' catch' + (x.catches > 1 ? 'es' : '') : 'seeker'); return line(id, i, '+' + (x.pts || 0), meta); }).join('')}
+    <div class="result-hero ${survivors.length ? 'hiders' : ''}"><small>${S.endWhy === 'host' ? 'Ended by the host' : 'Round ' + S.round}</small><h2>${headline}</h2></div>
+    <div class="section"><div class="section-t">This round</div><div class="lb">
+      ${roundRank.map((id, i) => { const x = r[id] || {}; const meta = x.startRole === 'hider' ? (x.extracted ? 'escaped' : x.survived ? 'survived' : 'hid ' + fmt(x.survivedMs)) : (x.catches ? x.catches + ' catch' + (x.catches > 1 ? 'es' : '') : 'seeker'); return line(id, i, '+' + (x.pts || 0), meta, roleCls(x.startRole)); }).join('')}
     </div></div>
     <div class="section"><div class="section-t">Overall</div><div class="lb">
-      ${totRank.map((id, i) => line(id, i, S.totals[id] || 0, '')).join('')}
+      ${totRank.map((id, i) => line(id, i, S.totals[id] || 0, '', '')).join('')}
     </div></div>
     <div class="section"><div class="section-t">Replay</div>
-      <button class="btn" data-act="replay" style="width:100%">▶ Watch everyone's paths</button></div>
+      <button class="btn" data-act="replay" style="width:100%">${ic('play')}Watch everyone's paths</button></div>
     <div class="big-actions"><button class="btn ghost" data-act="leave">Leave</button>
       ${isHost() ? `<button class="btn primary big" data-act="again">Next round</button>` : `<button class="btn big" disabled>Host starts the next round</button>`}</div>
-  `);
+  `, 'ended');
 }
 
 // ---------------- replay ----------------
@@ -1237,14 +1314,16 @@ function renderReplay() {
   const bounds = [];
   for (const [id, pts] of Object.entries(L_.tracks)) {
     const pl = P(id); if (!pl || !pts.length) continue;
-    L.polyline(pts.map((x) => [x[0], x[1]]), { color: pl.color, weight: 2, opacity: .35, interactive: false }).addTo(layers.replay);
+    const rr = (S.results && S.results[id] && S.results[id].startRole) || pl.startRole || pl.role;
+    const col = ROLE_INK[rr] || ROLE_INK.hider;
+    L.polyline(pts.map((x) => [x[0], x[1]]), { color: col, weight: 2, opacity: .3, interactive: false }).addTo(layers.replay);
     const past = pts.filter((x) => x[2] <= t);
-    if (past.length > 1) L.polyline(past.map((x) => [x[0], x[1]]), { color: pl.color, weight: 4, opacity: .95, interactive: false }).addTo(layers.replay);
+    if (past.length > 1) L.polyline(past.map((x) => [x[0], x[1]]), { color: col, weight: 4, opacity: .95, interactive: false }).addTo(layers.replay);
     const cur = past[past.length - 1] || pts[0];
-    L.marker([cur[0], cur[1]], { icon: blipIcon(pl.color, esc(pl.name), ''), interactive: false }).addTo(layers.replay);
+    L.marker([cur[0], cur[1]], { icon: blipIcon(col, esc(pl.name), '', rr === 'seeker' ? 'seeker' : ''), interactive: false }).addTo(layers.replay);
     pts.forEach((x) => bounds.push([x[0], x[1]]));
   }
-  for (const e of S.events) if (e.k === 'catch' && e.p && e.t <= t) L.marker(e.p, { icon: L.divIcon({ className: '', html: '<div class="skull">☠️</div>', iconSize: [20, 20], iconAnchor: [10, 10] }) }).addTo(layers.replay);
+  for (const e of S.events) if (e.k === 'catch' && e.p && e.t <= t) L.marker(e.p, { icon: L.divIcon({ className: '', html: `<div class="map-pin small dark">${ic('caught')}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] }), interactive: false }).addTo(layers.replay);
   if (!replay.fitted && bounds.length) { fitTo(bounds); replay.fitted = true; }
   const lbl = $('#rp-t'); if (lbl) lbl.textContent = fmt(t - replay.t0);
 }
@@ -1256,9 +1335,9 @@ function renderChat() {
   setSheet(`
     <div class="sheet-h"><h2>Chat</h2><button class="btn small" data-act="closeChat">Close</button></div>
     ${S && S.phase !== 'lobby' && role ? `<div class="seg"><button class="${chatTab === 'all' ? 'on' : ''}" data-act="chatTab" data-tab="all">Everyone</button><button class="${chatTab === 'team' ? 'on' : ''}" data-act="chatTab" data-tab="team">${role === 'seeker' ? 'Seekers' : 'Hiders'} only</button></div>` : ''}
-    <div class="chat-log" id="chat-log">${list.length ? list.map((c) => `<div class="msg ${c.team !== 'all' ? 'team' : ''}"><b style="color:${c.color}">${esc(c.name)}</b><span class="tm">${new Date(c.t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span><div>${esc(c.text)}</div></div>`).join('') : '<p class="note">No messages yet.</p>'}</div>
-    <form class="chat-form" data-act="chatSend"><input id="chat-in" maxlength="200" placeholder="Say something" autocomplete="off"><button class="btn primary">Send</button></form>
-  `);
+    <div class="chat-log" id="chat-log">${list.length ? list.map((c) => `<div class="msg ${c.team !== 'all' ? 'team' : ''}"><b class="${c.role === 'seeker' ? 'seeker' : ''}">${esc(c.name)}</b><span class="tm">${new Date(c.t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span><div>${esc(c.text)}</div></div>`).join('') : '<p class="note">No messages yet.</p>'}</div>
+    <form class="chat-form" data-act="chatSend"><input id="chat-in" maxlength="200" placeholder="Say something" autocomplete="off" aria-label="Message"><button class="btn primary">Send</button></form>
+  `, 'chat');
   const log = $('#chat-log'); if (log) log.scrollTop = log.scrollHeight;
 }
 
@@ -1313,11 +1392,11 @@ function act(a, el) {
     case 'share': {
       const url = inviteUrl();
       if (navigator.share) navigator.share({ title: 'Ghostline', text: `Join my Ghostline game. Code ${S.code}`, url }).catch(() => {});
-      else navigator.clipboard?.writeText(url).then(() => toast('Invite link copied', 'good'), () => toast(url));
+      else navigator.clipboard?.writeText(url).then(() => toast('Invite link copied', 'good', 'check'), () => toast(url));
       break;
     }
     case 'qr': {
-      modal(`<h3>Scan to join ${esc(S.code)}</h3><div class="qr" id="qr"></div><button class="btn" data-act="closeModal" style="width:100%">Done</button>`);
+      modal(`<h3>Scan to join ${esc(S.code)}</h3><div class="qr" id="qr"></div><button class="btn dark" data-act="closeModal" style="width:100%">Done</button>`);
       try { const q = qrcode(0, 'M'); q.addData(inviteUrl()); q.make(); $('#qr').innerHTML = q.createSvgTag({ cellSize: 6, margin: 0, scalable: true }); } catch { $('#qr').textContent = inviteUrl(); }
       break;
     }
@@ -1337,11 +1416,11 @@ function act(a, el) {
     case 'start': startRound(); break;
     case 'again': hostApply((s) => { s.phase = 'lobby'; s.events = []; s.results = null; for (const x of Object.values(s.players)) { x.role = 'hider'; x.caughtAt = null; x.inv = {}; x.fx = {}; x.extracted = null; x.mission = null; } s.drops = []; s.flags = []; s.jail = null; s.potato = null; s.sprint = null; }); break;
     case 'endNow': if (confirm('End this round now?')) hostApply((s) => endRound(s, 'host')); break;
-    case 'dropPotato': if (myPos && S.potato && S.potato.holder === me.id) { send('potatoDrop', { p: myPos.p, acc: myPos.acc }); toast('🥔 You dropped the hot potato.', 'hider'); } break;
+    case 'dropPotato': if (myPos && S.potato && S.potato.holder === me.id) { send('potatoDrop', { p: myPos.p, acc: myPos.acc }); toast('You dropped the hot potato.', 'hider', 'potato'); } break;
     case 'snap': { const fi = $('#snap-in'); if (fi) { fi.value = ''; fi.click(); } break; }
     case 'ruleCatch': {
       const hs = Object.entries(S.players).filter(([, x]) => x.role === 'hider' && !x.caughtAt);
-      modal(`<h3>Rule a catch</h3><p>Who got caught?</p><div class="stack">${hs.map(([id, x]) => `<button class="btn" data-act2="ruleWho" data-id="${id}" style="border-color:${x.color}">${esc(x.name)}</button>`).join('') || '<p>No hiders left.</p>'}<button class="btn ghost" data-act="closeModal">Cancel</button></div>`);
+      modal(`<h3>Rule a catch</h3><p>Who got caught?</p><div class="stack">${hs.map(([id, x]) => `<button class="btn" data-act2="ruleWho" data-id="${id}">${avatar(x, roleCls(x.role))}${esc(x.name)}</button>`).join('') || '<p>No hiders left.</p>'}<button class="btn ghost" data-act="closeModal">Cancel</button></div>`);
       break;
     }
     case 'tag': {
@@ -1352,23 +1431,23 @@ function act(a, el) {
       L_.tagCooldown = Date.now() + 3000;
       send('tag', { p: myPos.p, acc: myPos.acc });
       buzz(40);
-      toast('TAG sent. Anyone within ' + S.settings.tagRadiusM + ' m is out.', 'seeker');
+      toast('TAG sent. Anyone within ' + S.settings.tagRadiusM + ' m is out.', 'seeker', 'tag');
       break;
     }
     case 'item': {
       const item = el.dataset.item;
       if (!ITEM_INFO[item] || (((p.inv && p.inv[item]) || 0) < 1 && !(item === 'decoy' && L_.placingDecoy))) return;
-      if (item === 'decoy') { L_.placingDecoy = !L_.placingDecoy; renderSheet(); if (L_.placingDecoy) toast('Tap the map inside the zone to place your decoy', 'hider'); return; }
-      if (item === 'jammer') { if (L_.jamArmed) return; L_.jamArmed = true; send('useItem', { item }); toast('📵 Jammer armed. Your next ping is blocked.', 'hider'); }
-      if (item === 'swarm') { if (L_.swarmArmed) return; L_.swarmArmed = true; send('useItem', { item }); toast('🐝 Swarm armed. Your next ping shows 4 spots.', 'hider'); }
+      if (item === 'decoy') { L_.placingDecoy = !L_.placingDecoy; renderSheet(); if (L_.placingDecoy) toast('Tap the map inside the zone to place your decoy', 'hider', 'decoy'); return; }
+      if (item === 'jammer') { if (L_.jamArmed) return; L_.jamArmed = true; send('useItem', { item }); toast('Jammer armed. Your next ping is blocked.', 'hider', 'jammer'); }
+      if (item === 'swarm') { if (L_.swarmArmed) return; L_.swarmArmed = true; send('useItem', { item }); toast('Swarm armed. Your next ping shows 4 spots.', 'hider', 'swarm'); }
       if (['sonar', 'ghost', 'shield', 'blackout', 'xray', 'tracker'].includes(item)) send('useItem', { item });
-      if (item === 'radar') { send('useItem', { item }); toast('📡 Radar sweep! Every hider pings now.', 'seeker'); }
+      if (item === 'radar') { send('useItem', { item }); toast('Radar sweep. Every hider pings now.', 'seeker', 'radar'); }
       setTimeout(renderSheet, 50);
       break;
     }
     case 'selfCaught': {
       const seekers = Object.entries(S.players).filter(([, x]) => x.role === 'seeker');
-      modal(`<h3>Who caught you?</h3><p>Be honest. It gives them the points.</p><div class="stack">${seekers.map(([id, x]) => `<button class="btn" data-act2="caughtBy" data-id="${id}" style="border-color:${x.color}">${esc(x.name)}</button>`).join('')}<button class="btn ghost" data-act="closeModal">Never mind</button></div>`);
+      modal(`<h3>Who caught you?</h3><p>Be honest. It gives them the points.</p><div class="stack">${seekers.map(([id, x]) => `<button class="btn" data-act2="caughtBy" data-id="${id}">${avatar(x, roleCls(x.role))}${esc(x.name)}</button>`).join('')}<button class="btn ghost" data-act="closeModal">Never mind</button></div>`);
       break;
     }
     case 'replay': startReplay(); break;
@@ -1399,7 +1478,7 @@ $('#modal').addEventListener('click', (e) => {
   if (a === 'pick' && pickCb) { const f = pickCb; pickCb = null; f(d.id); }
   if (a === 'ruleWho') {
     const ss = Object.entries(S.players).filter(([, x]) => x.role === 'seeker');
-    modal(`<h3>Who caught ${nm(d.id)}?</h3><div class="stack">${ss.map(([id, x]) => `<button class="btn" data-act2="ruleBy" data-who="${d.id}" data-id="${id}" style="border-color:${x.color}">${esc(x.name)}</button>`).join('')}<button class="btn ghost" data-act2="ruleBy" data-who="${d.id}" data-id="">Nobody / not sure</button></div>`);
+    modal(`<h3>Who caught ${nm(d.id)}?</h3><div class="stack">${ss.map(([id, x]) => `<button class="btn" data-act2="ruleBy" data-who="${d.id}" data-id="${id}">${avatar(x, roleCls(x.role))}${esc(x.name)}</button>`).join('')}<button class="btn ghost" data-act2="ruleBy" data-who="${d.id}" data-id="">Nobody / not sure</button></div>`);
   }
   if (a === 'ruleBy' || a === 'ruleYes') { send('caught', { who: d.who, by: d.id || null, how: 'host', p: null }); if (d.req) delete hostPending[d.req]; nextHostRuling(); }
   if (a === 'ruleNo') { if (d.req) { hostPending[d.req] && (hostPending[d.req].status = 'done'); send('ruling', { reqId: d.req, by: d.by, target: d.who, counted: false }); } nextHostRuling(); }
@@ -1419,7 +1498,7 @@ function pickTarget(cb, title = 'Who did you tag?') {
     .map(([id, x]) => ({ id, x, d: myPos && latest[id] ? G.dist(myPos.p, latest[id].p) : Infinity })).sort((a, b) => a.d - b.d);
   if (!hs.length) { toast('No hiders left to tag'); return; }
   pickCb = cb;
-  modal(`<h3>${title}</h3><div class="stack">${hs.map(({ id, x, d }) => `<button class="btn" data-act2="pick" data-id="${id}" style="border-color:${x.color}">${esc(x.name)}${isFinite(d) ? ` <span style="color:var(--muted)">· last ping ${G.fmtDist(d)}</span>` : ''}</button>`).join('')}<button class="btn ghost" data-act="closeModal">Cancel</button></div>`);
+  modal(`<h3>${title}</h3><div class="stack">${hs.map(({ id, x, d }) => `<button class="btn" data-act2="pick" data-id="${id}">${avatar(x, 'hider')}${esc(x.name)}${isFinite(d) ? `<span class="sub">last ping ${G.fmtDist(d)}</span>` : ''}</button>`).join('')}<button class="btn ghost" data-act="closeModal">Cancel</button></div>`);
 }
 function sendTagReq(target, img) {
   if (Date.now() < L_.tagCooldown) { toast('Tag recharging…'); return; }
@@ -1427,7 +1506,7 @@ function sendTagReq(target, img) {
   const reqId = 'r' + Math.random().toString(36).slice(2, 9);
   send(img ? 'photoTag' : 'tagReq', { reqId, target, img: img || undefined });
   buzz(40);
-  toast(`${img ? '📸 Photo' : 'Tag'} sent to ${nm(target)}. Waiting for them to confirm…`, 'seeker');
+  toast(`${img ? 'Photo' : 'Tag'} sent to <b>${nm(target)}</b>. Waiting for them to confirm…`, 'seeker', img ? 'camera' : 'tag');
 }
 async function shrinkImage(file) {
   const url = URL.createObjectURL(file);
@@ -1451,7 +1530,7 @@ function nextIncoming() {
   const r = Object.entries(incoming)[0];
   if (!r) return;
   const [reqId, q] = r;
-  modal(`<h3>${q.kind === 'photo' ? `📸 ${nm(q.by)} snapped you?` : `${nm(q.by)} says they tagged you`}</h3>
+  modal(`<h3>${q.kind === 'photo' ? `${nm(q.by)} snapped you?` : `${nm(q.by)} says they tagged you`}</h3>
     ${q.img ? `<img src="${q.img}" alt="Tag photo" style="width:100%;border-radius:12px;margin-bottom:10px">` : ''}
     <p>${q.kind === 'photo' ? 'Is this you? Be honest.' : 'Did they really get you? Be honest.'}</p>
     <div class="stack"><button class="btn danger" data-act2="confirmYes" data-req="${reqId}">${q.kind === 'photo' ? "Yes, that's me" : 'Yes, they got me'}</button><button class="btn" data-act2="confirmNo" data-req="${reqId}">${q.kind === 'photo' ? 'Not me' : 'No, they missed'}</button></div>`);
@@ -1490,17 +1569,17 @@ map.on('click', (e) => {
     L_.placingDecoy = false;
     L_.decoyArmed = ll;
     send('useItem', { item: 'decoy' });
-    toast('👻 Decoy set. Your next ping shows there.', 'hider');
+    toast('Decoy set. Your next ping shows there.', 'hider', 'decoy');
     renderSheet(); renderMarks();
   }
 });
 function drawDraft() {
   layers.draft.clearLayers();
   if (!zoneDraft) return;
-  if (zoneDraft.type === 'circle' && zoneDraft.c) L.circle(zoneDraft.c, { radius: zoneDraft.r, color: '#ffb547', weight: 2, dashArray: '6 6', fillOpacity: .08 }).addTo(layers.draft);
+  if (zoneDraft.type === 'circle' && zoneDraft.c) L.circle(zoneDraft.c, { radius: zoneDraft.r, color: '#111111', weight: 2, dashArray: '6 6', fillOpacity: .06 }).addTo(layers.draft);
   if (zoneDraft.type === 'poly') {
-    zoneDraft.pts.forEach((p) => L.circleMarker(p, { radius: 5, color: '#ffb547', fillOpacity: 1 }).addTo(layers.draft));
-    if (zoneDraft.pts.length > 1) L.polygon(zoneDraft.pts, { color: '#ffb547', weight: 2, dashArray: '6 6', fillOpacity: .08 }).addTo(layers.draft);
+    zoneDraft.pts.forEach((p) => L.circleMarker(p, { radius: 5, color: '#111111', fillColor: '#e10600', fillOpacity: 1 }).addTo(layers.draft));
+    if (zoneDraft.pts.length > 1) L.polygon(zoneDraft.pts, { color: '#111111', weight: 2, dashArray: '6 6', fillOpacity: .06 }).addTo(layers.draft);
   }
 }
 
