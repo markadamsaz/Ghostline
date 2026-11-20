@@ -498,7 +498,10 @@ function handle(m, self) {
       const okPt = (q) => Array.isArray(q) && q.length === 2 && q.every(Number.isFinite);
       const alts = Array.isArray(d.alts) ? d.alts.filter(okPt).slice(0, 3) : null;
       L_.pings.push({ id: m.from, p: okPt(d.p) ? d.p : null, alts, blur: Math.min(+d.blur || 0, 200), kind: d.kind, n: d.n, t: hostNow() });
-      if (!self && mine()?.role === 'seeker') {
+      if (!self && d.kind === 'away') { // everyone hears about it, seekers get the spot
+        toast(`<b>${nm(m.from)}</b> turned off their screen.${mine()?.role === 'seeker' && okPt(d.p) ? ' Exact spot showing.' : ''}`, 'seeker', 'alert');
+        if (mine()?.role === 'seeker') { beep('alarm'); buzz([80, 60, 80]); }
+      } else if (!self && mine()?.role === 'seeker') {
         if (d.kind === 'breach') { toast(`<b>${nm(m.from)}</b> left the zone. Exact spot showing.`, 'seeker', 'alert'); beep('alarm'); buzz([80, 60, 80]); }
         else if (d.kind === 'jam') { toast(`<b>${nm(m.from)}</b> jammed their signal`, 'seeker', 'jammer'); }
         else if (d.kind === 'ghost') { toast(`<b>${nm(m.from)}</b> is a ghost. No signal.`, 'seeker', 'ghost'); }
@@ -743,6 +746,10 @@ function handle(m, self) {
     case 'seekerLoc': {
       L_.seekerLocs[m.from] = { p: d.p, t: hostNow() };
       renderMarks();
+      break;
+    }
+    case 'away': { // a seeker turned off their screen mid-hunt
+      if (!self && S && S.phase === 'hunting') toast(`<b>${nm(m.from)}</b> turned off their screen.`, '', 'alert');
       break;
     }
     case 'seekerNear': { // for the seeker alarm only: never drawn on the map
@@ -1074,7 +1081,8 @@ function onEvent(e) {
 function sendPing(kind = 'scheduled', n = null) {
   const s = S.settings;
   if (n === null) n = kind === 'scheduled' ? L_.lastPingN : 'r' + Date.now();
-  if (kind !== 'breach' && hostNow() < ((mine()?.fx || {}).ghostUntil || 0)) { send('ping', { kind: 'ghost', n, p: null }); return; }
+  if (kind !== 'breach' && kind !== 'away' && hostNow() < ((mine()?.fx || {}).ghostUntil || 0)) { send('ping', { kind: 'ghost', n, p: null }); return; }
+  if (kind === 'away') { send('ping', { kind, n: 'a' + Date.now(), p: myPos ? myPos.p : null, blur: 0 }); return; } // power-ups can't hide it
   if (!myPos) { send('ping', { kind: 'nosignal', n, p: null }); return; }
   if (kind === 'breach') { send('ping', { kind, n: 'b' + Date.now(), p: myPos.p, blur: 0 }); return; }
   if (kind === 'xray' || kind === 'capture' || kind === 'treasure' || kind === 'live') { send('ping', { kind, n, p: myPos.p, blur: 0 }); return; }
@@ -1148,6 +1156,7 @@ function shopHtml() {
 
 function clientTick() {
   if (!S) return;
+  if (!wakeLock && Date.now() - (L_.lastWakeTry || 0) > 5000) { L_.lastWakeTry = Date.now(); requestWake(); } // joiners get it as soon as they're in
   maybeTakeOverHost();
   hostTick();
   const now = hostNow();
@@ -1332,10 +1341,66 @@ function compactTrack(t) {
   const step = Math.ceil(t.length / 600);
   return t.filter((_, i) => i % step === 0 || i === t.length - 1);
 }
-async function requestWake() {
-  try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } } catch {}
+// Keep the screen on for as long as you're in a game (lobby included).
+// First choice is the Wake Lock API. Where that's missing or refused (older iPhones, some
+// home-screen apps, battery saver), a tiny silent video loops off-screen, which also keeps phones awake.
+let wakeVideo = null;
+function wakeVideoOn() {
+  try {
+    if (!wakeVideo) {
+      wakeVideo = document.createElement('video');
+      wakeVideo.src = 'media/keep-awake.mp4';
+      wakeVideo.muted = true; wakeVideo.loop = true; wakeVideo.playsInline = true;
+      wakeVideo.setAttribute('playsinline', ''); wakeVideo.setAttribute('muted', ''); wakeVideo.setAttribute('aria-hidden', 'true');
+      wakeVideo.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0.01;pointer-events:none;z-index:-1';
+      document.body.appendChild(wakeVideo);
+    }
+    if (wakeVideo.paused) wakeVideo.play().catch(() => {});
+  } catch {}
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S && S.phase !== 'lobby') requestWake(); });
+function wakeVideoOff() { try { if (wakeVideo && !wakeVideo.paused) wakeVideo.pause(); } catch {} }
+let wakePending = false;
+async function requestWake() {
+  if (!S || document.visibilityState !== 'visible') return;
+  if (wakeLock || wakePending) return;
+  wakePending = true;
+  try {
+    if (!('wakeLock' in navigator)) throw 0;
+    const lock = await navigator.wakeLock.request('screen');
+    if (!S) { lock.release().catch(() => {}); return; }
+    wakeLock = lock; wakeVideoOff();
+    lock.addEventListener('release', () => { if (wakeLock === lock) wakeLock = null; if (S && document.visibilityState === 'visible') requestWake(); });
+  } catch { wakeVideoOn(); } finally { wakePending = false; }
+}
+function releaseWake() {
+  const l = wakeLock; wakeLock = null;
+  try { l && l.release(); } catch {}
+  wakeVideoOff();
+}
+// re-arm on every tap (a tap lets the video start on phones that need one) and when the app comes back
+document.addEventListener('pointerdown', () => { if (S) requestWake(); }, { passive: true });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') { requestWake(); if (L_.wentAway) { L_.wentAway = false; showAwayWarning(); } }
+  else screenWentAway();
+});
+window.addEventListener('pagehide', screenWentAway);
+// The power button can't be blocked from a web page, so turning the screen off (or leaving the app)
+// during the hunt gives a hider away: their exact spot goes to the seekers, and everyone is told.
+function screenWentAway() {
+  if (!S || S.phase !== 'hunting') return;
+  const p = mine();
+  if (!p || !alive(p)) return;
+  const now = Date.now();
+  if (now - (L_.lastAway || 0) < 5000) return; // visibilitychange and pagehide can both fire
+  L_.lastAway = now; L_.wentAway = true;
+  if (p.role === 'hider') sendPing('away');
+  else send('away', {});
+}
+function showAwayWarning() {
+  const hider = mine()?.role === 'hider';
+  toast(hider ? '<b>Keep Ghostline open.</b> You turned off your screen, so the seekers saw your exact spot.' : '<b>Keep Ghostline open.</b> Everyone was told you turned off your screen.', 'seeker', 'alert');
+  beep('warn'); buzz([200, 100, 200]);
+}
 
 // ---------------- rendering ----------------
 function renderAll() { renderHud(); renderSheet(); renderZone(); renderMarks(); updateMeMarker(); }
@@ -1421,8 +1486,8 @@ function renderMarks() {
     const last = real[real.length - 1];
     real.slice(-4, -1).forEach((x) => L.circleMarker(x.p, { radius: 4, color: INK, weight: 1, opacity: .35, fillOpacity: .2, interactive: false }).addTo(layers.marks));
     if (!last || (pl.caughtAt && S.phase !== 'ended')) continue;
-    const loud = last.kind === 'breach' || last.kind === 'xray' || last.kind === 'live';
-    const sub = last.kind === 'live' ? 'LIVE · ' + ago(now - last.t) : last.kind === 'breach' ? 'OUT OF ZONE' : last.kind === 'xray' ? 'X-RAY · ' + ago(now - last.t) : (id === me.id ? 'your last ping · ' : '') + ago(now - last.t);
+    const loud = last.kind === 'breach' || last.kind === 'xray' || last.kind === 'live' || last.kind === 'away';
+    const sub = last.kind === 'live' ? 'LIVE · ' + ago(now - last.t) : last.kind === 'breach' ? 'OUT OF ZONE' : last.kind === 'away' ? 'SCREEN OFF · ' + ago(now - last.t) : last.kind === 'xray' ? 'X-RAY · ' + ago(now - last.t) : (id === me.id ? 'your last ping · ' : '') + ago(now - last.t);
     for (const spot of [last.p, ...(last.alts || [])]) {
       if (last.blur) L.circle(spot, { radius: last.blur, color: loud ? RED : INK, weight: 1.5, opacity: .6, fillOpacity: .08, interactive: false }).addTo(layers.marks);
       L.marker(spot, { icon: blipIcon(loud ? RED : INK, esc(pl.name), sub, loud ? 'loud' : ''), zIndexOffset: 500 }).addTo(layers.marks);
@@ -2050,6 +2115,7 @@ function enterGameUI() {
 }
 function leave(msg) {
   try { net && net.close(); } catch {}
+  releaseWake();
   net = null; S = null; code = null; prevPhase = null; prevRound = 0; zoneDraft = null; replay = null; fittedZone = false;
   processed.clear(); chat.length = 0; resetLocal();
   layers.zone.clearLayers(); layers.marks.clearLayers(); layers.replay.clearLayers(); layers.draft.clearLayers();
@@ -2064,7 +2130,7 @@ setInterval(clientTick, 500);
 // test and debug hooks
 window.__gl = {
   get S() { return S; }, get me() { return me; }, get peers() { return [...peers]; }, get local() { return L_; },
-  get myPos() { return myPos; }, get alarmOn() { return alarm.on; }, hostNow, currentZone,
+  get myPos() { return myPos; }, get alarmOn() { return alarm.on; }, get awake() { return !!wakeLock || !!(wakeVideo && !wakeVideo.paused); }, hostNow, currentZone,
   ...(DEBUG ? {
     setPos, act, send, feedFix: (lat, lng, acc) => onPos({ coords: { latitude: lat, longitude: lng, accuracy: acc } }),
     setSettings: (o) => hostApply((s) => { Object.assign(s.settings, o); if (o.jail) s.settings.infection = false; if (o.infection) s.settings.jail = false; }),

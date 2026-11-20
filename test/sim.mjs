@@ -139,6 +139,15 @@ await setPos(hiders[1], off(0, 300));
 ok(await until(async () => !(await G(hiders[1], () => window.__gl.alarmOn)), 8000, 'alarm off'), 'the alarm stops once the seeker is out of range');
 await setPos(hiders[1], spots[1]);
 
+// ---- keep-awake: every phone holds the screen on; a hider who turns the screen off gives away their spot
+ok(await until(async () => (await Promise.all(all.map((ph) => G(ph, () => window.__gl.awake)))).every(Boolean), 8000, 'awake'), 'every phone keeps its screen on during the game');
+const setVis = (ph, v) => G(ph, (v) => { Object.defineProperty(document, 'visibilityState', { value: v, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); }, v);
+await setVis(hiders[0], 'hidden');
+ok(await until(async () => (await G(seeker, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'away' && x.blur === 0 && x.p), hiders[0].pid)), 5000, 'away'), 'a hider who turns off their screen sends their exact spot to the seekers');
+ok(await G(seeker, () => /turned off their screen/.test(document.querySelector('#toasts').textContent)), 'the seeker is told');
+await setVis(hiders[0], 'visible');
+ok(await until(async () => G(hiders[0], () => /Keep Ghostline open/.test(document.querySelector('#toasts').textContent)), 3000, 'away warn'), 'the hider is warned when they come back');
+
 // ---- zone breach
 await setPos(hiders[2], off(700, 0));
 ok(await until(async () => (await G(seeker, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'breach'), hiders[2].pid)), 9000, 'breach'), 'leaving the zone exposes the hider\'s exact spot after the grace period');
