@@ -27,6 +27,9 @@ const ICONS = {
   drops: '<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5l9 4.5 9-4.5"/><path d="M12 12v9"/>',
   missions: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
   capture: '<path d="M5 21V4"/><path d="M5 4h13l-2.5 4.5L18 13H5"/>',
+  treasure: '<path d="M4 10h16v9H4z"/><path d="M4 10a8 5 0 0 1 16 0"/><path d="M11 12h2v3h-2z"/>',
+  trivia: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.5V14"/><path d="M12 17v.5"/>',
+  wire: '<path d="M13 2 5 13h6l-1 9 8-11h-6z"/>',
   potato: '<path d="M12 3c1 4 6 5.5 6 11a6 6 0 0 1-12 0c0-3 2-4.5 2.5-6.5 1 1.2 2 2 3 2 .3-2.3-.5-4.5.5-6.5z"/>',
   sprint: '<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v6H4V6h6"/>',
   shrink: '<path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/>',
@@ -107,6 +110,26 @@ const SUPERS = { hider: ['ghost', 'shield', 'swarm', 'blackout'], seeker: ['xray
 const BASICS = { hider: ['decoy', 'jammer', 'sonar'], seeker: ['radar'] };
 const STARTER = { hider: { decoy: 1, jammer: 1, sonar: 1 }, seeker: { radar: 1 } };
 const GPS_OK = 20, GPS_POOR = 30; // meters: phone accuracy we trust fully / at all
+const TREASURE_PTS = 30, WIRE_PASS_M = 15, TRIVIA_EVERY = 120000;
+// [question, right answer, wrong answers...]
+const TRIVIA = [
+  ['How many legs does a spider have?', '8', '6', '10', '12'], ['Which planet is called the Red Planet?', 'Mars', 'Venus', 'Jupiter', 'Saturn'],
+  ['What is the largest ocean on Earth?', 'Pacific', 'Atlantic', 'Indian', 'Arctic'], ['How many sides does a hexagon have?', '6', '5', '7', '8'],
+  ['What gas do plants take in from the air?', 'Carbon dioxide', 'Oxygen', 'Nitrogen', 'Helium'], ['What is 7 x 8?', '56', '54', '58', '64'],
+  ['What is the capital of Arizona?', 'Phoenix', 'Tucson', 'Mesa', 'Flagstaff'], ['How many continents are there?', '7', '5', '6', '8'],
+  ['What is the fastest land animal?', 'Cheetah', 'Lion', 'Horse', 'Greyhound'], ['Which is the biggest planet?', 'Jupiter', 'Earth', 'Saturn', 'Neptune'],
+  ['What do bees make?', 'Honey', 'Butter', 'Silk', 'Syrup'], ['What is 12 x 12?', '144', '124', '132', '156'],
+  ['How many days are in a leap year?', '366', '364', '365', '367'], ['At what temperature does water boil, in Fahrenheit?', '212', '100', '180', '250'],
+  ['Which state is the Grand Canyon in?', 'Arizona', 'Utah', 'Nevada', 'Colorado'], ['What is the hardest natural material?', 'Diamond', 'Gold', 'Iron', 'Quartz'],
+  ['How many players does a soccer team have on the field?', '11', '9', '10', '12'], ['What is the square root of 81?', '9', '7', '8', '11'],
+  ['What color do you get mixing blue and yellow?', 'Green', 'Purple', 'Orange', 'Brown'], ['How many bones are in an adult human body?', '206', '106', '186', '306'],
+  ['What is the closest star to Earth?', 'The Sun', 'Polaris', 'Sirius', 'Vega'], ['What is 15 + 27?', '42', '32', '43', '52'],
+  ['Which planet has the biggest rings?', 'Saturn', 'Mars', 'Uranus', 'Mercury'], ['What is the largest animal ever?', 'Blue whale', 'Elephant', 'Giraffe', 'T. rex'],
+  ['What is H2O?', 'Water', 'Salt', 'Air', 'Sugar'], ['In which sport do you score a touchdown?', 'Football', 'Soccer', 'Baseball', 'Hockey'],
+  ['How many minutes are in 3 hours?', '180', '120', '160', '300'], ['Which animal is a mammal?', 'Dolphin', 'Shark', 'Salmon', 'Octopus'],
+  ['What is half of 250?', '125', '120', '115', '150'], ['What is the tallest animal?', 'Giraffe', 'Elephant', 'Moose', 'Camel'],
+];
+const MISS_PTS = 10; // a GPS tag that reaches nobody costs the seeker this much
 const REACH_M = 20; // how close you have to get to a drop, flag, jail, mission or extraction point
 // game modes the host can mix and match
 const MODES = [
@@ -117,6 +140,9 @@ const MODES = [
   ['drops', 'Supply drops', 'Super power-ups land on the map. Everyone can see them'],
   ['missions', 'Missions', 'Each hider gets secret spots to reach for points and power-ups'],
   ['capture', 'Capture points', 'Hold a flag for 1 min for +50. You ping while you hold it'],
+  ['treasure', 'Treasure drops', 'Chests pop up out in the open. Grab one for +30, but it pings your exact spot to the seekers'],
+  ['trivia', 'Quick-fire trivia', 'Hiders get a quick question every 2 min. Answer right in 15 s for a free decoy'],
+  ['wire', 'Live Wire', 'One hider holds a live wire and can see the other hiders. Walk near one to pass it. Holding it when the fuse runs out means you go live: seekers see you for the rest of the round'],
   ['potato', 'Hot potato', 'Whoever carries it pings twice as often but scores double'],
   ['sprint', 'Final sprint', 'An extraction point opens near the end. Reach it for +100'],
   ['shrink', 'Shrinking zone', 'The zone closes in over the round'],
@@ -130,7 +156,8 @@ const OPTS = {
   huntSec: [[300, '5 min'], [600, '10 min'], [900, '15 min'], [1200, '20 min'], [1800, '30 min'], [2700, '45 min'], [3600, '60 min']],
   pingSec: [[30, '30 s'], [60, '1 min'], [120, '2 min'], [180, '3 min'], [300, '5 min'], [600, '10 min']],
   blurM: [[0, 'Exact'], [10, '10 m'], [25, '25 m'], [50, '50 m'], [100, '100 m']],
-  tagRadiusM: [[10, '10 m'], [15, '15 m'], [20, '20 m'], [25, '25 m'], [30, '30 m'], [40, '40 m']],
+  tagRadiusM: [[10, '10 m'], [20, '20 m'], [30, '30 m'], [40, '40 m'], [50, '50 m']],
+  wireSec: [[60, '1 min'], [120, '2 min'], [180, '3 min'], [300, '5 min'], [600, '10 min']],
   seekers: [[1, '1'], [2, '2'], [3, '3']],
   dropSec: [[60, 'Every 1 min'], [120, 'Every 2 min'], [180, 'Every 3 min'], [300, 'Every 5 min'], [600, 'Every 10 min']],
   shrinkStyle: [['smooth', 'Closes in smoothly'], ['steps', 'Jumps in at each ping']],
@@ -138,14 +165,14 @@ const OPTS = {
   tagMode: [['gps', 'GPS range: hit TAG when close'], ['honor', 'Honor: tag them, they confirm'], ['photo', 'Photo: snap them, they confirm']],
 };
 const TAG_HINT = {
-  gps: (s) => `Get within ${s.tagRadiusM} m of a hider and hit TAG.`,
+  gps: (s) => `Get within ${s.tagRadiusM} m of a hider and hit TAG. A tag that reaches nobody costs ${MISS_PTS} points.`,
   honor: () => 'Touch them for real, then hit TAG and pick who. They confirm on their phone.',
   photo: () => 'Snap a clear photo of them. They confirm it is them, or the host decides.',
 };
 const DEFAULT_SETTINGS = {
-  hideSec: 120, huntSec: 1200, pingSec: 300, blurM: 25, tagRadiusM: 15, seekers: 1,
+  hideSec: 120, huntSec: 1200, pingSec: 300, blurM: 25, tagRadiusM: 20, seekers: 1,
   tagMode: 'gps', infection: true, fugitive: false, jail: false, starter: true, drops: true, dropSec: 180,
-  missions: false, capture: false, potato: false, sprint: false,
+  missions: false, capture: false, potato: false, sprint: false, treasure: false, trivia: false, wire: false, wireSec: 180,
   shrink: true, shrinkStyle: 'smooth', shrinkTo: 0.4, strictZone: true, graceSec: 15,
 };
 
@@ -189,7 +216,7 @@ function resetLocal() {
     lastPingN: -1, warnedN: -1,
     decoyArmed: null, jamArmed: false, placingDecoy: false,
     outSince: null, lastBreach: 0,
-    sonarUntil: 0, seekerLocs: {}, peekUntil: 0, trailUntil: 0, trailLocs: {}, trailSendUntil: 0, spotUntil: 0,
+    sonarUntil: 0, seekerLocs: {}, peekUntil: 0, trailUntil: 0, trailLocs: {}, wireLocs: {}, trivia: null, nextTrivia: 0, trailSendUntil: 0, spotUntil: 0,
     tracks: {}, myTrack: [],
     tagCooldown: 0, lastShrinkK: 0,
     swarmArmed: false, lastTrack: 0, lastPotN: -1, sentAt: {}, capStart: {}, capPing: {}, dqSent: false, ozSec: -1,
@@ -441,6 +468,8 @@ function handle(m, self) {
       break;
     }
     case 'tag': {
+      // host: remember the tag; if no hider answers that it landed (or nearly did), it was a miss
+      if (isHost() && S && S.phase === 'hunting' && S.players[m.from] && S.players[m.from].role === 'seeker') hostTags.push({ by: m.from, t: Date.now(), hit: false });
       // a seeker hit TAG: my own phone decides if I was in range
       if (self || !S || S.phase !== 'hunting') return;
       const p = mine();
@@ -462,12 +491,14 @@ function handle(m, self) {
       break;
     }
     case 'tagWeak': {
+      if (isHost()) markTagHit(d.to);
       if (d.to !== me.id || !S || S.phase !== 'hunting') return;
       toast(`Too close to call: GPS is weak (±${Math.round(+d.acc || 0)} m). Get closer and tag again.`, 'seeker', 'alert');
       break;
     }
     case 'caught': {
       if (!isHost() || S.phase !== 'hunting') return;
+      if (d.how === 'tag' && m.from === d.who) markTagHit(d.by);
       if (m.from === d.who) for (const q of Object.values(hostPending)) if (q.target === d.who) q.status = 'done'; // the hider answered: nothing left to rule on
       const who = S.players[d.who];
       if (!who || who.role !== 'hider' || who.caughtAt || who.extracted) return;
@@ -526,7 +557,7 @@ function handle(m, self) {
       });
       break;
     }
-    case 'claim': case 'mission': case 'flag': case 'potato': case 'potatoDrop': case 'breakout': case 'extract': {
+    case 'claim': case 'mission': case 'flag': case 'treasure': case 'potato': case 'potatoDrop': case 'breakout': case 'extract': {
       if (!isHost() || S.phase !== 'hunting') return;
       const q = S.players[m.from];
       if (!q || !Array.isArray(d.p) || !d.p.every(Number.isFinite)) return;
@@ -577,6 +608,10 @@ function handle(m, self) {
           x.by = m.from; const w = s.players[m.from]; w.bonus = (w.bonus || 0) + 50; w.flags = (w.flags || 0) + 1; credit(s, m.from, 50);
           s.events.push({ id: evId(), k: 'flag', who: m.from, t: now });
         });
+      }
+      if (m.t === 'treasure') {
+        if (!S.treasure || S.treasure.id !== d.id || q.role !== 'hider' || !alive(q) || !ok(S.treasure.p)) return;
+        hostApply((s) => { const w = s.players[m.from]; w.bonus = (w.bonus || 0) + TREASURE_PTS; credit(s, m.from, TREASURE_PTS); s.events.push({ id: evId(), k: 'treasureGot', who: m.from, p: s.treasure.p, t: now }); s.treasure = null; s.nextTreasureAt = now + 90000; });
       }
       if (m.t === 'potato') {
         if (!S.potato || S.potato.holder || !ok(S.potato.p)) return;
@@ -644,7 +679,22 @@ function handle(m, self) {
       });
       break;
     }
+    case 'wirePass': {
+      if (!isHost() || !S || S.phase !== 'hunting' || !S.wire || S.wire.holder !== m.from) return;
+      const t = S.players[d.to];
+      if (!t || t.role !== 'hider' || t.caughtAt || t.extracted || d.to === m.from) return;
+      hostApply((s) => { s.wire.from = m.from; s.wire.holder = d.to; s.wire.at = Date.now(); s.events.push({ id: evId(), k: 'wirePass', from: m.from, to: d.to, t: Date.now() }); });
+      break;
+    }
+    case 'triviaWin': {
+      if (!isHost() || !S || S.phase !== 'hunting' || !S.settings.trivia) return;
+      const q = S.players[m.from];
+      if (!q || q.role !== 'hider' || !alive(q) || Date.now() - (q.lastTrivia || 0) < 60000) return;
+      hostApply((s) => { const w = s.players[m.from]; w.lastTrivia = Date.now(); w.inv = w.inv || {}; w.inv.decoy = (w.inv.decoy || 0) + 1; });
+      break;
+    }
     case 'hiderLoc': {
+      if (d.wire) { if (S && S.wire && S.wire.holder === me.id && Array.isArray(d.p) && d.p.every(Number.isFinite)) L_.wireLocs[m.from] = { p: d.p, t: hostNow() }; break; }
       if (hostNow() < (L_.trailUntil || 0) && Array.isArray(d.p)) { L_.trailLocs[m.from] = { p: d.p, t: hostNow() }; updateTrail(); }
       break;
     }
@@ -721,7 +771,7 @@ function startRound() {
       p.role = seekers.has(id) ? 'seeker' : 'hider';
       p.startRole = p.role;
       if (seekers.has(id)) p.seekerCount = (p.seekerCount || 0) + 1; else if (s.settings.fugitive) p.runnerCount = (p.runnerCount || 0) + 1;
-      p.caughtAt = null; p.caughtBy = null; p.fx = {}; p.bonus = 0; p.potatoMs = 0; p.extracted = null; p.mission = null; p.flags = 0; p.missionsDone = 0;
+      p.caughtAt = null; p.caughtBy = null; p.fx = {}; p.bonus = 0; p.potatoMs = 0; p.live = false; p.extracted = null; p.mission = null; p.flags = 0; p.missionsDone = 0;
       p.inv = s.settings.starter ? { ...STARTER[p.role] } : {};
       p.banked = 0;
       for (const [k, n] of Object.entries(p.bank || {})) { // shop items saved for a round with this role
@@ -731,7 +781,7 @@ function startRound() {
       }
     }
     s.wallet = s.wallet || {}; s.lockdownUntil = 0;
-    s.drops = []; s.flags = []; s.jail = null; s.potato = null; s.sprint = null; s.blackoutUntil = 0; s.trackerUntil = 0; s.jailCooldownUntil = 0;
+    s.drops = []; s.flags = []; s.jail = null; s.potato = null; s.sprint = null; s.treasure = null; s.wire = null; s.nextTreasureAt = Infinity; s.nextWireAt = Infinity; s.blackoutUntil = 0; s.trackerUntil = 0; s.jailCooldownUntil = 0;
     const now = Date.now();
     s.round++; s.phase = 'hiding';
     s.roundStart = now; s.huntStart = now + s.settings.hideSec * 1000; s.huntEnd = s.huntStart + s.settings.huntSec * 1000;
@@ -758,6 +808,9 @@ function setupModes(s) {
   if (s.settings.capture) s.flags = [0, 1].map((i) => ({ id: 'f' + i, p: randomSpotIn(fz, i ? s.flags?.[0]?.p : null, 60), by: null }));
   if (s.settings.capture && s.flags[1] && s.flags[0] && G.dist(s.flags[0].p, s.flags[1].p) < 60) s.flags[1].p = randomSpotIn(fz, s.flags[0].p, 60);
   if (s.settings.potato) s.potato = { p: randomSpotIn(fz), holder: null, since: 0 };
+  const t0 = Date.now();
+  if (s.settings.treasure) s.nextTreasureAt = t0 + 60000;
+  if (s.settings.wire) armWire(s, t0);
   if (s.settings.sprint) s.sprint = { at: s.huntEnd - Math.max(60, Math.min(300, s.settings.huntSec * 0.2)) * 1000, p: null };
 }
 function spawnDrop(s) {
@@ -799,18 +852,61 @@ function endRound(s, why) {
     res[id].pts += p.bonus || 0;
   }
   for (const e of s.events) if (e.k === 'catch' && e.by && res[e.by]) { res[e.by].catches++; res[e.by].pts += 50; }
+  for (const r of Object.values(res)) r.pts = Math.max(0, r.pts);
   s.results = res;
   s.wallet = s.wallet || {};
   for (const [id, r] of Object.entries(res)) {
     s.totals[id] = (s.totals[id] || 0) + r.pts;
-    s.wallet[id] = (s.wallet[id] || 0) + Math.max(0, r.pts - (s.players[id].banked || 0)); // what was not already paid out mid-round
+    s.wallet[id] = Math.max(0, (s.wallet[id] || 0) + r.pts - (s.players[id].banked || 0)); // what was not already paid out mid-round (missed tags can take some back)
     s.players[id].banked = 0;
+  }
+}
+function liveHiders(s, except) { return Object.keys(s.players).filter((id) => { const q = s.players[id]; return id !== except && q.role === 'hider' && !q.caughtAt && !q.extracted && peers.has(id); }); }
+function armWire(s, now) { // hand the live wire to a random hider who isn't live yet
+  const ids = liveHiders(s).filter((id) => !s.players[id].live);
+  if (ids.length < 2) { s.wire = null; s.nextWireAt = now + 30000; return; }
+  s.wire = { holder: pick(ids), until: now + (s.settings.wireSec || 180) * 1000, from: null, at: now };
+  s.nextWireAt = Infinity;
+  s.events.push({ id: evId(), k: 'wire', who: s.wire.holder, t: now });
+}
+function hostModesTick(now) {
+  const st = S.settings;
+  if (st.treasure && !S.treasure && now >= (S.nextTreasureAt || Infinity) && now < S.huntEnd - 30000) hostApply((s) => {
+    s.treasure = { id: 't' + Math.random().toString(36).slice(2, 7), p: randomSpotIn(currentZone(now) || s.zone) };
+    s.nextTreasureAt = Infinity; s.events.push({ id: evId(), k: 'treasure', t: now });
+  });
+  if (!S.wire) { if (st.wire && now >= (S.nextWireAt || Infinity) && now < S.huntEnd - 60000) hostApply((s) => armWire(s, now)); return; }
+  const h = S.players[S.wire.holder];
+  if (!h || h.role !== 'hider' || h.caughtAt || h.extracted) { // holder is out: the wire jumps to someone else, same fuse
+    hostApply((s) => { const ids = liveHiders(s, s.wire.holder); if (!ids.length) { s.wire = null; return; } s.wire.from = null; s.wire.holder = pick(ids); s.wire.at = now; s.events.push({ id: evId(), k: 'wirePass', to: s.wire.holder, t: now }); });
+  } else if (now >= S.wire.until) {
+    hostApply((s) => { const w = s.players[s.wire.holder]; w.live = true; s.events.push({ id: evId(), k: 'wireLive', who: s.wire.holder, t: now }); s.wire = null; s.nextWireAt = now + 60000; });
+  }
+}
+const hostTags = []; // host: recent GPS tags waiting to hear if they hit anyone
+function markTagHit(by) { const t = hostTags.find((x) => x.by === by && !x.hit); if (t) t.hit = true; }
+function hostMissTick(now) {
+  while (hostTags.length && now - hostTags[0].t > 3500) {
+    const t = hostTags.shift();
+    if (t.hit || !S || S.phase !== 'hunting') continue;
+    hostApply((s) => {
+      const q = s.players[t.by];
+      if (!q || q.role !== 'seeker') return;
+      s.wallet = s.wallet || {};
+      const take = Math.min(MISS_PTS, s.wallet[t.by] || 0); // never below 0
+      s.wallet[t.by] = (s.wallet[t.by] || 0) - take;
+      q.banked = (q.banked || 0) - take;
+      q.bonus = (q.bonus || 0) - MISS_PTS;
+      s.events.push({ id: evId(), k: 'tagMiss', by: t.by, t: now });
+    });
   }
 }
 function hostTick() {
   if (!isHost()) return;
   hostRulingsTick();
   const now = Date.now();
+  hostMissTick(now);
+  if (S.phase === 'hunting') hostModesTick(now);
   if (S.phase === 'hiding' && now >= S.huntStart) hostApply((s) => { s.phase = 'hunting'; setupModes(s); s.events.push({ id: evId(), k: 'hunt', t: now }); });
   else if (S.phase === 'hunting' && now >= S.huntEnd) hostApply((s) => checkEnd(s));
   else if (S.phase === 'hunting' && S.settings.drops && now >= (S.nextDropAt || Infinity)) hostApply(spawnDrop);
@@ -897,6 +993,12 @@ function onEvent(e) {
   if (e.k === 'flag') toast(self_(e.who) ? 'Flag captured. +50' : `<b>${nm(e.who)}</b> captured a flag`, self_(e.who) ? 'good' : tone(e.who), 'capture');
   if (e.k === 'potato') { if (self_(e.who)) { toast('You grabbed the hot potato: double points, but you ping twice as often.', 'good', 'potato'); sendPing('potato'); } else toast(`<b>${nm(e.who)}</b> has the hot potato`, tone(e.who), 'potato'); }
   if (e.k === 'potatoDrop' && !self_(e.who)) toast(`<b>${nm(e.who)}</b> dropped the hot potato`, '', 'potato');
+  if (e.k === 'treasure') { beep('warn'); toast(`A treasure chest dropped. +${TREASURE_PTS} for the hider who grabs it.`, 'good', 'treasure'); }
+  if (e.k === 'treasureGot') { if (self_(e.who)) { beep('alarm'); toast(`+${TREASURE_PTS} points! Your exact spot just pinged. Move!`, 'good', 'treasure'); sendPing('treasure'); } else toast(`<b>${nm(e.who)}</b> grabbed the treasure`, tone(e.who), 'treasure'); }
+  if (e.k === 'wire') { L_.wireLocs = {}; if (self_(e.who)) { beep('alarm'); buzz([200, 80, 200]); toast(`You have the Live Wire! ${fmt(S.wire ? S.wire.until - hostNow() : 0)} on the fuse. Walk near another hider to pass it.`, 'seeker', 'wire'); } else toast(`<b>${nm(e.who)}</b> has the Live Wire`, '', 'wire'); }
+  if (e.k === 'wirePass') { L_.wireLocs = {}; if (self_(e.to)) { beep('alarm'); buzz([200, 80, 200]); toast(`${e.from ? `<b>${nm(e.from)}</b> passed you` : 'You got'} the Live Wire! Pass it before the fuse runs out.`, 'seeker', 'wire'); } else if (self_(e.from)) toast('Passed the Live Wire.', 'good', 'wire'); else toast(`<b>${nm(e.to)}</b> has the Live Wire`, '', 'wire'); }
+  if (e.k === 'wireLive') { if (self_(e.who)) { beep('alarm'); buzz([400, 100, 400]); toast('The fuse ran out. You are LIVE: seekers can see you for the rest of the round.', 'seeker', 'wire'); } else toast(`<b>${nm(e.who)}</b> is LIVE. Seekers can see them now.`, 'seeker', 'wire'); }
+  if (e.k === 'tagMiss' && self_(e.by)) { buzz([120]); toast(`Missed tag: nobody was in range. -${MISS_PTS} points.`, 'seeker', 'alert'); }
   if (e.k === 'extract') { beep('alarm'); buzz([200, 100, 200, 100, 400]); toast('Extraction point is open. Hiders: reach it for +100. Seekers: guard it.', 'good', 'sprint'); }
   if (e.k === 'extracted') toast(self_(e.who) ? 'You made it out. +100. You are safe.' : `<b>${nm(e.who)}</b> escaped`, self_(e.who) ? 'good' : tone(e.who), 'sprint');
   if (e.k === 'breakout') { beep('alarm'); toast((e.freed || []).includes(me.id) ? `<b>${nm(e.by)}</b> broke you out. Run!` : `<b>${nm(e.by)}</b> broke ${e.freed.length} out of jail`, (e.freed || []).includes(me.id) ? 'good' : tone(e.by), 'jail'); }
@@ -929,7 +1031,7 @@ function sendPing(kind = 'scheduled', n = null) {
   if (kind !== 'breach' && hostNow() < ((mine()?.fx || {}).ghostUntil || 0)) { send('ping', { kind: 'ghost', n, p: null }); return; }
   if (!myPos) { send('ping', { kind: 'nosignal', n, p: null }); return; }
   if (kind === 'breach') { send('ping', { kind, n: 'b' + Date.now(), p: myPos.p, blur: 0 }); return; }
-  if (kind === 'xray' || kind === 'capture') { send('ping', { kind, n, p: myPos.p, blur: 0 }); return; }
+  if (kind === 'xray' || kind === 'capture' || kind === 'treasure' || kind === 'live') { send('ping', { kind, n, p: myPos.p, blur: 0 }); return; }
   if (kind === 'scheduled' && L_.swarmArmed) {
     L_.swarmArmed = false;
     const z = currentZone() || S.zone;
@@ -946,6 +1048,22 @@ function bearing(a, b) {
   const r = Math.PI / 180, y = Math.sin((b[1] - a[1]) * r) * Math.cos(b[0] * r);
   const x = Math.cos(a[0] * r) * Math.sin(b[0] * r) - Math.sin(a[0] * r) * Math.cos(b[0] * r) * Math.cos((b[1] - a[1]) * r);
   return (Math.atan2(y, x) / r + 360) % 360;
+}
+function showTrivia(now) {
+  const [q, ans, ...wrong] = pick(TRIVIA);
+  L_.trivia = { ans, until: now + 15000 };
+  L_.nextTrivia = now + TRIVIA_EVERY;
+  beep('warn'); buzz([60, 60, 60]);
+  modal(`<h3>${ic('trivia')} Quick-fire trivia</h3><p>${esc(q)}</p><div class="stack">${shuffle([ans, ...wrong]).map((o) => `<button class="btn" data-act2="trivia" data-a="${esc(o)}">${esc(o)}</button>`).join('')}</div><p class="hint">15 seconds. Get it right for a free decoy.</p>`);
+}
+function updateWireBar(now) {
+  let el = $('#wirebar');
+  if (!el) { el = document.createElement('div'); el.id = 'wirebar'; el.hidden = true; document.body.appendChild(el); }
+  const p = mine();
+  if (!S || S.phase !== 'hunting' || !S.wire || !p) { el.hidden = true; return; }
+  const mineW = S.wire.holder === me.id;
+  el.hidden = false; el.classList.toggle('hot', mineW);
+  el.innerHTML = `${ic('wire')}<span class="tr-t">${mineW ? 'You have the Live Wire' : `<b>${nm(S.wire.holder)}</b> has the Live Wire`} · <b class="mono">${fmt(Math.max(0, S.wire.until - now))}</b>${mineW ? ' · get near a hider' : ''}</span>`;
 }
 function updateTrail() {
   let el = $('#trail');
@@ -988,6 +1106,7 @@ function clientTick() {
   hostTick();
   const now = hostNow();
   if (now < (L_.trailUntil || 0) + 1500) updateTrail();
+  updateWireBar(now);
   const p = mine();
   if (S.phase === 'hunting' && p && p.role === 'hider' && alive(p)) {
     const n = Math.floor((now - S.huntStart) / pingMs());
@@ -995,6 +1114,18 @@ function clientTick() {
     if (now < (S.trackerUntil || 0) && now - (L_.lastTrack || 0) >= 15000) { L_.lastTrack = now; sendPing('tracker'); }
     if (now < (L_.trailSendUntil || 0) && now - (L_.lastTrailSend || 0) >= 5000 && myPos) { L_.lastTrailSend = now; send('hiderLoc', { p: G.randomInDisk(myPos.p, 20) }); }
     if (now < (L_.spotUntil || 0) && now - (L_.lastSpot || 0) >= 5000) { L_.lastSpot = now; sendPing('xray'); }
+    if (p.live && now - (L_.lastLive || 0) >= 5000) { L_.lastLive = now; sendPing('live'); }
+    if (S.wire && S.wire.holder !== me.id && myPos && now - (L_.lastWireSend || 0) >= 5000) { L_.lastWireSend = now; send('hiderLoc', { p: myPos.p, wire: true }); }
+    if (S.wire && S.wire.holder === me.id && myPos) for (const [id, x] of Object.entries(L_.wireLocs)) {
+      const q = P(id);
+      if (!q || q.role !== 'hider' || !alive(q) || now - x.t > 12000 || (id === S.wire.from && now - S.wire.at < 15000)) continue;
+      if (G.dist(myPos.p, x.p) <= WIRE_PASS_M + Math.min(10, (myPos.acc || 0) / 2)) { sendOnce('wire', 'wirePass', { to: id }, now, 3000); break; }
+    }
+    if (S.settings.trivia) {
+      if (!L_.nextTrivia) L_.nextTrivia = now + 60000;
+      if (L_.trivia && now > L_.trivia.until) { L_.trivia = null; if ($('#modal [data-act2="trivia"]')) closeModal(); toast("Time's up on that question.", '', 'trivia'); }
+      if (!L_.trivia && now >= L_.nextTrivia && $('#modal').hidden) showTrivia(now);
+    }
     if (S.potato && S.potato.holder === me.id) { // hot potato: an extra ping halfway between the normal ones
       const h = Math.floor((now - S.huntStart) / (pingMs() / 2));
       if (h % 2 === 1 && h > L_.lastPotN) { L_.lastPotN = h; sendPing('potato'); toast('Hot potato ping', 'hider', 'potato'); }
@@ -1024,6 +1155,7 @@ function reachThings(p, now) {
     return;
   }
   if (p.mission && near(p.mission.p)) sendOnce('m' + p.mission.id, 'mission', { id: p.mission.id }, now);
+  if (S.treasure && near(S.treasure.p)) sendOnce('tr' + S.treasure.id, 'treasure', { id: S.treasure.id }, now);
   if (S.potato && !S.potato.holder && near(S.potato.p)) sendOnce('potato' + S.potato.p.join(), 'potato', {}, now);
   if (S.sprint && S.sprint.p && near(S.sprint.p)) sendOnce('extract', 'extract', {}, now);
   if (S.jail && near(S.jail.p) && now >= (S.jailCooldownUntil || 0) && Object.values(S.players).some((x) => x.role === 'hider' && x.caughtAt)) sendOnce('breakout', 'breakout', {}, now, 6000);
@@ -1212,6 +1344,7 @@ function renderMarks() {
     for (const x of S.drops || []) if (!x.claimedBy) { ring(x.p, RED); pin(x.p, `<div class="map-pin solid bob">${ic('drops')}</div>`); }
     for (const f of S.flags || []) { ring(f.p, f.by ? INK : RED); pin(f.p, `<div class="map-pin ${f.by ? 'dark' : 'red'}">${ic('capture')}</div>`); }
     if (S.jail) { ring(S.jail.p, INK); pin(S.jail.p, `<div class="map-pin dark">${ic('jail')}</div>`); }
+    if (S.treasure) { ring(S.treasure.p, RED); pin(S.treasure.p, `<div class="map-pin solid bob">${ic('treasure')}</div>`); }
     if (S.potato && !S.potato.holder) { ring(S.potato.p, RED); pin(S.potato.p, `<div class="map-pin red bob">${ic('potato')}</div>`); }
     if (S.sprint && S.sprint.p) { ring(S.sprint.p, RED); pin(S.sprint.p, `<div class="map-pin solid bob">${ic('sprint')}</div>`, 800); }
     if (p && p.mission && alive(p)) { ring(p.mission.p, INK); pin(p.mission.p, `<div class="map-pin">${ic('missions')}</div>`); }
@@ -1227,8 +1360,8 @@ function renderMarks() {
     const last = real[real.length - 1];
     real.slice(-4, -1).forEach((x) => L.circleMarker(x.p, { radius: 4, color: INK, weight: 1, opacity: .35, fillOpacity: .2, interactive: false }).addTo(layers.marks));
     if (!last || (pl.caughtAt && S.phase !== 'ended')) continue;
-    const loud = last.kind === 'breach' || last.kind === 'xray';
-    const sub = last.kind === 'breach' ? 'OUT OF ZONE' : last.kind === 'xray' ? 'X-RAY · ' + ago(now - last.t) : (id === me.id ? 'your last ping · ' : '') + ago(now - last.t);
+    const loud = last.kind === 'breach' || last.kind === 'xray' || last.kind === 'live';
+    const sub = last.kind === 'live' ? 'LIVE · ' + ago(now - last.t) : last.kind === 'breach' ? 'OUT OF ZONE' : last.kind === 'xray' ? 'X-RAY · ' + ago(now - last.t) : (id === me.id ? 'your last ping · ' : '') + ago(now - last.t);
     for (const spot of [last.p, ...(last.alts || [])]) {
       if (last.blur) L.circle(spot, { radius: last.blur, color: loud ? RED : INK, weight: 1.5, opacity: .6, fillOpacity: .08, interactive: false }).addTo(layers.marks);
       L.marker(spot, { icon: blipIcon(loud ? RED : INK, esc(pl.name), sub, loud ? 'loud' : ''), zIndexOffset: 500 }).addTo(layers.marks);
@@ -1243,6 +1376,10 @@ function renderMarks() {
       if (now - s.t > 45000) continue;
       L.marker(s.p, { icon: blipIcon(RED, esc(P(id).name), ago(now - s.t), 'seeker'), zIndexOffset: 600 }).addTo(layers.marks);
     }
+  }
+  if (S.phase === 'hunting' && S.wire && S.wire.holder === me.id) for (const [id, x] of Object.entries(L_.wireLocs)) {
+    const q = P(id); if (!q || q.role !== 'hider' || !alive(q) || now - x.t > 15000) continue;
+    L.marker(x.p, { icon: blipIcon(INK, esc(q.name), 'pass it here', 'loud'), zIndexOffset: 550 }).addTo(layers.marks);
   }
   if (L_.decoyArmed) pin(L_.decoyArmed, `<div class="map-pin small">${ic('decoy')}</div>`, 650, 26);
 }
@@ -1343,6 +1480,7 @@ function renderLobby() {
     <label class="set">Ping fuzz${selectHtml('blurM', s.blurM, false)}</label>
     ${s.fugitive ? '' : `<label class="set">Seekers${selectHtml('seekers', s.seekers, false)}</label>`}
     ${s.tagMode === 'gps' ? `<label class="set">Tag range${selectHtml('tagRadiusM', s.tagRadiusM, false)}</label>` : ''}
+    ${s.wire ? `<label class="set">Live Wire fuse${selectHtml('wireSec', s.wireSec, false)}</label>` : ''}
     ${s.shrink ? `<label class="set">Zone${selectHtml('shrinkStyle', s.shrinkStyle || 'steps', false)}</label><label class="set">Final zone${selectHtml('shrinkTo', s.shrinkTo, false)}</label>` : ''}
     ${s.drops ? `<label class="set" style="grid-column:1/-1">Supply drops${selectHtml('dropSec', s.dropSec, false)}</label>` : ''}
   </div>` : `<div class="mode-lines" style="margin:0">
@@ -1403,6 +1541,8 @@ function modeLines(p, now) {
     if (S.jail && Object.values(S.players).some((x) => x.role === 'hider' && x.caughtAt)) L2.push(row('jail', `Friends in jail, ${far(S.jail.p)}${now < (S.jailCooldownUntil || 0) ? ' · locked for ' + fmt(S.jailCooldownUntil - now) : ''}`));
     if (S.potato && S.potato.holder === me.id) L2.push(row('potato', 'You have the hot potato: double points, extra pings', '<button class="btn small" data-act="dropPotato">Drop it</button>'));
   }
+  if (S.treasure) L2.push(row('treasure', p.role === 'hider' && alive(p) ? `Treasure chest, ${far(S.treasure.p)}: +${TREASURE_PTS}, but grabbing it pings your exact spot` : 'Treasure chest on the map. Hiders who grab it ping their exact spot'));
+  if (p.live && alive(p)) L2.push(row('wire', 'You are LIVE: seekers see where you are'));
   if (S.potato && !S.potato.holder && (p.role === 'seeker' || alive(p))) L2.push(row('potato', 'The hot potato is up for grabs'));
   if (S.sprint && S.sprint.p) L2.push(row('sprint', `Extraction open, ${far(S.sprint.p)}`));
   else if (S.sprint && p.role === 'hider' && alive(p)) L2.push(row('sprint', `Extraction opens in ${fmt(S.sprint.at - now)}`));
@@ -1632,7 +1772,7 @@ function act(a, el) {
       break;
     }
     case 'start': startRound(); break;
-    case 'again': hostApply((s) => { s.phase = 'lobby'; s.events = []; s.results = null; for (const x of Object.values(s.players)) { x.role = 'hider'; x.caughtAt = null; x.inv = {}; x.fx = {}; x.extracted = null; x.mission = null; } s.drops = []; s.flags = []; s.jail = null; s.potato = null; s.sprint = null; }); break;
+    case 'again': hostApply((s) => { s.phase = 'lobby'; s.events = []; s.results = null; for (const x of Object.values(s.players)) { x.role = 'hider'; x.caughtAt = null; x.inv = {}; x.fx = {}; x.extracted = null; x.mission = null; } s.drops = []; s.flags = []; s.jail = null; s.potato = null; s.sprint = null; s.treasure = null; s.wire = null; for (const x of Object.values(s.players)) x.live = false; }); break;
     case 'endNow': if (confirm('End this round now?')) hostApply((s) => endRound(s, 'host')); break;
     case 'dropPotato': if (myPos && S.potato && S.potato.holder === me.id) { send('potatoDrop', { p: myPos.p, acc: myPos.acc }); toast('You dropped the hot potato.', 'hider', 'potato'); } break;
     case 'snap': { const fi = $('#snap-in'); if (fi) { fi.value = ''; fi.click(); } break; }
@@ -1650,7 +1790,7 @@ function act(a, el) {
       send('tag', { p: myPos.p, acc: myPos.acc });
       buzz(40);
       if (myPos.acc > GPS_POOR) toast(`Your GPS is weak (±${myPos.acc} m), so close tags may not count.`, 'seeker', 'alert');
-      toast('TAG sent. Anyone within ' + S.settings.tagRadiusM + ' m is out.', 'seeker', 'tag');
+      toast(`TAG sent. Anyone within ${S.settings.tagRadiusM} m is out. A miss costs ${MISS_PTS} points.`, 'seeker', 'tag');
       break;
     }
     case 'item': {
@@ -1699,6 +1839,7 @@ $('#modal').addEventListener('click', (e) => {
   const a = b.dataset.act2, d = b.dataset;
   closeModal();
   if (a === 'caughtBy') send('caught', { who: me.id, by: d.id, how: 'self', p: myPos?.p || null });
+  if (a === 'trivia') { const t = L_.trivia; L_.trivia = null; if (t) { if (d.a === t.ans) { send('triviaWin', {}); toast('Correct! A free decoy is yours.', 'good', 'trivia'); } else toast(`Nope, it was ${esc(t.ans)}.`, '', 'trivia'); } }
   if (a === 'pick' && pickCb) { const f = pickCb; pickCb = null; f(d.id); }
   if (a === 'ruleWho') {
     const ss = Object.entries(S.players).filter(([, x]) => x.role === 'seeker');
@@ -1866,6 +2007,9 @@ window.__gl = {
     tapMap: (lat, lng) => map.fire('click', { latlng: L.latLng(lat, lng) }),
     give: (id, item) => hostApply((s) => { const q = s.players[id]; q.inv = q.inv || {}; q.inv[item] = (q.inv[item] || 0) + 1; }),
     spawnDrop: () => hostApply((s) => spawnDrop(s)),
+    showTrivia: () => showTrivia(hostNow()),
+    spawnTreasure: (pt) => hostApply((s) => { s.treasure = { id: 'tx' + Date.now(), p: pt }; }),
+    setWire: (id, ms) => hostApply((s) => { s.wire = id ? { holder: id, until: Date.now() + ms, from: null, at: Date.now() } : null; s.nextWireAt = Infinity; if (id) s.events.push({ id: evId(), k: 'wire', who: id, t: Date.now() }); }),
     setWallet: (id, n) => hostApply((s) => { s.wallet = s.wallet || {}; s.wallet[id] = n; }),
     openExtraction: () => hostApply((s) => { if (s.sprint) s.sprint.at = Date.now(); }),
   } : {}),

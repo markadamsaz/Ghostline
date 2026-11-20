@@ -72,7 +72,7 @@ await G(host, ([a, b]) => window.__gl.tapMap(a, b), C);
 await host.page.click('[data-act="zoneSave"]');
 ok(await until(async () => (await state(others[0]))?.zone?.type === 'circle', 5000, 'zone'), 'zone drawn by host reaches players');
 await G(host, ([c]) => window.__gl.setZone({ type: 'circle', c, r: 400 }), [C]);
-await G(host, () => window.__gl.setSettings({ hideSec: 3, huntSec: 45, pingSec: 9, blurM: 25, tagRadiusM: 15, graceSec: 4, shrinkTo: 0.5, shrinkStyle: 'steps', strictZone: false, drops: false, starter: true, infection: true }));
+await G(host, () => window.__gl.setSettings({ hideSec: 3, huntSec: 100, pingSec: 9, blurM: 25, tagRadiusM: 20, graceSec: 4, shrinkTo: 0.5, shrinkStyle: 'steps', strictZone: false, drops: false, starter: true, infection: true }));
 await G(host, () => window.__gl.act('mapDone')); // back from the map to the lobby
 if (SHOTS) await host.page.screenshot({ path: SHOTS + '/1-lobby.png' });
 await host.page.click('[data-act="start"]');
@@ -134,6 +134,31 @@ await setPos(hiders[2], off(700, 0));
 ok(await until(async () => (await G(seeker, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'breach'), hiders[2].pid)), 9000, 'breach'), 'leaving the zone exposes the hider\'s exact spot after the grace period');
 await setPos(hiders[2], spots[2]);
 
+// ---- mini games
+// treasure: grabbing it pays +30 and pings the hider's exact spot
+await G(host, ([p]) => window.__gl.spawnTreasure(p), [spots[2]]);
+ok(await until(async () => ((await state(host)).players[hiders[2].pid].bonus || 0) === 30, 6000, 'treasure'), 'grabbing a treasure chest pays +30');
+ok(await until(async () => (await G(seeker, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'treasure' && !x.blur), hiders[2].pid)), 5000, 'tping'), 'and pings the hider\'s exact spot to the seekers');
+// trivia: a right answer earns a decoy
+await G(host, () => window.__gl.setSettings({ trivia: true }));
+const decoys0 = ((await state(host)).players[hiders[2].pid].inv || {}).decoy || 0;
+await G(hiders[2], () => window.__gl.showTrivia());
+await G(hiders[2], () => { const a = window.__gl.local.trivia.ans; [...document.querySelectorAll('#modal [data-act2="trivia"]')].find((b) => b.dataset.a === a).click(); });
+ok(await until(async () => (((await state(host)).players[hiders[2].pid].inv || {}).decoy || 0) === decoys0 + 1, 5000, 'trivia'), 'a right trivia answer earns a free decoy');
+await G(host, () => window.__gl.setSettings({ trivia: false }));
+// live wire: the holder sees other hiders, passes it by walking close, and whoever holds it at zero goes live
+await G(host, (id) => window.__gl.setWire(id, 60000), hiders[1].pid);
+ok(await until(async () => (await G(hiders[1], (id) => !!window.__gl.local.wireLocs[id], hiders[0].pid)), 9000, 'wireLocs'), 'the Live Wire holder can see the other hiders');
+ok(await until(async () => (await hiders[1].page.isVisible('#wirebar')), 3000, 'wirebar'), 'the Live Wire fuse shows on screen');
+await setPos(hiders[1], off(155, 100)); // 5 m from hider 0
+ok(await until(async () => (await state(host)).wire?.holder === hiders[0].pid, 6000, 'pass'), 'walking near another hider passes the Live Wire');
+await setPos(hiders[1], spots[1]);
+const fuseLeft = (await state(host)).wire.until - Date.now();
+ok(fuseLeft > 40000 && fuseLeft < 60000, 'passing it does not reset the fuse');
+await G(host, (id) => window.__gl.setWire(id, 1500), hiders[0].pid);
+ok(await until(async () => !!(await state(host)).players[hiders[0].pid].live, 6000, 'live'), 'whoever holds it when the fuse runs out goes live');
+ok(await until(async () => (await G(seeker, (id) => window.__gl.local.pings.filter((x) => x.id === id && x.kind === 'live').length >= 2, hiders[0].pid)), 12000, 'liveping'), 'seekers keep seeing a live hider\'s exact spot');
+
 // ---- GPS accuracy: a wild fix is skipped, jitter is averaged out, and the HUD shows accuracy
 const h1 = spots[1];
 await G(hiders[1], ([a, b]) => window.__gl.feedFix(a, b, 6), h1);
@@ -148,16 +173,19 @@ ok((await hiders[1].page.textContent('#gps-chip')).includes('±6 m'), 'each play
 await setPos(hiders[1], h1);
 
 // ---- tagging: range is strict, and a weak fix can't decide a close call
-await setPos(seeker, off(170, 100)); // 20 m from hider 0, range 15 m
+await setPos(seeker, off(180, 100)); // 30 m from hider 0, range 20 m
 await G(seeker, () => window.__gl.act('tag'));
 await sleep(1500);
-ok(!(await state(host)).players[hiders[0].pid].caughtAt, 'a tag from 20 m does not count with a 15 m range');
-await sleep(1700);
+ok(!(await state(host)).players[hiders[0].pid].caughtAt, 'a tag from 30 m does not count with a 20 m range');
+ok(await until(async () => (await state(host)).players[seekerPid].bonus === -10, 6000, 'miss'), 'a tag that reaches nobody costs the seeker 10 points');
+ok((await seeker.page.textContent('#toasts')).includes('Missed tag'), 'the seeker is told about the missed tag');
 await G(hiders[0], ([a, b]) => window.__gl.setPos(a, b, 45), spots[0]); // hider's GPS goes weak
 await setPos(seeker, off(162, 100)); // 12 m away
 await G(seeker, () => window.__gl.act('tag'));
 ok(await until(async () => (await seeker.page.textContent('#toasts')).includes('Too close to call'), 5000, 'weak'), 'a close tag on weak GPS asks the seeker to get closer');
 ok(!(await state(host)).players[hiders[0].pid].caughtAt, 'and does not count');
+await sleep(4000);
+ok((await state(host)).players[seekerPid].bonus === -10, 'a too-close-to-call tag on weak GPS costs nothing');
 await G(hiders[0], ([a, b]) => window.__gl.setPos(a, b, 8), spots[0]);
 await sleep(3200); // tag cooldown
 
@@ -183,11 +211,11 @@ await sleep(600);
 ok((await hiders[2].page.evaluate(() => document.body.innerText)).includes('north side') === false, 'seeker team chat is hidden from hiders');
 
 // ---- end of round by timer
-ok(await until(async () => (await state(host)).phase === 'ended', 40000, 'end'), 'round ends when the clock runs out');
+ok(await until(async () => (await state(host)).phase === 'ended', 100000, 'end'), 'round ends when the clock runs out');
 st = await state(host);
 const r = st.results;
 ok(r[hiders[2].pid].survived && r[hiders[2].pid].pts >= 50, `${hiders[2].name} survived and scored ${r[hiders[2].pid].pts}`);
-ok(r[seekerPid].catches === 2 && r[seekerPid].pts === 100, `${seeker.name} scored ${r[seekerPid].pts} for 2 catches`);
+ok(r[seekerPid].catches === 2 && r[seekerPid].pts === 90, `${seeker.name} scored ${r[seekerPid].pts} for 2 catches and 1 miss`);
 ok(await until(async () => (await G(host, () => Object.keys(window.__gl.local.tracks).length)) >= 3, 6000, 'tracks'), 'everyone\'s path arrives for the replay');
 await G(host, () => window.__gl.act('replay'));
 await sleep(1500);

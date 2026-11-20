@@ -10,6 +10,16 @@ Play somewhere safe and public. Locations are only shared with players in your g
 Infection, Jailbreak, Fugitive, Starter power-ups, Supply drops, Missions, Capture points, Hot potato, Final sprint, Shrinking zone, Strict zone.
 Tags: GPS range, honor tag (they confirm) or photo tag (snap them, they confirm). The host settles disputes.
 
+## Mini games (toggle in the lobby)
+
+- **Treasure drops:** a chest pops up in the open about every 90 s. A hider who grabs it gets +30, but their exact spot pings to the seekers.
+- **Quick-fire trivia:** every 2 min each hider gets a question with 15 s to answer. A right answer earns a free decoy.
+- **Live Wire:** one hider holds the wire and sees where the other hiders are. Walking within 15 m of one passes it. Passing doesn't reset the fuse (1 to 10 min, set in the lobby). Whoever holds it when the fuse runs out goes live: seekers see their exact spot for the rest of the round. A new wire goes to someone else a minute later.
+
+## Tagging
+
+GPS tag range is set in 10 m steps (10 to 50 m). A tag that reaches nobody costs the seeker 10 points (never below 0). A too-close-to-call tag on weak GPS costs nothing.
+
 ## Points shop
 
 Points you earn (survival minutes, catches, missions, flags, extraction) can be spent. Each player sees picks for their own role during a round; picks bought in the lobby wait for a round where you have that role.
