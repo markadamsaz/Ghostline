@@ -360,3 +360,9 @@ body.blackout::after { content: 'BLACKOUT'; position: fixed; z-index: 15; top: 4
 .gps-chip { display: inline-flex; align-items: center; font-size: 11px; font-weight: 800; letter-spacing: .04em; padding: 3px 8px; border-radius: 999px; border: 1.5px solid var(--line-2); color: var(--ink-2); background: var(--surface); white-space: nowrap; }
 .gps-chip.fair { border-color: var(--red); color: var(--red); }
 .gps-chip.bad { background: var(--red); border-color: var(--red); color: #fff; }
+
+/* Live Wire fuse bar */
+#wirebar { position: fixed; top: calc(124px + var(--safe-t)); left: 50%; transform: translateX(-50%); z-index: 900; display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: var(--surface); border: 2px solid var(--ink); color: var(--ink); font-size: 14px; font-weight: 700; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.15); }
+#wirebar[hidden] { display: none; }
+#wirebar .i { width: 18px; height: 18px; }
+#wirebar.hot { background: var(--red); border-color: var(--red); color: #fff; }
