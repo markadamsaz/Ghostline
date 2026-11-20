@@ -32,7 +32,7 @@ GPS tag range is set in 10 m steps (10 to 50 m). A tag that reaches nobody costs
 
 Points you earn (survival minutes, catches, missions, flags, extraction) can be spent. Each player sees picks for their own role during a round; picks bought in the lobby wait for a round where you have that role.
 
-- Hiders: Power-up 40, Peek 50 (see the nearest seeker for 10 s), Cloak 60 (no pings for 30 s), Escape pass 120 (get away from one catch)
+- Hiders: Power-up 40, Peek 50 (see the nearest seeker for 10 s), Cloak 60 (your next ping is hidden), Escape pass 120 (get away from one catch)
 - Seekers: Radar 40, Hot trail 60 (arrow to the nearest hider for 20 s), Lockdown 70 (hiders can't use power-ups for 30 s), Spotlight 80 (one hider's exact spot for 10 s)
 - Anyone: Map icon 25
 

@@ -79,11 +79,11 @@ const ITEM_INFO = {
   ghost: { ic: 'ghost', name: 'Ghost', desc: 'No pings at all for the next 2 rounds', role: 'hider', sup: true },
   shield: { ic: 'shield', name: 'Shield', desc: 'Blocks the next tag on you', role: 'hider', sup: true },
   swarm: { ic: 'swarm', name: 'Swarm', desc: 'Next ping shows 4 spots, only 1 is real', role: 'hider', sup: true },
-  blackout: { ic: 'blackout', name: 'Blackout', desc: "Seekers' maps go dark for 45 s", role: 'hider', sup: true },
+  blackout: { ic: 'blackout', name: 'Blackout', desc: "Every hider's next ping is hidden and seekers' maps go dark until then", role: 'hider', sup: true },
   xray: { ic: 'xray', name: 'X-ray', desc: 'Every hider pings their exact spot now', role: 'seeker', sup: true },
   tracker: { ic: 'tracker', name: 'Tracker', desc: 'Hiders ping every 15 s for a minute', role: 'seeker', sup: true },
   // bought in the points shop
-  cloak: { ic: 'cloak', name: 'Cloak', desc: 'No pings of any kind for 30 s', role: 'hider' },
+  cloak: { ic: 'cloak', name: 'Cloak', desc: 'Your next ping is hidden, plus any surprise pings before it', role: 'hider' },
   pass: { ic: 'pass', name: 'Escape pass', desc: 'Ready: the next time you get caught, you get away', role: 'hider' },
   peek: { ic: 'peek', name: 'Peek', desc: 'See the nearest seeker for 10 s', role: 'hider' },
   trail: { ic: 'trail', name: 'Hot trail', desc: 'An arrow points to the nearest hider for 20 s', role: 'seeker' },
@@ -341,6 +341,7 @@ function updateMeMarker() {
 // ---------------- zone over time ----------------
 function huntMs() { return S.settings.huntSec * 1000; }
 function pingMs() { return S.settings.pingSec * 1000; }
+function nextPingAt(s, now) { const ms = s.settings.pingSec * 1000; return s.huntStart + (Math.floor((now - s.huntStart) / ms) + 1) * ms; } // when the next regular ping goes out
 function shrinkStep(t) {
   if (!S || S.phase !== 'hunting' || !S.settings.shrink) return 0;
   const K = Math.max(1, Math.floor(huntMs() / pingMs()));
@@ -489,6 +490,7 @@ function handle(m, self) {
       } else if (!self && mine()?.role === 'seeker') {
         if (d.kind === 'breach') { toast(`<b>${nm(m.from)}</b> left the zone. Exact spot showing.`, 'seeker', 'alert'); beep('alarm'); buzz([80, 60, 80]); }
         else if (d.kind === 'jam') { toast(`<b>${nm(m.from)}</b> jammed their signal`, 'seeker', 'jammer'); }
+        else if (d.kind === 'blackout') { /* nothing to show */ }
         else if (d.kind === 'ghost') { toast(`<b>${nm(m.from)}</b> is a ghost. No signal.`, 'seeker', 'ghost'); }
         else if (d.kind === 'capture') { beep('ping'); toast(`<b>${nm(m.from)}</b> is capturing a flag`, 'seeker', 'capture'); }
         else if (d.kind === 'nosignal') { toast(`<b>${nm(m.from)}</b> has no GPS fix`, '', 'pin'); }
@@ -578,9 +580,9 @@ function handle(m, self) {
         q.fx = q.fx || {};
         if (item === 'ghost') { const ms = s.settings.pingSec * 1000, n = Math.floor((now - s.huntStart) / ms) + 1; q.fx.ghostUntil = s.huntStart + (n + 1) * ms + 1500; }
         if (item === 'shield') q.fx.shield = 1;
-        if (item === 'blackout') s.blackoutUntil = now + 45000;
+        if (item === 'blackout') s.blackoutUntil = nextPingAt(s, now) + 1500;
         if (item === 'tracker') s.trackerUntil = now + 60000;
-        if (item === 'cloak') q.fx.ghostUntil = Math.max(q.fx.ghostUntil || 0, now + 30000);
+        if (item === 'cloak') q.fx.ghostUntil = Math.max(q.fx.ghostUntil || 0, nextPingAt(s, now) + 1500);
         if (item === 'lockdown') s.lockdownUntil = now + 30000;
         if (['radar', 'sonar', 'blackout', 'xray', 'tracker', 'ghost', 'shield', 'cloak', 'peek', 'trail', 'lockdown'].includes(item)) s.events.push({ id: evId(), k: item, by: m.from, t: now });
         if (item === 'spotlight') s.events.push({ id: evId(), k: 'spotlight', by: m.from, target: d.target, t: now });
@@ -1058,7 +1060,7 @@ function onEvent(e) {
   if (e.k === 'shieldHit') { beep('alarm'); toast(self_(e.who) ? `Your shield blocked ${e.by ? nm(e.by) + "'s" : 'a'} tag. Run!` : `<b>${nm(e.who)}</b>'s shield blocked a tag`, self_(e.who) ? 'good' : '', 'shield'); }
   if (e.k === 'shield' && self_(e.by)) toast('Shield up. The next tag on you won’t count.', 'hider', 'shield');
   if (e.k === 'ghost') toast(self_(e.by) ? 'Ghost mode: your next 2 pings are blocked.' : `<b>${nm(e.by)}</b> went ghost`, self_(e.by) ? 'hider' : '', 'ghost');
-  if (e.k === 'blackout') { beep('alarm'); toast(p && p.role === 'seeker' ? `<b>${nm(e.by)}</b> blacked out your map for 45 s` : `Blackout by <b>${nm(e.by)}</b>: seekers are blind for 45 s`, p && p.role === 'seeker' ? 'seeker' : 'hider', 'blackout'); }
+  if (e.k === 'blackout') { beep('alarm'); toast(p && p.role === 'seeker' ? `<b>${nm(e.by)}</b> blacked out your map. You miss the next ping.` : `Blackout by <b>${nm(e.by)}</b>: seekers miss everyone's next ping`, p && p.role === 'seeker' ? 'seeker' : 'hider', 'blackout'); }
   if (e.k === 'xray') {
     if (p && p.role === 'hider' && alive(p)) { beep('alarm'); buzz([200, 80, 200]); toast(`<b>${nm(e.by)}</b> used X-ray. Your exact spot just pinged.`, 'seeker', 'xray'); sendPing('xray'); }
     else toast(`X-ray by <b>${nm(e.by)}</b>: exact spots incoming`, 'seeker', 'xray');
@@ -1090,7 +1092,7 @@ function onEvent(e) {
   if (e.k === 'breakout') { beep('alarm'); toast((e.freed || []).includes(me.id) ? `<b>${nm(e.by)}</b> broke you out. Run!` : `<b>${nm(e.by)}</b> broke ${e.freed.length} out of jail`, (e.freed || []).includes(me.id) ? 'good' : tone(e.by), 'jail'); }
   if (e.k === 'buy' && self_(e.who)) toast(e.item === 'icon' ? 'New badge' : `<b>${shopInfo(e.item).name || e.item}</b> ${e.saved ? 'saved for your next round as ' + (SHOP[e.item]?.role || 'player') : 'is yours'}`, 'good', e.item === 'icon' ? 'star' : shopInfo(e.item).ic || 'shop');
   if (e.k === 'passHit') { beep('alarm'); toast(self_(e.who) ? 'Escape pass used. You got away. Run!' : `<b>${nm(e.who)}</b> used an escape pass and got away`, self_(e.who) ? 'good' : '', 'pass'); }
-  if (e.k === 'cloak' && self_(e.by)) toast('Cloaked: no pings for 30 s.', 'hider', 'cloak');
+  if (e.k === 'cloak' && self_(e.by)) toast('Cloaked: your next ping is hidden.', 'hider', 'cloak');
   if (e.k === 'lockdown') { beep('alarm'); toast(p && p.role === 'hider' ? `<b>${nm(e.by)}</b> locked down your power-ups for 30 s` : `Lockdown by <b>${nm(e.by)}</b>: hiders can't use power-ups for 30 s`, p && p.role === 'hider' ? 'hider' : 'seeker', 'lockdown'); }
   if (e.k === 'peek') {
     if (p && p.role === 'seeker') { if (myPos) send('seekerLoc', { p: myPos.p }); }
@@ -1115,6 +1117,7 @@ function sendPing(kind = 'scheduled', n = null) {
   const s = S.settings;
   if (n === null) n = kind === 'scheduled' ? L_.lastPingN : 'r' + Date.now();
   if (kind !== 'breach' && kind !== 'away' && hostNow() < ((mine()?.fx || {}).ghostUntil || 0)) { send('ping', { kind: 'ghost', n, p: null }); return; }
+  if (kind !== 'breach' && kind !== 'away' && hostNow() < (S.blackoutUntil || 0)) { send('ping', { kind: 'blackout', n, p: null }); return; }
   if (kind === 'away') { send('ping', { kind, n: 'a' + Date.now(), p: myPos ? myPos.p : null, blur: 0 }); return; } // power-ups can't hide it
   if (!myPos) { send('ping', { kind: 'nosignal', n, p: null }); return; }
   if (kind === 'breach') { send('ping', { kind, n: 'b' + Date.now(), p: myPos.p, blur: 0 }); return; }

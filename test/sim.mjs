@@ -369,12 +369,14 @@ await G(B, () => window.__gl.act('item', { dataset: { item: 'ghost' } }));
 await until(async () => (await state(B)).players[B.pid].fx.ghostUntil > 0, 4000, 'ghost on');
 await G(sk2, () => window.__gl.act('item', { dataset: { item: 'radar' } }));
 ok(await until(async () => (await G(sk2, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'ghost' && !x.p), B.pid)), 5000, 'ghost'), 'a ghosted hider sends no location, even to radar');
+ok(await until(async () => (await G(sk2, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'blackout' && !x.p), A.pid)), 5000, 'blackoutPing'), 'during a blackout, pings stay hidden until the next regular ping');
+ok((await state(host)).blackoutUntil > Date.now() + 1000, 'the blackout lasts until the next regular ping, not a set number of seconds');
 
 // swarm: next scheduled ping shows 4 spots
 await G(host, (id) => window.__gl.give(id, 'swarm'), A.pid);
 await until(async () => (await state(A)).players[A.pid].inv.swarm >= 1, 4000, 'give4');
 await G(A, () => window.__gl.act('item', { dataset: { item: 'swarm' } }));
-ok(await until(async () => (await G(sk2, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'scheduled' && x.alts && x.alts.length === 3), A.pid)), 25000, 'swarm'), 'swarm ping shows 4 spots, only one real');
+ok(await until(async () => (await G(sk2, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'scheduled' && x.alts && x.alts.length === 3), A.pid)), 45000, 'swarm'), 'swarm ping shows 4 spots, only one real');
 
 // final sprint
 await G(host, () => window.__gl.openExtraction());
