@@ -13,7 +13,7 @@ Tags: GPS range, honor tag (they confirm) or photo tag (snap them, they confirm)
 ## Mini games (toggle in the lobby)
 
 - **Treasure drops:** a chest pops up in the open about every 90 s. A hider who grabs it gets +30, but their exact spot pings to the seekers.
-- **Quick-fire trivia:** every 2 min each hider gets a question with 15 s to answer. A right answer earns a free decoy.
+- **Showdown:** every few minutes (the host picks how often) two random hiders, anywhere in the zone, face off in a quick game: rock paper scissors, a tap race, a reaction test or a memory pattern. The winner gets +25 and the loser loses nothing. With an odd number of hiders one sits it out; a hider who doesn't play in 45 s, or gets caught, loses.
 - **Live Wire:** one hider holds the wire and sees where the other hiders are. Walking within 15 m of one passes it. Passing doesn't reset the fuse (1 to 10 min, set in the lobby). Whoever holds it when the fuse runs out goes live: seekers see their exact spot for the rest of the round. A new wire goes to someone else a minute later.
 
 ## Seeker alarm

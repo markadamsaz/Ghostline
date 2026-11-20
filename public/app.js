@@ -28,7 +28,7 @@ const ICONS = {
   missions: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
   capture: '<path d="M5 21V4"/><path d="M5 4h13l-2.5 4.5L18 13H5"/>',
   treasure: '<path d="M4 10h16v9H4z"/><path d="M4 10a8 5 0 0 1 16 0"/><path d="M11 12h2v3h-2z"/>',
-  trivia: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.5V14"/><path d="M12 17v.5"/>',
+  duel: '<path d="M4 4l9 9M4 4h4M4 4v4"/><path d="M20 4l-9 9M20 4h-4M20 4v4"/><path d="M7 15l-3 3 2 2 3-3M17 15l3 3-2 2-3-3"/>',
   wire: '<path d="M13 2 5 13h6l-1 9 8-11h-6z"/>',
   potato: '<path d="M12 3c1 4 6 5.5 6 11a6 6 0 0 1-12 0c0-3 2-4.5 2.5-6.5 1 1.2 2 2 3 2 .3-2.3-.5-4.5.5-6.5z"/>',
   sprint: '<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v6H4V6h6"/>',
@@ -110,25 +110,9 @@ const SUPERS = { hider: ['ghost', 'shield', 'swarm', 'blackout'], seeker: ['xray
 const BASICS = { hider: ['decoy', 'jammer', 'sonar'], seeker: ['radar'] };
 const STARTER = { hider: { decoy: 1, jammer: 1, sonar: 1 }, seeker: { radar: 1 } };
 const GPS_OK = 20, GPS_POOR = 30; // meters: phone accuracy we trust fully / at all
-const TREASURE_PTS = 30, WIRE_PASS_M = 15, TRIVIA_EVERY = 120000;
-// [question, right answer, wrong answers...]
-const TRIVIA = [
-  ['How many legs does a spider have?', '8', '6', '10', '12'], ['Which planet is called the Red Planet?', 'Mars', 'Venus', 'Jupiter', 'Saturn'],
-  ['What is the largest ocean on Earth?', 'Pacific', 'Atlantic', 'Indian', 'Arctic'], ['How many sides does a hexagon have?', '6', '5', '7', '8'],
-  ['What gas do plants take in from the air?', 'Carbon dioxide', 'Oxygen', 'Nitrogen', 'Helium'], ['What is 7 x 8?', '56', '54', '58', '64'],
-  ['What is the capital of Arizona?', 'Phoenix', 'Tucson', 'Mesa', 'Flagstaff'], ['How many continents are there?', '7', '5', '6', '8'],
-  ['What is the fastest land animal?', 'Cheetah', 'Lion', 'Horse', 'Greyhound'], ['Which is the biggest planet?', 'Jupiter', 'Earth', 'Saturn', 'Neptune'],
-  ['What do bees make?', 'Honey', 'Butter', 'Silk', 'Syrup'], ['What is 12 x 12?', '144', '124', '132', '156'],
-  ['How many days are in a leap year?', '366', '364', '365', '367'], ['At what temperature does water boil, in Fahrenheit?', '212', '100', '180', '250'],
-  ['Which state is the Grand Canyon in?', 'Arizona', 'Utah', 'Nevada', 'Colorado'], ['What is the hardest natural material?', 'Diamond', 'Gold', 'Iron', 'Quartz'],
-  ['How many players does a soccer team have on the field?', '11', '9', '10', '12'], ['What is the square root of 81?', '9', '7', '8', '11'],
-  ['What color do you get mixing blue and yellow?', 'Green', 'Purple', 'Orange', 'Brown'], ['How many bones are in an adult human body?', '206', '106', '186', '306'],
-  ['What is the closest star to Earth?', 'The Sun', 'Polaris', 'Sirius', 'Vega'], ['What is 15 + 27?', '42', '32', '43', '52'],
-  ['Which planet has the biggest rings?', 'Saturn', 'Mars', 'Uranus', 'Mercury'], ['What is the largest animal ever?', 'Blue whale', 'Elephant', 'Giraffe', 'T. rex'],
-  ['What is H2O?', 'Water', 'Salt', 'Air', 'Sugar'], ['In which sport do you score a touchdown?', 'Football', 'Soccer', 'Baseball', 'Hockey'],
-  ['How many minutes are in 3 hours?', '180', '120', '160', '300'], ['Which animal is a mammal?', 'Dolphin', 'Shark', 'Salmon', 'Octopus'],
-  ['What is half of 250?', '125', '120', '115', '150'], ['What is the tallest animal?', 'Giraffe', 'Elephant', 'Moose', 'Camel'],
-];
+const TREASURE_PTS = 30, WIRE_PASS_M = 15, DUEL_PTS = 25;
+const DUEL_GAMES = ['rps', 'tap', 'react', 'memory'];
+const DUEL_NAMES = { rps: 'Rock paper scissors', tap: 'Tap race', react: 'Reaction test', memory: 'Memory' };
 const MISS_PTS = 10; // a GPS tag that reaches nobody costs the seeker this much
 const REACH_M = 20; // how close you have to get to a drop, flag, jail, mission or extraction point
 // game modes the host can mix and match
@@ -141,7 +125,7 @@ const MODES = [
   ['missions', 'Missions', 'Each hider gets secret spots to reach for points and power-ups'],
   ['capture', 'Capture points', 'Hold a flag for 1 min for +50. You ping while you hold it'],
   ['treasure', 'Treasure drops', 'Chests pop up out in the open. Grab one for +30, but it pings your exact spot to the seekers'],
-  ['trivia', 'Quick-fire trivia', 'Hiders get a quick question every 2 min. Answer right in 15 s for a free decoy'],
+  ['duel', 'Showdown', 'Two hiders get paired for a quick head-to-head game: rock paper scissors, tap race, reaction or memory. Winner gets +25'],
   ['wire', 'Live Wire', 'One hider holds a live wire and can see the other hiders. Walk near one to pass it. Holding it when the fuse runs out means you go live: seekers see you for the rest of the round'],
   ['potato', 'Hot potato', 'Whoever carries it pings twice as often but scores double'],
   ['sprint', 'Final sprint', 'An extraction point opens near the end. Reach it for +100'],
@@ -157,6 +141,7 @@ const OPTS = {
   pingSec: [[30, '30 s'], [60, '1 min'], [120, '2 min'], [180, '3 min'], [300, '5 min'], [600, '10 min']],
   blurM: [[0, 'Exact'], [10, '10 m'], [25, '25 m'], [50, '50 m'], [100, '100 m']],
   tagRadiusM: [[10, '10 m'], [20, '20 m'], [30, '30 m'], [40, '40 m'], [50, '50 m']],
+  duelSec: [[60, 'Every 1 min'], [120, 'Every 2 min'], [180, 'Every 3 min'], [300, 'Every 5 min'], [600, 'Every 10 min']],
   wireSec: [[60, '1 min'], [120, '2 min'], [180, '3 min'], [300, '5 min'], [600, '10 min']],
   alarmM: [[0, 'Off'], [20, 'Within 20 m'], [30, 'Within 30 m'], [50, 'Within 50 m'], [75, 'Within 75 m'], [100, 'Within 100 m'], [150, 'Within 150 m'], [200, 'Within 200 m']],
   seekers: [[1, '1'], [2, '2'], [3, '3']],
@@ -173,7 +158,7 @@ const TAG_HINT = {
 const DEFAULT_SETTINGS = {
   hideSec: 120, huntSec: 1200, pingSec: 300, blurM: 25, tagRadiusM: 20, seekers: 1,
   tagMode: 'gps', infection: true, fugitive: false, jail: false, starter: true, drops: true, dropSec: 180,
-  missions: false, capture: false, potato: false, sprint: false, treasure: false, trivia: false, wire: false, wireSec: 180,
+  missions: false, capture: false, potato: false, sprint: false, treasure: false, duel: false, duelSec: 180, wire: false, wireSec: 180,
   shrink: true, shrinkStyle: 'smooth', shrinkTo: 0.4, strictZone: true, graceSec: 15,
   alarmM: 50, // seeker alarm: hiders hear "wanna sprite cranberry?" on repeat when a seeker is this close (0 = off)
 };
@@ -219,7 +204,7 @@ function resetLocal() {
     lastPingN: -1, warnedN: -1,
     decoyArmed: null, jamArmed: false, placingDecoy: false,
     outSince: null, lastBreach: 0,
-    sonarUntil: 0, seekerLocs: {}, nearLocs: {}, lastNearSend: 0, peekUntil: 0, trailUntil: 0, trailLocs: {}, wireLocs: {}, trivia: null, nextTrivia: 0, trailSendUntil: 0, spotUntil: 0,
+    sonarUntil: 0, seekerLocs: {}, nearLocs: {}, lastNearSend: 0, peekUntil: 0, trailUntil: 0, trailLocs: {}, wireLocs: {}, duelShown: {}, duelSent: {}, trailSendUntil: 0, spotUntil: 0,
     tracks: {}, myTrack: [],
     tagCooldown: 0, lastShrinkK: 0,
     swarmArmed: false, lastTrack: 0, lastPotN: -1, sentAt: {}, capStart: {}, capPing: {}, dqSent: false, ozSec: -1,
@@ -731,11 +716,12 @@ function handle(m, self) {
       hostApply((s) => { s.wire.from = m.from; s.wire.holder = d.to; s.wire.at = Date.now(); s.events.push({ id: evId(), k: 'wirePass', from: m.from, to: d.to, t: Date.now() }); });
       break;
     }
-    case 'triviaWin': {
-      if (!isHost() || !S || S.phase !== 'hunting' || !S.settings.trivia) return;
-      const q = S.players[m.from];
-      if (!q || q.role !== 'hider' || !alive(q) || Date.now() - (q.lastTrivia || 0) < 60000) return;
-      hostApply((s) => { const w = s.players[m.from]; w.lastTrivia = Date.now(); w.inv = w.inv || {}; w.inv.decoy = (w.inv.decoy || 0) + 1; });
+    case 'duelRes': {
+      if (!isHost() || !S || !S.duel || d.id !== S.duel.id || d.tie !== S.duel.tie || (m.from !== S.duel.a && m.from !== S.duel.b) || S.duel.res[m.from] != null) return;
+      const g = S.duel.game;
+      const v = g === 'rps' ? (['rock', 'paper', 'scissors'].includes(d.v) ? d.v : null) : Number.isFinite(+d.v) ? Math.max(0, Math.min(g === 'tap' ? 150 : 9999999, Math.round(+d.v))) : null;
+      if (v === null) return;
+      hostApply((s) => { s.duel.res[m.from] = v; });
       break;
     }
     case 'hiderLoc': {
@@ -834,7 +820,7 @@ function startRound() {
       }
     }
     s.wallet = s.wallet || {}; s.lockdownUntil = 0;
-    s.drops = []; s.flags = []; s.jail = null; s.potato = null; s.sprint = null; s.treasure = null; s.wire = null; s.nextTreasureAt = Infinity; s.nextWireAt = Infinity; s.blackoutUntil = 0; s.trackerUntil = 0; s.jailCooldownUntil = 0;
+    s.drops = []; s.flags = []; s.jail = null; s.potato = null; s.sprint = null; s.treasure = null; s.wire = null; s.duel = null; s.nextDuelAt = Infinity; s.nextTreasureAt = Infinity; s.nextWireAt = Infinity; s.blackoutUntil = 0; s.trackerUntil = 0; s.jailCooldownUntil = 0;
     const now = Date.now();
     s.round++; s.phase = 'hiding';
     s.roundStart = now; s.huntStart = now + s.settings.hideSec * 1000; s.huntEnd = s.huntStart + s.settings.huntSec * 1000;
@@ -864,6 +850,7 @@ function setupModes(s) {
   const t0 = Date.now();
   if (s.settings.treasure) s.nextTreasureAt = t0 + 60000;
   if (s.settings.wire) armWire(s, t0);
+  if (s.settings.duel) s.nextDuelAt = t0 + Math.min(60, s.settings.duelSec || 180) * 1000;
   if (s.settings.sprint) s.sprint = { at: s.huntEnd - Math.max(60, Math.min(300, s.settings.huntSec * 0.2)) * 1000, p: null };
 }
 function spawnDrop(s) {
@@ -922,12 +909,50 @@ function armWire(s, now) { // hand the live wire to a random hider who isn't liv
   s.nextWireAt = Infinity;
   s.events.push({ id: evId(), k: 'wire', who: s.wire.holder, t: now });
 }
+function startDuelIn(s, a, b, game, now, ms) {
+  s.duel = { id: 'du' + Math.random().toString(36).slice(2, 7), a, b, game, seed: Math.floor(Math.random() * 1e9), until: now + ms, res: {}, tie: 0 };
+  s.nextDuelAt = Infinity;
+  s.events.push({ id: evId(), k: 'duel', a, b, game, t: now });
+}
+function resolveDuel(s, now) {
+  const d = s.duel; if (!d) return;
+  const ok = (id) => { const q = s.players[id]; return q && q.role === 'hider' && !q.caughtAt && !q.extracted && d.res[id] != null; };
+  const va = ok(d.a) ? d.res[d.a] : null, vb = ok(d.b) ? d.res[d.b] : null;
+  let win = null;
+  if (va != null && vb == null) win = d.a; // a no-show (or a caught hider) loses
+  else if (vb != null && va == null) win = d.b;
+  else if (va != null && vb != null) {
+    if (d.game === 'rps') {
+      const beats = { rock: 'scissors', paper: 'rock', scissors: 'paper' };
+      win = va === vb ? null : beats[va] === vb ? d.a : d.b;
+      if (!win && d.tie < 2 && now < s.huntEnd - 20000) { d.tie++; d.res = {}; d.until = now + 30000; s.events.push({ id: evId(), k: 'duelTie', a: d.a, b: d.b, t: now }); return; }
+    } else if (d.game === 'react') win = va === vb ? null : va < vb ? d.a : d.b; // fastest reaction
+    else win = va === vb ? null : va > vb ? d.a : d.b; // most taps / longest memory
+  }
+  if (win) { const w = s.players[win]; w.bonus = (w.bonus || 0) + DUEL_PTS; credit(s, win, DUEL_PTS); }
+  s.events.push({ id: evId(), k: 'duelEnd', a: d.a, b: d.b, win, game: d.game, t: now });
+  s.duel = null; s.nextDuelAt = now + (s.settings.duelSec || 180) * 1000;
+}
+function hostDuelTick(now) {
+  if (!S.duel) {
+    if (S.settings.duel && now >= (S.nextDuelAt || Infinity) && now < S.huntEnd - 30000) hostApply((s) => {
+      const ids = shuffle(liveHiders(s)); // odd one out sits this one out
+      if (ids.length < 2) { s.nextDuelAt = now + 30000; return; }
+      startDuelIn(s, ids[0], ids[1], pick(DUEL_GAMES), now, 45000);
+    });
+    return;
+  }
+  const d = S.duel, out = (id) => { const q = S.players[id]; return !q || q.role !== 'hider' || q.caughtAt || q.extracted; };
+  const has = (id) => d.res[id] != null;
+  if ((has(d.a) && has(d.b)) || now > d.until || (out(d.a) && (has(d.b) || out(d.b))) || (out(d.b) && has(d.a))) hostApply((s) => resolveDuel(s, now));
+}
 function hostModesTick(now) {
   const st = S.settings;
   if (st.treasure && !S.treasure && now >= (S.nextTreasureAt || Infinity) && now < S.huntEnd - 30000) hostApply((s) => {
     s.treasure = { id: 't' + Math.random().toString(36).slice(2, 7), p: randomSpotIn(currentZone(now) || s.zone) };
     s.nextTreasureAt = Infinity; s.events.push({ id: evId(), k: 'treasure', t: now });
   });
+  hostDuelTick(now);
   if (!S.wire) { if (st.wire && now >= (S.nextWireAt || Infinity) && now < S.huntEnd - 60000) hostApply((s) => armWire(s, now)); return; }
   const h = S.players[S.wire.holder];
   if (!h || h.role !== 'hider' || h.caughtAt || h.extracted) { // holder is out: the wire jumps to someone else, same fuse
@@ -1046,6 +1071,14 @@ function onEvent(e) {
   if (e.k === 'flag') toast(self_(e.who) ? 'Flag captured. +50' : `<b>${nm(e.who)}</b> captured a flag`, self_(e.who) ? 'good' : tone(e.who), 'capture');
   if (e.k === 'potato') { if (self_(e.who)) { toast('You grabbed the hot potato: double points, but you ping twice as often.', 'good', 'potato'); sendPing('potato'); } else toast(`<b>${nm(e.who)}</b> has the hot potato`, tone(e.who), 'potato'); }
   if (e.k === 'potatoDrop' && !self_(e.who)) toast(`<b>${nm(e.who)}</b> dropped the hot potato`, '', 'potato');
+  if (e.k === 'duel' && (self_(e.a) || self_(e.b))) toast(`Showdown! You vs <b>${nm(self_(e.a) ? e.b : e.a)}</b>: ${DUEL_NAMES[e.game]}`, 'good', 'duel');
+  if (e.k === 'duelTie' && (self_(e.a) || self_(e.b))) toast('Tie! Go again.', '', 'duel');
+  if (e.k === 'duelEnd') {
+    if ($('#modal .duel-wait') || $('#modal [data-dg]')) closeModal();
+    if (self_(e.win)) { beep('ping'); toast(`You won the showdown! +${DUEL_PTS} points`, 'good', 'duel'); }
+    else if (self_(e.a) || self_(e.b)) toast(e.win ? `<b>${nm(e.win)}</b> won the showdown` : 'The showdown was a draw', '', 'duel');
+    else if (e.win) toast(`<b>${nm(e.win)}</b> won a showdown vs <b>${nm(e.win === e.a ? e.b : e.a)}</b>`, '', 'duel');
+  }
   if (e.k === 'treasure') { beep('warn'); toast(`A treasure chest dropped. +${TREASURE_PTS} for the hider who grabs it.`, 'good', 'treasure'); }
   if (e.k === 'treasureGot') { if (self_(e.who)) { beep('alarm'); toast(`+${TREASURE_PTS} points! Your exact spot just pinged. Move!`, 'good', 'treasure'); sendPing('treasure'); } else toast(`<b>${nm(e.who)}</b> grabbed the treasure`, tone(e.who), 'treasure'); }
   if (e.k === 'wire') { L_.wireLocs = {}; if (self_(e.who)) { beep('alarm'); buzz([200, 80, 200]); toast(`You have the Live Wire! ${fmt(S.wire ? S.wire.until - hostNow() : 0)} on the fuse. Walk near another hider to pass it.`, 'seeker', 'wire'); } else toast(`<b>${nm(e.who)}</b> has the Live Wire`, '', 'wire'); }
@@ -1103,12 +1136,56 @@ function bearing(a, b) {
   const x = Math.cos(a[0] * r) * Math.sin(b[0] * r) - Math.sin(a[0] * r) * Math.cos(b[0] * r) * Math.cos((b[1] - a[1]) * r);
   return (Math.atan2(y, x) / r + 360) % 360;
 }
-function showTrivia(now) {
-  const [q, ans, ...wrong] = pick(TRIVIA);
-  L_.trivia = { ans, until: now + 15000 };
-  L_.nextTrivia = now + TRIVIA_EVERY;
-  beep('warn'); buzz([60, 60, 60]);
-  modal(`<h3>${ic('trivia')} Quick-fire trivia</h3><p>${esc(q)}</p><div class="stack">${shuffle([ans, ...wrong]).map((o) => `<button class="btn" data-act2="trivia" data-a="${esc(o)}">${esc(o)}</button>`).join('')}</div><p class="hint">15 seconds. Get it right for a free decoy.</p>`);
+const duelKey = (d) => d.id + ':' + d.tie;
+function seeded(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function duelSubmit(v) { const d = S && S.duel; if (!d || L_.duelSent[duelKey(d)] || (d.a !== me.id && d.b !== me.id)) return; L_.duelSent[duelKey(d)] = true; send('duelRes', { id: d.id, tie: d.tie, v }); }
+function openDuel() {
+  const d = S && S.duel; if (!d || (d.a !== me.id && d.b !== me.id)) return;
+  const opp = d.a === me.id ? d.b : d.a, key = duelKey(d);
+  L_.duelShown[key] = true;
+  const head = `<h3>${ic('duel')} Showdown vs ${nm(opp)}</h3><p class="hint">${DUEL_NAMES[d.game]} · winner gets +${DUEL_PTS}</p>`;
+  const wait = (msg) => head + `<div class="duel-wait"><p>${msg}</p><p>Waiting for ${nm(opp)}…</p></div><button class="btn ghost" data-act="closeModal">Close</button>`;
+  if (L_.duelSent[key]) { modal(wait('You played.')); return; }
+  const card = () => $('#modal .modal-card');
+  const done = (v, msg) => { if (L_.duelSent[key] || !S.duel || duelKey(S.duel) !== key) return; duelSubmit(v); if (card().querySelector('[data-dg]')) card().innerHTML = wait(msg); };
+  const r = seeded(d.seed + d.tie * 7919);
+  if (d.game === 'rps') {
+    modal(head + `<p>Pick one:</p><div class="duel-rps">${['rock', 'paper', 'scissors'].map((v) => `<button class="btn big" data-dg="${v}">${v[0].toUpperCase() + v.slice(1)}</button>`).join('')}</div>`);
+    card().onclick = (e) => { const b = e.target.closest('[data-dg]'); if (b) done(b.dataset.dg, `You picked ${b.dataset.dg}.`); };
+  } else if (d.game === 'tap') {
+    modal(head + `<p class="duel-big mono" id="dg-t">3</p><button class="btn primary big duel-pad" data-dg="tap" disabled>Get ready</button><p class="hint">Tap as fast as you can for 5 seconds</p>`);
+    const pad = $('#modal [data-dg="tap"]'); let n = 0, live = false, left = 3;
+    card().onclick = null;
+    pad.onpointerdown = (e) => { e.preventDefault(); if (live) { n++; pad.textContent = n; } };
+    const iv = setInterval(() => {
+      if (!pad.isConnected) { clearInterval(iv); return; }
+      left--; const t = $('#dg-t'); if (t) t.textContent = live ? left : left || 'GO';
+      if (!live && left <= 0) { live = true; left = 5; pad.disabled = false; pad.textContent = 'TAP!'; }
+      else if (live && left <= 0) { clearInterval(iv); live = false; done(Math.min(n, 150), `${n} taps!`); }
+    }, 1000);
+  } else if (d.game === 'react') {
+    modal(head + `<button class="duel-react" data-dg="react">Wait for green…</button><p class="hint">Tap the moment it turns green. Too soon and you lose.</p>`);
+    const pad = $('#modal [data-dg="react"]'); let goAt = 0;
+    card().onclick = null;
+    const tm = setTimeout(() => { if (!pad.isConnected) return; goAt = performance.now(); pad.classList.add('go'); pad.textContent = 'TAP!'; }, 2500 + r() * 3000);
+    pad.onpointerdown = (e) => { e.preventDefault(); if (!goAt) { clearTimeout(tm); done(9999, 'Too soon!'); } else { const ms = Math.round(performance.now() - goAt); done(ms, `${ms} ms`); } };
+  } else {
+    const seq = Array.from({ length: 6 }, () => Math.floor(r() * 4));
+    modal(head + `<p class="hint" id="dg-t">Watch the pattern…</p><div class="duel-mem">${[0, 1, 2, 3].map((i) => `<button class="mp c${i}" data-dg="${i}" disabled aria-label="pad ${i + 1}"></button>`).join('')}</div>`);
+    const pads = [...document.querySelectorAll('#modal .mp')]; let i = 0, pos = 0, t0 = 0;
+    const finish = () => done(pos * 100000 - Math.min(99999, Math.round(performance.now() - t0)), `${pos} of ${seq.length} right`);
+    const show = () => {
+      if (!pads[0].isConnected) return;
+      if (i >= seq.length) { pads.forEach((x) => { x.disabled = false; }); const t = $('#dg-t'); if (t) t.textContent = 'Your turn: repeat it'; t0 = performance.now(); return; }
+      const x = pads[seq[i]]; x.classList.add('lit'); setTimeout(() => { x.classList.remove('lit'); i++; setTimeout(show, 200); }, 600);
+    };
+    setTimeout(show, 800);
+    card().onclick = (e) => {
+      const b = e.target.closest('.mp'); if (!b || b.disabled || L_.duelSent[key]) return;
+      b.classList.add('lit'); setTimeout(() => b.classList.remove('lit'), 150);
+      if (+b.dataset.dg === seq[pos]) { pos++; if (pos === seq.length) finish(); } else finish();
+    };
+  }
 }
 function updateWireBar(now) {
   let el = $('#wirebar');
@@ -1176,11 +1253,7 @@ function clientTick() {
       if (!q || q.role !== 'hider' || !alive(q) || now - x.t > 12000 || (id === S.wire.from && now - S.wire.at < 15000)) continue;
       if (G.dist(myPos.p, x.p) <= WIRE_PASS_M + Math.min(10, (myPos.acc || 0) / 2)) { sendOnce('wire', 'wirePass', { to: id }, now, 3000); break; }
     }
-    if (S.settings.trivia) {
-      if (!L_.nextTrivia) L_.nextTrivia = now + 60000;
-      if (L_.trivia && now > L_.trivia.until) { L_.trivia = null; if ($('#modal [data-act2="trivia"]')) closeModal(); toast("Time's up on that question.", '', 'trivia'); }
-      if (!L_.trivia && now >= L_.nextTrivia && $('#modal').hidden) showTrivia(now);
-    }
+    if (S.duel && (S.duel.a === me.id || S.duel.b === me.id) && !L_.duelShown[duelKey(S.duel)] && $('#modal').hidden) { beep('alarm'); buzz([100, 60, 100]); openDuel(); }
     if (S.potato && S.potato.holder === me.id) { // hot potato: an extra ping halfway between the normal ones
       const h = Math.floor((now - S.huntStart) / (pingMs() / 2));
       if (h % 2 === 1 && h > L_.lastPotN) { L_.lastPotN = h; sendPing('potato'); toast('Hot potato ping', 'hider', 'potato'); }
@@ -1606,6 +1679,7 @@ function renderLobby() {
     <label class="set">Ping fuzz${selectHtml('blurM', s.blurM, false)}</label>
     ${s.fugitive ? '' : `<label class="set">Seekers${selectHtml('seekers', s.seekers, false)}</label>`}
     ${s.tagMode === 'gps' ? `<label class="set">Tag range${selectHtml('tagRadiusM', s.tagRadiusM, false)}</label>` : ''}
+    ${s.duel ? `<label class="set">Showdowns${selectHtml('duelSec', s.duelSec, false)}</label>` : ''}
     ${s.wire ? `<label class="set">Live Wire fuse${selectHtml('wireSec', s.wireSec, false)}</label>` : ''}
     <label class="set" style="grid-column:1/-1">Seeker alarm (plays on hiders' phones)${selectHtml('alarmM', s.alarmM ?? 0, false)}</label>
     ${s.shrink ? `<label class="set">Zone${selectHtml('shrinkStyle', s.shrinkStyle || 'steps', false)}</label><label class="set">Final zone${selectHtml('shrinkTo', s.shrinkTo, false)}</label>` : ''}
@@ -1670,6 +1744,7 @@ function modeLines(p, now) {
     if (S.potato && S.potato.holder === me.id) L2.push(row('potato', 'You have the hot potato: double points, extra pings', '<button class="btn small" data-act="dropPotato">Drop it</button>'));
   }
   if (S.treasure) L2.push(row('treasure', p.role === 'hider' && alive(p) ? `Treasure chest, ${far(S.treasure.p)}: +${TREASURE_PTS}, but grabbing it pings your exact spot` : 'Treasure chest on the map. Hiders who grab it ping their exact spot'));
+  if (S.duel && (S.duel.a === me.id || S.duel.b === me.id) && !L_.duelSent[duelKey(S.duel)]) L2.push(row('duel', `Showdown vs ${nm(S.duel.a === me.id ? S.duel.b : S.duel.a)}: ${DUEL_NAMES[S.duel.game]}`, '<button class="btn small" data-act="duelOpen">Play</button>'));
   if (p.live && alive(p)) L2.push(row('wire', 'You are LIVE: seekers see where you are'));
   if (S.potato && !S.potato.holder && (p.role === 'seeker' || alive(p))) L2.push(row('potato', 'The hot potato is up for grabs'));
   if (S.sprint && S.sprint.p) L2.push(row('sprint', `Extraction open, ${far(S.sprint.p)}`));
@@ -1900,8 +1975,9 @@ function act(a, el) {
       break;
     }
     case 'start': startRound(); break;
-    case 'again': hostApply((s) => { s.phase = 'lobby'; s.events = []; s.results = null; for (const x of Object.values(s.players)) { x.role = 'hider'; x.caughtAt = null; x.inv = {}; x.fx = {}; x.extracted = null; x.mission = null; } s.drops = []; s.flags = []; s.jail = null; s.potato = null; s.sprint = null; s.treasure = null; s.wire = null; for (const x of Object.values(s.players)) x.live = false; }); break;
+    case 'again': hostApply((s) => { s.phase = 'lobby'; s.events = []; s.results = null; for (const x of Object.values(s.players)) { x.role = 'hider'; x.caughtAt = null; x.inv = {}; x.fx = {}; x.extracted = null; x.mission = null; } s.drops = []; s.flags = []; s.jail = null; s.potato = null; s.sprint = null; s.treasure = null; s.wire = null; s.duel = null; for (const x of Object.values(s.players)) x.live = false; }); break;
     case 'endNow': if (confirm('End this round now?')) hostApply((s) => endRound(s, 'host')); break;
+    case 'duelOpen': openDuel(); break;
     case 'dropPotato': if (myPos && S.potato && S.potato.holder === me.id) { send('potatoDrop', { p: myPos.p, acc: myPos.acc }); toast('You dropped the hot potato.', 'hider', 'potato'); } break;
     case 'snap': { const fi = $('#snap-in'); if (fi) { fi.value = ''; fi.click(); } break; }
     case 'ruleCatch': {
@@ -1967,7 +2043,6 @@ $('#modal').addEventListener('click', (e) => {
   const a = b.dataset.act2, d = b.dataset;
   closeModal();
   if (a === 'caughtBy') send('caught', { who: me.id, by: d.id, how: 'self', p: myPos?.p || null });
-  if (a === 'trivia') { const t = L_.trivia; L_.trivia = null; if (t) { if (d.a === t.ans) { send('triviaWin', {}); toast('Correct! A free decoy is yours.', 'good', 'trivia'); } else toast(`Nope, it was ${esc(t.ans)}.`, '', 'trivia'); } }
   if (a === 'pick' && pickCb) { const f = pickCb; pickCb = null; f(d.id); }
   if (a === 'ruleWho') {
     const ss = Object.entries(S.players).filter(([, x]) => x.role === 'seeker');
@@ -2138,7 +2213,7 @@ window.__gl = {
     tapMap: (lat, lng) => map.fire('click', { latlng: L.latLng(lat, lng) }),
     give: (id, item) => hostApply((s) => { const q = s.players[id]; q.inv = q.inv || {}; q.inv[item] = (q.inv[item] || 0) + 1; }),
     spawnDrop: () => hostApply((s) => spawnDrop(s)),
-    showTrivia: () => showTrivia(hostNow()),
+    startDuel: (a, b, game, ms) => hostApply((s) => startDuelIn(s, a, b, game, Date.now(), ms || 45000)), duelSubmit,
     spawnTreasure: (pt) => hostApply((s) => { s.treasure = { id: 'tx' + Date.now(), p: pt }; }),
     setWire: (id, ms) => hostApply((s) => { s.wire = id ? { holder: id, until: Date.now() + ms, from: null, at: Date.now() } : null; s.nextWireAt = Infinity; if (id) s.events.push({ id: evId(), k: 'wire', who: id, t: Date.now() }); }),
     setWallet: (id, n) => hostApply((s) => { s.wallet = s.wallet || {}; s.wallet[id] = n; }),

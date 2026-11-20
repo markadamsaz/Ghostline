@@ -158,13 +158,20 @@ await setPos(hiders[2], spots[2]);
 await G(host, ([p]) => window.__gl.spawnTreasure(p), [spots[2]]);
 ok(await until(async () => ((await state(host)).players[hiders[2].pid].bonus || 0) === 30, 6000, 'treasure'), 'grabbing a treasure chest pays +30');
 ok(await until(async () => (await G(seeker, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'treasure' && !x.blur), hiders[2].pid)), 5000, 'tping'), 'and pings the hider\'s exact spot to the seekers');
-// trivia: a right answer earns a decoy
-await G(host, () => window.__gl.setSettings({ trivia: true }));
-const decoys0 = ((await state(host)).players[hiders[2].pid].inv || {}).decoy || 0;
-await G(hiders[2], () => window.__gl.showTrivia());
-await G(hiders[2], () => { const a = window.__gl.local.trivia.ans; [...document.querySelectorAll('#modal [data-act2="trivia"]')].find((b) => b.dataset.a === a).click(); });
-ok(await until(async () => (((await state(host)).players[hiders[2].pid].inv || {}).decoy || 0) === decoys0 + 1, 5000, 'trivia'), 'a right trivia answer earns a free decoy');
-await G(host, () => window.__gl.setSettings({ trivia: false }));
+// showdown: two hiders play a quick game, the winner gets +25
+const duelB = async (h) => (await state(host)).players[h.pid].bonus || 0;
+const b1 = await duelB(hiders[1]), b2 = await duelB(hiders[2]);
+await G(host, ([a, b]) => window.__gl.startDuel(a, b, 'rps', 30000), [hiders[1].pid, hiders[2].pid]);
+ok(await until(async () => (await G(hiders[1], () => !!document.querySelector('#modal:not([hidden]) [data-dg="rock"]'))) && (await G(hiders[2], () => !!document.querySelector('#modal:not([hidden]) [data-dg="scissors"]'))), 8000, 'duelOpen'), 'a showdown pops up for both hiders');
+await G(hiders[1], () => document.querySelector('#modal [data-dg="rock"]').click());
+await G(hiders[2], () => document.querySelector('#modal [data-dg="scissors"]').click());
+ok(await until(async () => (await duelB(hiders[1])) === b1 + 25 && !(await state(host)).duel, 6000, 'duelWin'), 'rock beats scissors: the winner gets +25');
+ok((await duelB(hiders[2])) === b2, 'and the loser loses nothing');
+await G(host, ([a, b]) => window.__gl.startDuel(a, b, 'tap', 3000), [hiders[2].pid, hiders[1].pid]);
+await until(async () => !!(await state(host)).duel, 4000, 'duel2');
+await G(hiders[2], () => window.__gl.duelSubmit(12));
+ok(await until(async () => (await duelB(hiders[2])) === b2 + 25 && !(await state(host)).duel, 9000, 'noShow'), 'a no-show loses the showdown after the timeout');
+ok(await until(async () => (await G(hiders[1], () => document.querySelector('#modal').hidden)), 4000, 'duelClose'), 'the showdown closes when it ends');
 // live wire: the holder sees other hiders, passes it by walking close, and whoever holds it at zero goes live
 await G(host, (id) => window.__gl.setWire(id, 60000), hiders[1].pid);
 ok(await until(async () => (await G(hiders[1], (id) => !!window.__gl.local.wireLocs[id], hiders[0].pid)), 9000, 'wireLocs'), 'the Live Wire holder can see the other hiders');
