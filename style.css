@@ -366,3 +366,15 @@ body.blackout::after { content: 'BLACKOUT'; position: fixed; z-index: 15; top: 4
 #wirebar[hidden] { display: none; }
 #wirebar .i { width: 18px; height: 18px; }
 #wirebar.hot { background: var(--red); border-color: var(--red); color: #fff; }
+
+/* showdown */
+.duel-rps { display: grid; gap: 10px; margin-top: 8px; }
+.duel-big { font-size: 44px; font-weight: 800; text-align: center; margin: 6px 0; }
+.duel-pad { width: 100%; min-height: 140px; font-size: 28px; touch-action: manipulation; user-select: none; }
+.duel-react { width: 100%; min-height: 180px; border: 0; border-radius: 18px; background: var(--red); color: #fff; font-size: 24px; font-weight: 800; touch-action: manipulation; user-select: none; }
+.duel-react.go { background: #1f9d55; }
+.duel-mem { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+.duel-mem .mp { aspect-ratio: 1; border: 0; border-radius: 16px; opacity: .45; transition: opacity .1s, transform .1s; touch-action: manipulation; }
+.duel-mem .mp.lit { opacity: 1; transform: scale(1.04); }
+.duel-mem .c0 { background: #e53e3e; } .duel-mem .c1 { background: #3182ce; } .duel-mem .c2 { background: #38a169; } .duel-mem .c3 { background: #d69e2e; }
+.duel-wait { text-align: center; margin: 14px 0; }
