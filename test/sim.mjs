@@ -129,6 +129,16 @@ await setPos(seeker, off(0, 0));
 await G(hiders[2], () => window.__gl.act('item', { dataset: { item: 'sonar' } }));
 ok(await until(async () => (await G(hiders[2], (sp) => !!window.__gl.local.seekerLocs[sp], seekerPid)), 5000, 'sonar'), 'sonar reveals the seeker to hiders');
 
+// ---- seeker alarm (default 50 m): a hider 20 m from the seeker hears it, one 180 m away does not
+await setPos(hiders[1], off(0, 20));
+ok(await until(async () => (await G(hiders[1], () => window.__gl.local.alarmM)) <= 50, 8000, 'alarm range'), 'hider within the alarm range knows a seeker is close');
+ok(await until(async () => G(hiders[1], () => window.__gl.alarmOn), 8000, 'alarm sound'), 'the sprite cranberry alarm plays on the close hider');
+ok(!(await G(hiders[0], () => window.__gl.alarmOn)) && (await G(hiders[0], () => window.__gl.local.alarmM)) > 50, 'a far hider hears nothing');
+ok((await Promise.all(all.map((ph) => G(ph, () => Object.keys(window.__gl.local.nearLocs))))).flat().every((id) => id === seekerPid), 'only seekers send their spot for the alarm, never hiders');
+await setPos(hiders[1], off(0, 300));
+ok(await until(async () => !(await G(hiders[1], () => window.__gl.alarmOn)), 8000, 'alarm off'), 'the alarm stops once the seeker is out of range');
+await setPos(hiders[1], spots[1]);
+
 // ---- zone breach
 await setPos(hiders[2], off(700, 0));
 ok(await until(async () => (await G(seeker, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'breach'), hiders[2].pid)), 9000, 'breach'), 'leaving the zone exposes the hider\'s exact spot after the grace period');

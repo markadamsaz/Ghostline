@@ -158,6 +158,7 @@ const OPTS = {
   blurM: [[0, 'Exact'], [10, '10 m'], [25, '25 m'], [50, '50 m'], [100, '100 m']],
   tagRadiusM: [[10, '10 m'], [20, '20 m'], [30, '30 m'], [40, '40 m'], [50, '50 m']],
   wireSec: [[60, '1 min'], [120, '2 min'], [180, '3 min'], [300, '5 min'], [600, '10 min']],
+  alarmM: [[0, 'Off'], [20, 'Within 20 m'], [30, 'Within 30 m'], [50, 'Within 50 m'], [75, 'Within 75 m'], [100, 'Within 100 m'], [150, 'Within 150 m'], [200, 'Within 200 m']],
   seekers: [[1, '1'], [2, '2'], [3, '3']],
   dropSec: [[60, 'Every 1 min'], [120, 'Every 2 min'], [180, 'Every 3 min'], [300, 'Every 5 min'], [600, 'Every 10 min']],
   shrinkStyle: [['smooth', 'Closes in smoothly'], ['steps', 'Jumps in at each ping']],
@@ -174,7 +175,9 @@ const DEFAULT_SETTINGS = {
   tagMode: 'gps', infection: true, fugitive: false, jail: false, starter: true, drops: true, dropSec: 180,
   missions: false, capture: false, potato: false, sprint: false, treasure: false, trivia: false, wire: false, wireSec: 180,
   shrink: true, shrinkStyle: 'smooth', shrinkTo: 0.4, strictZone: true, graceSec: 15,
+  alarmM: 50, // seeker alarm: hiders hear "wanna sprite cranberry?" on repeat when a seeker is this close (0 = off)
 };
+const ALARM_SEND_MS = 3000, ALARM_STALE_MS = 10000, ALARM_HYST_M = 5;
 
 // ---------------- identity ----------------
 function loadMe() {
@@ -216,7 +219,7 @@ function resetLocal() {
     lastPingN: -1, warnedN: -1,
     decoyArmed: null, jamArmed: false, placingDecoy: false,
     outSince: null, lastBreach: 0,
-    sonarUntil: 0, seekerLocs: {}, peekUntil: 0, trailUntil: 0, trailLocs: {}, wireLocs: {}, trivia: null, nextTrivia: 0, trailSendUntil: 0, spotUntil: 0,
+    sonarUntil: 0, seekerLocs: {}, nearLocs: {}, lastNearSend: 0, peekUntil: 0, trailUntil: 0, trailLocs: {}, wireLocs: {}, trivia: null, nextTrivia: 0, trailSendUntil: 0, spotUntil: 0,
     tracks: {}, myTrack: [],
     tagCooldown: 0, lastShrinkK: 0,
     swarmArmed: false, lastTrack: 0, lastPotN: -1, sentAt: {}, capStart: {}, capPing: {}, dqSent: false, ozSec: -1,
@@ -267,6 +270,45 @@ function beep(kind) {
   } catch {}
 }
 const buzz = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch {} };
+
+// Seeker alarm: "wanna sprite cranberry?" loops on a hider's phone while a seeker is in range.
+// The closer the seeker, the louder it plays and the shorter the gap between plays.
+const alarm = { buf: null, loading: false, src: null, gain: null, nextAt: 0, on: false };
+function loadAlarm() {
+  if (alarm.buf || alarm.loading || !actx) return;
+  alarm.loading = true;
+  fetch('audio/sprite-cranberry.m4a').then((r) => r.arrayBuffer())
+    .then((b) => new Promise((ok, no) => actx.decodeAudioData(b, ok, no)))
+    .then((buf) => { alarm.buf = buf; })
+    .catch(() => {})
+    .finally(() => { alarm.loading = false; });
+}
+function stopAlarm() {
+  alarm.on = false; alarm.nextAt = 0;
+  if (alarm.src) { try { alarm.gain.gain.setTargetAtTime(0, actx.currentTime, 0.05); alarm.src.stop(actx.currentTime + 0.3); } catch {} }
+  alarm.src = null; alarm.gain = null;
+}
+// d: meters to the nearest seeker (Infinity if none), range: the lobby setting
+function alarmUpdate(d, range) {
+  const inRange = range > 0 && d <= range + (alarm.on ? ALARM_HYST_M : 0);
+  if (!inRange) { if (alarm.on) stopAlarm(); return; }
+  if (!actx) return;
+  if (actx.state === 'suspended') actx.resume().catch(() => {});
+  if (!alarm.buf) { loadAlarm(); return; }
+  const k = Math.max(0, Math.min(1, 1 - d / range)); // 0 at the edge of the range, 1 right on top of you
+  const vol = 0.3 + 0.7 * k;
+  if (!alarm.on) { alarm.on = true; buzz([120, 80, 120]); }
+  if (alarm.gain) alarm.gain.gain.setTargetAtTime(vol, actx.currentTime, 0.1); // gets louder mid-clip as they close in
+  const t = actx.currentTime;
+  if (t < alarm.nextAt) return;
+  const src = actx.createBufferSource(), g = actx.createGain();
+  src.buffer = alarm.buf; g.gain.value = vol;
+  src.connect(g).connect(actx.destination);
+  src.onended = () => { if (alarm.src === src) { alarm.src = null; alarm.gain = null; } };
+  src.start(t);
+  alarm.src = src; alarm.gain = g;
+  alarm.nextAt = t + alarm.buf.duration + 2.5 * (1 - k); // back to back when they're right there
+}
 
 // ---------------- map ----------------
 const map = L.map('map', { zoomControl: false, attributionControl: true, worldCopyJump: true }).setView([39.5, -98.35], 4);
@@ -703,6 +745,10 @@ function handle(m, self) {
       renderMarks();
       break;
     }
+    case 'seekerNear': { // for the seeker alarm only: never drawn on the map
+      if (Array.isArray(d.p) && d.p.length === 2 && d.p.every(Number.isFinite)) L_.nearLocs[m.from] = { p: d.p, t: hostNow() };
+      break;
+    }
     case 'chat': {
       if (!S) return;
       const text = String(d.text || '').slice(0, 200);
@@ -1134,6 +1180,21 @@ function clientTick() {
     if (toNext <= 10000 && L_.warnedN !== n + 1) { L_.warnedN = n + 1; beep('warn'); buzz([60, 80, 60]); toast('<b>Ping in 10 s.</b> Get under cover.', 'hider', 'clock'); }
   }
   if (S.phase === 'hunting' && p) reachThings(p, now);
+  // seeker alarm: seekers quietly share their spot, hiders' phones play the alarm when one is close
+  const range = +S.settings.alarmM || 0;
+  if (range && S.phase === 'hunting' && p && p.role === 'seeker' && alive(p) && myPos && now - L_.lastNearSend >= ALARM_SEND_MS) {
+    L_.lastNearSend = now; send('seekerNear', { p: myPos.p });
+  }
+  let nearM = Infinity;
+  if (range && S.phase === 'hunting' && p && p.role === 'hider' && alive(p) && myPos) {
+    for (const [id, x] of Object.entries(L_.nearLocs)) {
+      const q = P(id);
+      if (id === me.id || !q || q.role !== 'seeker' || !alive(q) || now - x.t > ALARM_STALE_MS) continue;
+      nearM = Math.min(nearM, G.dist(myPos.p, x.p));
+    }
+  }
+  L_.alarmM = nearM;
+  alarmUpdate(nearM, range);
   // shrink notices
   if (S.phase === 'hunting' && S.settings.shrink && !smoothShrink()) {
     const k = shrinkStep(now);
@@ -1481,6 +1542,7 @@ function renderLobby() {
     ${s.fugitive ? '' : `<label class="set">Seekers${selectHtml('seekers', s.seekers, false)}</label>`}
     ${s.tagMode === 'gps' ? `<label class="set">Tag range${selectHtml('tagRadiusM', s.tagRadiusM, false)}</label>` : ''}
     ${s.wire ? `<label class="set">Live Wire fuse${selectHtml('wireSec', s.wireSec, false)}</label>` : ''}
+    <label class="set" style="grid-column:1/-1">Seeker alarm (plays on hiders' phones)${selectHtml('alarmM', s.alarmM ?? 0, false)}</label>
     ${s.shrink ? `<label class="set">Zone${selectHtml('shrinkStyle', s.shrinkStyle || 'steps', false)}</label><label class="set">Final zone${selectHtml('shrinkTo', s.shrinkTo, false)}</label>` : ''}
     ${s.drops ? `<label class="set" style="grid-column:1/-1">Supply drops${selectHtml('dropSec', s.dropSec, false)}</label>` : ''}
   </div>` : `<div class="mode-lines" style="margin:0">
@@ -1488,6 +1550,7 @@ function renderLobby() {
     <div>${ic('pin')}<span class="txt">Hiders ping every <b>${optLabel('pingSec', s.pingSec)}</b>${+s.blurM ? `, fuzzed by ${optLabel('blurM', s.blurM)}` : ', exact spot'}</span></div>
     <div>${ic('tag')}<span class="txt">${s.tagMode === 'gps' ? `Tag by getting within <b>${optLabel('tagRadiusM', s.tagRadiusM)}</b>` : s.tagMode === 'honor' ? 'Honor tags: tag them for real, they confirm' : 'Photo tags: snap them, they confirm'}</span></div>
     <div>${ic('eye')}<span class="txt">${s.fugitive ? 'One runner, everyone else seeks' : `<b>${s.seekers}</b> seeker${s.seekers > 1 ? 's' : ''} to start`}</span></div>
+    ${+s.alarmM ? `<div>${ic('sonar')}<span class="txt">Hiders' phones play an alarm when a seeker is within <b>${s.alarmM} m</b>. It gets louder the closer they get</span></div>` : ''}
   </div>`;
   const shown = host ? MODES : MODES.filter(([k]) => s[k]);
   const modes = shown.length ? `<div class="modes">${shown.map(([k, t, d]) => `<label class="mode ${s[k] ? 'on' : ''} ${host ? '' : 'locked'}"><span class="mi">${ic(k)}</span><span class="mt"><b>${t}</b><small>${d}</small></span>${host ? `<span class="sw"><input type="checkbox" data-set="${k}" ${s[k] ? 'checked' : ''} aria-label="${t}"><span></span></span>` : ''}</label>`).join('')}</div>`
@@ -1965,7 +2028,9 @@ function takeName() {
   const n = inName.value.trim();
   if (!n) { showHomeErr('Pick a name first.'); inName.focus(); return null; }
   me.name = n.slice(0, 16); saveMe(); showHomeErr('');
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {} // iOS: play even with the silent switch on
   try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch {}
+  loadAlarm();
   return n;
 }
 $('#btn-create').addEventListener('click', () => { if (takeName()) connect(newCode(), true); });
@@ -1999,7 +2064,7 @@ setInterval(clientTick, 500);
 // test and debug hooks
 window.__gl = {
   get S() { return S; }, get me() { return me; }, get peers() { return [...peers]; }, get local() { return L_; },
-  get myPos() { return myPos; }, hostNow, currentZone,
+  get myPos() { return myPos; }, get alarmOn() { return alarm.on; }, hostNow, currentZone,
   ...(DEBUG ? {
     setPos, act, send, feedFix: (lat, lng, acc) => onPos({ coords: { latitude: lat, longitude: lng, accuracy: acc } }),
     setSettings: (o) => hostApply((s) => { Object.assign(s.settings, o); if (o.jail) s.settings.infection = false; if (o.infection) s.settings.jail = false; }),
