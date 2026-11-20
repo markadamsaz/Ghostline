@@ -158,6 +158,7 @@ const OPTS = {
   blurM: [[0, 'Exact'], [10, '10 m'], [25, '25 m'], [50, '50 m'], [100, '100 m']],
   tagRadiusM: [[10, '10 m'], [20, '20 m'], [30, '30 m'], [40, '40 m'], [50, '50 m']],
   wireSec: [[60, '1 min'], [120, '2 min'], [180, '3 min'], [300, '5 min'], [600, '10 min']],
+  alarmM: [[0, 'Off'], [20, 'Within 20 m'], [30, 'Within 30 m'], [50, 'Within 50 m'], [75, 'Within 75 m'], [100, 'Within 100 m'], [150, 'Within 150 m'], [200, 'Within 200 m']],
   seekers: [[1, '1'], [2, '2'], [3, '3']],
   dropSec: [[60, 'Every 1 min'], [120, 'Every 2 min'], [180, 'Every 3 min'], [300, 'Every 5 min'], [600, 'Every 10 min']],
   shrinkStyle: [['smooth', 'Closes in smoothly'], ['steps', 'Jumps in at each ping']],
@@ -174,7 +175,9 @@ const DEFAULT_SETTINGS = {
   tagMode: 'gps', infection: true, fugitive: false, jail: false, starter: true, drops: true, dropSec: 180,
   missions: false, capture: false, potato: false, sprint: false, treasure: false, trivia: false, wire: false, wireSec: 180,
   shrink: true, shrinkStyle: 'smooth', shrinkTo: 0.4, strictZone: true, graceSec: 15,
+  alarmM: 50, // seeker alarm: hiders hear "wanna sprite cranberry?" on repeat when a seeker is this close (0 = off)
 };
+const ALARM_SEND_MS = 3000, ALARM_STALE_MS = 10000, ALARM_HYST_M = 5;
 
 // ---------------- identity ----------------
 function loadMe() {
@@ -216,7 +219,7 @@ function resetLocal() {
     lastPingN: -1, warnedN: -1,
     decoyArmed: null, jamArmed: false, placingDecoy: false,
     outSince: null, lastBreach: 0,
-    sonarUntil: 0, seekerLocs: {}, peekUntil: 0, trailUntil: 0, trailLocs: {}, wireLocs: {}, trivia: null, nextTrivia: 0, trailSendUntil: 0, spotUntil: 0,
+    sonarUntil: 0, seekerLocs: {}, nearLocs: {}, lastNearSend: 0, peekUntil: 0, trailUntil: 0, trailLocs: {}, wireLocs: {}, trivia: null, nextTrivia: 0, trailSendUntil: 0, spotUntil: 0,
     tracks: {}, myTrack: [],
     tagCooldown: 0, lastShrinkK: 0,
     swarmArmed: false, lastTrack: 0, lastPotN: -1, sentAt: {}, capStart: {}, capPing: {}, dqSent: false, ozSec: -1,
@@ -267,6 +270,45 @@ function beep(kind) {
   } catch {}
 }
 const buzz = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch {} };
+
+// Seeker alarm: "wanna sprite cranberry?" loops on a hider's phone while a seeker is in range.
+// The closer the seeker, the louder it plays and the shorter the gap between plays.
+const alarm = { buf: null, loading: false, src: null, gain: null, nextAt: 0, on: false };
+function loadAlarm() {
+  if (alarm.buf || alarm.loading || !actx) return;
+  alarm.loading = true;
+  fetch('audio/sprite-cranberry.m4a').then((r) => r.arrayBuffer())
+    .then((b) => new Promise((ok, no) => actx.decodeAudioData(b, ok, no)))
+    .then((buf) => { alarm.buf = buf; })
+    .catch(() => {})
+    .finally(() => { alarm.loading = false; });
+}
+function stopAlarm() {
+  alarm.on = false; alarm.nextAt = 0;
+  if (alarm.src) { try { alarm.gain.gain.setTargetAtTime(0, actx.currentTime, 0.05); alarm.src.stop(actx.currentTime + 0.3); } catch {} }
+  alarm.src = null; alarm.gain = null;
+}
+// d: meters to the nearest seeker (Infinity if none), range: the lobby setting
+function alarmUpdate(d, range) {
+  const inRange = range > 0 && d <= range + (alarm.on ? ALARM_HYST_M : 0);
+  if (!inRange) { if (alarm.on) stopAlarm(); return; }
+  if (!actx) return;
+  if (actx.state === 'suspended') actx.resume().catch(() => {});
+  if (!alarm.buf) { loadAlarm(); return; }
+  const k = Math.max(0, Math.min(1, 1 - d / range)); // 0 at the edge of the range, 1 right on top of you
+  const vol = 0.3 + 0.7 * k;
+  if (!alarm.on) { alarm.on = true; buzz([120, 80, 120]); }
+  if (alarm.gain) alarm.gain.gain.setTargetAtTime(vol, actx.currentTime, 0.1); // gets louder mid-clip as they close in
+  const t = actx.currentTime;
+  if (t < alarm.nextAt) return;
+  const src = actx.createBufferSource(), g = actx.createGain();
+  src.buffer = alarm.buf; g.gain.value = vol;
+  src.connect(g).connect(actx.destination);
+  src.onended = () => { if (alarm.src === src) { alarm.src = null; alarm.gain = null; } };
+  src.start(t);
+  alarm.src = src; alarm.gain = g;
+  alarm.nextAt = t + alarm.buf.duration + 2.5 * (1 - k); // back to back when they're right there
+}
 
 // ---------------- map ----------------
 const map = L.map('map', { zoomControl: false, attributionControl: true, worldCopyJump: true }).setView([39.5, -98.35], 4);
@@ -456,7 +498,10 @@ function handle(m, self) {
       const okPt = (q) => Array.isArray(q) && q.length === 2 && q.every(Number.isFinite);
       const alts = Array.isArray(d.alts) ? d.alts.filter(okPt).slice(0, 3) : null;
       L_.pings.push({ id: m.from, p: okPt(d.p) ? d.p : null, alts, blur: Math.min(+d.blur || 0, 200), kind: d.kind, n: d.n, t: hostNow() });
-      if (!self && mine()?.role === 'seeker') {
+      if (!self && d.kind === 'away') { // everyone hears about it, seekers get the spot
+        toast(`<b>${nm(m.from)}</b> turned off their screen.${mine()?.role === 'seeker' && okPt(d.p) ? ' Exact spot showing.' : ''}`, 'seeker', 'alert');
+        if (mine()?.role === 'seeker') { beep('alarm'); buzz([80, 60, 80]); }
+      } else if (!self && mine()?.role === 'seeker') {
         if (d.kind === 'breach') { toast(`<b>${nm(m.from)}</b> left the zone. Exact spot showing.`, 'seeker', 'alert'); beep('alarm'); buzz([80, 60, 80]); }
         else if (d.kind === 'jam') { toast(`<b>${nm(m.from)}</b> jammed their signal`, 'seeker', 'jammer'); }
         else if (d.kind === 'ghost') { toast(`<b>${nm(m.from)}</b> is a ghost. No signal.`, 'seeker', 'ghost'); }
@@ -701,6 +746,14 @@ function handle(m, self) {
     case 'seekerLoc': {
       L_.seekerLocs[m.from] = { p: d.p, t: hostNow() };
       renderMarks();
+      break;
+    }
+    case 'away': { // a seeker turned off their screen mid-hunt
+      if (!self && S && S.phase === 'hunting') toast(`<b>${nm(m.from)}</b> turned off their screen.`, '', 'alert');
+      break;
+    }
+    case 'seekerNear': { // for the seeker alarm only: never drawn on the map
+      if (Array.isArray(d.p) && d.p.length === 2 && d.p.every(Number.isFinite)) L_.nearLocs[m.from] = { p: d.p, t: hostNow() };
       break;
     }
     case 'chat': {
@@ -1028,7 +1081,8 @@ function onEvent(e) {
 function sendPing(kind = 'scheduled', n = null) {
   const s = S.settings;
   if (n === null) n = kind === 'scheduled' ? L_.lastPingN : 'r' + Date.now();
-  if (kind !== 'breach' && hostNow() < ((mine()?.fx || {}).ghostUntil || 0)) { send('ping', { kind: 'ghost', n, p: null }); return; }
+  if (kind !== 'breach' && kind !== 'away' && hostNow() < ((mine()?.fx || {}).ghostUntil || 0)) { send('ping', { kind: 'ghost', n, p: null }); return; }
+  if (kind === 'away') { send('ping', { kind, n: 'a' + Date.now(), p: myPos ? myPos.p : null, blur: 0 }); return; } // power-ups can't hide it
   if (!myPos) { send('ping', { kind: 'nosignal', n, p: null }); return; }
   if (kind === 'breach') { send('ping', { kind, n: 'b' + Date.now(), p: myPos.p, blur: 0 }); return; }
   if (kind === 'xray' || kind === 'capture' || kind === 'treasure' || kind === 'live') { send('ping', { kind, n, p: myPos.p, blur: 0 }); return; }
@@ -1102,6 +1156,7 @@ function shopHtml() {
 
 function clientTick() {
   if (!S) return;
+  if (!wakeLock && Date.now() - (L_.lastWakeTry || 0) > 5000) { L_.lastWakeTry = Date.now(); requestWake(); } // joiners get it as soon as they're in
   maybeTakeOverHost();
   hostTick();
   const now = hostNow();
@@ -1134,6 +1189,21 @@ function clientTick() {
     if (toNext <= 10000 && L_.warnedN !== n + 1) { L_.warnedN = n + 1; beep('warn'); buzz([60, 80, 60]); toast('<b>Ping in 10 s.</b> Get under cover.', 'hider', 'clock'); }
   }
   if (S.phase === 'hunting' && p) reachThings(p, now);
+  // seeker alarm: seekers quietly share their spot, hiders' phones play the alarm when one is close
+  const range = +S.settings.alarmM || 0;
+  if (range && S.phase === 'hunting' && p && p.role === 'seeker' && alive(p) && myPos && now - L_.lastNearSend >= ALARM_SEND_MS) {
+    L_.lastNearSend = now; send('seekerNear', { p: myPos.p });
+  }
+  let nearM = Infinity;
+  if (range && S.phase === 'hunting' && p && p.role === 'hider' && alive(p) && myPos) {
+    for (const [id, x] of Object.entries(L_.nearLocs)) {
+      const q = P(id);
+      if (id === me.id || !q || q.role !== 'seeker' || !alive(q) || now - x.t > ALARM_STALE_MS) continue;
+      nearM = Math.min(nearM, G.dist(myPos.p, x.p));
+    }
+  }
+  L_.alarmM = nearM;
+  alarmUpdate(nearM, range);
   // shrink notices
   if (S.phase === 'hunting' && S.settings.shrink && !smoothShrink()) {
     const k = shrinkStep(now);
@@ -1271,10 +1341,66 @@ function compactTrack(t) {
   const step = Math.ceil(t.length / 600);
   return t.filter((_, i) => i % step === 0 || i === t.length - 1);
 }
-async function requestWake() {
-  try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } } catch {}
+// Keep the screen on for as long as you're in a game (lobby included).
+// First choice is the Wake Lock API. Where that's missing or refused (older iPhones, some
+// home-screen apps, battery saver), a tiny silent video loops off-screen, which also keeps phones awake.
+let wakeVideo = null;
+function wakeVideoOn() {
+  try {
+    if (!wakeVideo) {
+      wakeVideo = document.createElement('video');
+      wakeVideo.src = 'media/keep-awake.mp4';
+      wakeVideo.muted = true; wakeVideo.loop = true; wakeVideo.playsInline = true;
+      wakeVideo.setAttribute('playsinline', ''); wakeVideo.setAttribute('muted', ''); wakeVideo.setAttribute('aria-hidden', 'true');
+      wakeVideo.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0.01;pointer-events:none;z-index:-1';
+      document.body.appendChild(wakeVideo);
+    }
+    if (wakeVideo.paused) wakeVideo.play().catch(() => {});
+  } catch {}
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S && S.phase !== 'lobby') requestWake(); });
+function wakeVideoOff() { try { if (wakeVideo && !wakeVideo.paused) wakeVideo.pause(); } catch {} }
+let wakePending = false;
+async function requestWake() {
+  if (!S || document.visibilityState !== 'visible') return;
+  if (wakeLock || wakePending) return;
+  wakePending = true;
+  try {
+    if (!('wakeLock' in navigator)) throw 0;
+    const lock = await navigator.wakeLock.request('screen');
+    if (!S) { lock.release().catch(() => {}); return; }
+    wakeLock = lock; wakeVideoOff();
+    lock.addEventListener('release', () => { if (wakeLock === lock) wakeLock = null; if (S && document.visibilityState === 'visible') requestWake(); });
+  } catch { wakeVideoOn(); } finally { wakePending = false; }
+}
+function releaseWake() {
+  const l = wakeLock; wakeLock = null;
+  try { l && l.release(); } catch {}
+  wakeVideoOff();
+}
+// re-arm on every tap (a tap lets the video start on phones that need one) and when the app comes back
+document.addEventListener('pointerdown', () => { if (S) requestWake(); }, { passive: true });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') { requestWake(); if (L_.wentAway) { L_.wentAway = false; showAwayWarning(); } }
+  else screenWentAway();
+});
+window.addEventListener('pagehide', screenWentAway);
+// The power button can't be blocked from a web page, so turning the screen off (or leaving the app)
+// during the hunt gives a hider away: their exact spot goes to the seekers, and everyone is told.
+function screenWentAway() {
+  if (!S || S.phase !== 'hunting') return;
+  const p = mine();
+  if (!p || !alive(p)) return;
+  const now = Date.now();
+  if (now - (L_.lastAway || 0) < 5000) return; // visibilitychange and pagehide can both fire
+  L_.lastAway = now; L_.wentAway = true;
+  if (p.role === 'hider') sendPing('away');
+  else send('away', {});
+}
+function showAwayWarning() {
+  const hider = mine()?.role === 'hider';
+  toast(hider ? '<b>Keep Ghostline open.</b> You turned off your screen, so the seekers saw your exact spot.' : '<b>Keep Ghostline open.</b> Everyone was told you turned off your screen.', 'seeker', 'alert');
+  beep('warn'); buzz([200, 100, 200]);
+}
 
 // ---------------- rendering ----------------
 function renderAll() { renderHud(); renderSheet(); renderZone(); renderMarks(); updateMeMarker(); }
@@ -1360,8 +1486,8 @@ function renderMarks() {
     const last = real[real.length - 1];
     real.slice(-4, -1).forEach((x) => L.circleMarker(x.p, { radius: 4, color: INK, weight: 1, opacity: .35, fillOpacity: .2, interactive: false }).addTo(layers.marks));
     if (!last || (pl.caughtAt && S.phase !== 'ended')) continue;
-    const loud = last.kind === 'breach' || last.kind === 'xray' || last.kind === 'live';
-    const sub = last.kind === 'live' ? 'LIVE · ' + ago(now - last.t) : last.kind === 'breach' ? 'OUT OF ZONE' : last.kind === 'xray' ? 'X-RAY · ' + ago(now - last.t) : (id === me.id ? 'your last ping · ' : '') + ago(now - last.t);
+    const loud = last.kind === 'breach' || last.kind === 'xray' || last.kind === 'live' || last.kind === 'away';
+    const sub = last.kind === 'live' ? 'LIVE · ' + ago(now - last.t) : last.kind === 'breach' ? 'OUT OF ZONE' : last.kind === 'away' ? 'SCREEN OFF · ' + ago(now - last.t) : last.kind === 'xray' ? 'X-RAY · ' + ago(now - last.t) : (id === me.id ? 'your last ping · ' : '') + ago(now - last.t);
     for (const spot of [last.p, ...(last.alts || [])]) {
       if (last.blur) L.circle(spot, { radius: last.blur, color: loud ? RED : INK, weight: 1.5, opacity: .6, fillOpacity: .08, interactive: false }).addTo(layers.marks);
       L.marker(spot, { icon: blipIcon(loud ? RED : INK, esc(pl.name), sub, loud ? 'loud' : ''), zIndexOffset: 500 }).addTo(layers.marks);
@@ -1481,6 +1607,7 @@ function renderLobby() {
     ${s.fugitive ? '' : `<label class="set">Seekers${selectHtml('seekers', s.seekers, false)}</label>`}
     ${s.tagMode === 'gps' ? `<label class="set">Tag range${selectHtml('tagRadiusM', s.tagRadiusM, false)}</label>` : ''}
     ${s.wire ? `<label class="set">Live Wire fuse${selectHtml('wireSec', s.wireSec, false)}</label>` : ''}
+    <label class="set" style="grid-column:1/-1">Seeker alarm (plays on hiders' phones)${selectHtml('alarmM', s.alarmM ?? 0, false)}</label>
     ${s.shrink ? `<label class="set">Zone${selectHtml('shrinkStyle', s.shrinkStyle || 'steps', false)}</label><label class="set">Final zone${selectHtml('shrinkTo', s.shrinkTo, false)}</label>` : ''}
     ${s.drops ? `<label class="set" style="grid-column:1/-1">Supply drops${selectHtml('dropSec', s.dropSec, false)}</label>` : ''}
   </div>` : `<div class="mode-lines" style="margin:0">
@@ -1488,6 +1615,7 @@ function renderLobby() {
     <div>${ic('pin')}<span class="txt">Hiders ping every <b>${optLabel('pingSec', s.pingSec)}</b>${+s.blurM ? `, fuzzed by ${optLabel('blurM', s.blurM)}` : ', exact spot'}</span></div>
     <div>${ic('tag')}<span class="txt">${s.tagMode === 'gps' ? `Tag by getting within <b>${optLabel('tagRadiusM', s.tagRadiusM)}</b>` : s.tagMode === 'honor' ? 'Honor tags: tag them for real, they confirm' : 'Photo tags: snap them, they confirm'}</span></div>
     <div>${ic('eye')}<span class="txt">${s.fugitive ? 'One runner, everyone else seeks' : `<b>${s.seekers}</b> seeker${s.seekers > 1 ? 's' : ''} to start`}</span></div>
+    ${+s.alarmM ? `<div>${ic('sonar')}<span class="txt">Hiders' phones play an alarm when a seeker is within <b>${s.alarmM} m</b>. It gets louder the closer they get</span></div>` : ''}
   </div>`;
   const shown = host ? MODES : MODES.filter(([k]) => s[k]);
   const modes = shown.length ? `<div class="modes">${shown.map(([k, t, d]) => `<label class="mode ${s[k] ? 'on' : ''} ${host ? '' : 'locked'}"><span class="mi">${ic(k)}</span><span class="mt"><b>${t}</b><small>${d}</small></span>${host ? `<span class="sw"><input type="checkbox" data-set="${k}" ${s[k] ? 'checked' : ''} aria-label="${t}"><span></span></span>` : ''}</label>`).join('')}</div>`
@@ -1965,7 +2093,9 @@ function takeName() {
   const n = inName.value.trim();
   if (!n) { showHomeErr('Pick a name first.'); inName.focus(); return null; }
   me.name = n.slice(0, 16); saveMe(); showHomeErr('');
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {} // iOS: play even with the silent switch on
   try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch {}
+  loadAlarm();
   return n;
 }
 $('#btn-create').addEventListener('click', () => { if (takeName()) connect(newCode(), true); });
@@ -1985,6 +2115,7 @@ function enterGameUI() {
 }
 function leave(msg) {
   try { net && net.close(); } catch {}
+  releaseWake();
   net = null; S = null; code = null; prevPhase = null; prevRound = 0; zoneDraft = null; replay = null; fittedZone = false;
   processed.clear(); chat.length = 0; resetLocal();
   layers.zone.clearLayers(); layers.marks.clearLayers(); layers.replay.clearLayers(); layers.draft.clearLayers();
@@ -1999,7 +2130,7 @@ setInterval(clientTick, 500);
 // test and debug hooks
 window.__gl = {
   get S() { return S; }, get me() { return me; }, get peers() { return [...peers]; }, get local() { return L_; },
-  get myPos() { return myPos; }, hostNow, currentZone,
+  get myPos() { return myPos; }, get alarmOn() { return alarm.on; }, get awake() { return !!wakeLock || !!(wakeVideo && !wakeVideo.paused); }, hostNow, currentZone,
   ...(DEBUG ? {
     setPos, act, send, feedFix: (lat, lng, acc) => onPos({ coords: { latitude: lat, longitude: lng, accuracy: acc } }),
     setSettings: (o) => hostApply((s) => { Object.assign(s.settings, o); if (o.jail) s.settings.infection = false; if (o.infection) s.settings.jail = false; }),
