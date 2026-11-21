@@ -657,3 +657,5 @@ body.lobby #hud .map-ctl .icon-btn { background: var(--surface); color: var(--in
 .duo:not(.open) .shop-box .shop-h .bal { grid-column: 1 / -1; grid-row: 2; font-size: 22px; text-align: left; }
 .duo { grid-template-columns: 1fr 1fr; }
 .duo:not(.open) .card-tap { font-size: 16px; gap: 7px; }
+.noloc.sm { padding: 2px; margin-left: auto; }
+.noloc.sm .i { width: 16px; height: 16px; }

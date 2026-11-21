@@ -1924,8 +1924,9 @@ function renderLobby() {
   </div>`;
 
   // 2. players + shop
-  const pRow = (id, full) => playerRow(id, full ? `${noLoc(id) ? `<span class="noloc">${ic('pin')}No location</span>` : ''}<span class="meta">${S.totals[id] ? S.totals[id] + ' pts' : ''}</span>${host && id !== me.id ? `<button class="x" data-act="kick" data-id="${id}" aria-label="Remove ${esc(S.players[id].name)}">${ic('close')}</button>` : ''}` : '');
-  const shownIds = playersOpen ? ids : ids.slice(0, 2);
+  const pRow = (id, full) => playerRow(id, full ? `${noLoc(id) ? `<span class="noloc">${ic('pin')}No location</span>` : ''}<span class="meta">${S.totals[id] ? S.totals[id] + ' pts' : ''}</span>${host && id !== me.id ? `<button class="x" data-act="kick" data-id="${id}" aria-label="Remove ${esc(S.players[id].name)}">${ic('close')}</button>` : ''}` : noLoc(id) ? `<span class="noloc sm" title="No location">${ic('pin')}</span>` : '');
+  // collapsed: show players missing location first so the warning is visible
+  const shownIds = playersOpen ? ids : [...ids].sort((x, y) => noLoc(y) - noLoc(x)).slice(0, 2);
   const players = `<div class="card pl-card ${playersOpen ? 'open' : ''}">
     <button class="card-tap" data-act="togglePlayers">${ic('users')}<span class="ct">Players</span><span class="cnt">${online.length}</span>${ic(playersOpen ? 'chevD' : 'chevR', 'chev')}</button>
     <div class="players">${shownIds.map((id) => pRow(id, playersOpen)).join('')}${!playersOpen && n > 2 ? `<button class="more" data-act="togglePlayers">+${n - 2} more</button>` : ''}</div>
