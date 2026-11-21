@@ -498,6 +498,21 @@ ok(await until(async () => { const s = await state(others[0]); return s.hostId !
 const nh = (await state(others[0])).hostId;
 ok(await until(async () => (await Promise.all(others.map(state))).every((s) => s.hostId === nh), 6000, 'agree'), 'all phones agree on the new host');
 
+// ---- location blocked: the Allow location button
+const lp = others[0];
+await lp.page.evaluate(() => { navigator.geolocation.getCurrentPosition = (ok, no) => setTimeout(() => no({ code: 1 }), 50); });
+await G(lp, () => window.__gl.act('allowGeo', { dataset: {} }));
+ok(await until(() => lp.page.evaluate(() => !!document.querySelector('#modal:not([hidden]) .geo-help')), 4000, 'geohelp'), 'if location is blocked, Allow location shows how to turn it back on');
+ok(await until(() => lp.page.evaluate(() => !!document.querySelector('#sheet [data-act="allowGeo"]')), 4000, 'geobtn'), 'and an Allow location button stays on screen');
+await lp.page.evaluate(() => { navigator.geolocation.getCurrentPosition = (ok) => setTimeout(() => ok({ coords: { latitude: 33.42, longitude: -111.83, accuracy: 8 } }), 50); }); // they turned it on in settings
+await lp.page.click('#modal [data-act="allowGeo"]');
+ok(await until(() => lp.page.evaluate(() => document.querySelector('#modal').hidden && !document.querySelector('#sheet [data-act="allowGeo"]')), 8000, 'geook'), 'once location is allowed, Try again picks it back up');
+await lp.page.click('#sheet');
+await lp.page.evaluate(() => window.__gl.map.setView([0, 0], 3));
+await lp.page.click('#btn-fit');
+ok(await until(() => lp.page.evaluate(() => { const m = window.__gl.map, z = window.__gl.S.zone; const c = z.type === 'circle' ? z.c : z.pts[0]; return m.getZoom() > 8 && m.getBounds().contains(c); }), 4000, 'fit'), 'the whole-map button zooms to fit the play area');
+ok(await until(() => lp.page.evaluate(() => window.__gl.audio() === 'running'), 4000, 'audio'), 'game sound is on and running after a tap');
+
 console.log(errors.length ? 'PAGE ERRORS:\n' + errors.join('\n') : 'No page errors');
 if (errors.length) fails++;
 await browser.close();

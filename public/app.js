@@ -183,7 +183,7 @@ let peers = new Set();
 let clockOffset = 0, clockSet = false;
 const hostNow = () => Date.now() + clockOffset;
 let myPos = null;        // {p:[lat,lng], acc, t}
-let geoWatch = null, geoError = null;
+let geoWatch = null, geoError = null, geoBlocked = false;
 let wakeLock = null;
 let L_ = {};             // local per-round state
 let prevPhase = null, prevRound = 0;
@@ -241,9 +241,22 @@ function toast(text, cls = '', icon = null) {
   while ($('#toasts').children.length > 2) $('#toasts').firstChild.remove();
 }
 let actx = null;
+// Sound is always on: no mute. Phones only start web audio after a tap, so every tap (and coming
+// back to the app) makes sure it's running, and on iPhone it plays even with the silent switch on.
+function unlockAudio() {
+  try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch {}
+  try {
+    if (!actx) { actx = new (window.AudioContext || window.webkitAudioContext)(); actx.onstatechange = () => { if (actx.state !== 'running' && document.visibilityState === 'visible') actx.resume().catch(() => {}); }; }
+    if (actx.state !== 'running') actx.resume().catch(() => {});
+    if (!L_unlocked) { L_unlocked = true; const b = actx.createBuffer(1, 1, 22050), src = actx.createBufferSource(); src.buffer = b; src.connect(actx.destination); src.start(0); } // iOS needs a sound played inside a tap
+  } catch {}
+  if (typeof loadAlarm === 'function' && S) loadAlarm();
+}
+let L_unlocked = false;
 function beep(kind) {
   try {
-    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (!actx) unlockAudio();
+    if (actx.state !== 'running') actx.resume().catch(() => {});
     const seq = { ping: [[880, .08], [1320, .12]], warn: [[660, .1], [660, .1]], caught: [[300, .2], [200, .35]], tag: [[1000, .05], [1500, .08]], alarm: [[900, .15], [600, .15], [900, .15]], start: [[523, .1], [659, .1], [784, .2]] }[kind] || [[700, .1]];
     let t = actx.currentTime;
     for (const [f, d] of seq) {
@@ -1369,10 +1382,46 @@ function banner(text, cls = '') {
 function startGeo() {
   if (geoWatch !== null || !navigator.geolocation) { if (!navigator.geolocation) geoError = 'This browser has no location support.'; return; }
   geoWatch = navigator.geolocation.watchPosition(onPos, (err) => {
-    geoError = err.code === 1 ? 'Location is blocked. Turn it on for this site to play.' : 'Still looking for GPS…';
-    renderSheet();
+    geoBlocked = err.code === 1;
+    geoError = geoBlocked ? 'Location is off for Ghostline. You need it to play.' : 'Still looking for GPS…';
+    if (geoBlocked) { navigator.geolocation.clearWatch(geoWatch); geoWatch = null; }
+    if (S) renderSheet();
   }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
 }
+// "Allow location" button: ask again. If the phone already blocked it, browsers won't ask again,
+// so show how to turn it back on, and re-check when they come back to the game.
+async function geoState() { try { return (await navigator.permissions.query({ name: 'geolocation' })).state; } catch { return null; } }
+function retryGeo(fromTap) {
+  if (!navigator.geolocation) return;
+  if (geoWatch !== null) { navigator.geolocation.clearWatch(geoWatch); geoWatch = null; }
+  const t0 = Date.now();
+  navigator.geolocation.getCurrentPosition((pos) => { geoBlocked = false; geoError = null; if (!$('#modal').hidden && $('#modal .geo-help')) closeModal(); onPos(pos); startGeo(); if (S) renderSheet(); }, async (err) => {
+    if (err.code !== 1) { geoBlocked = false; startGeo(); return; }
+    geoBlocked = true; geoError = 'Location is off for Ghostline. You need it to play.';
+    if (S) renderSheet();
+    if (fromTap && ((await geoState()) === 'denied' || Date.now() - t0 < 1500)) showGeoHelp(); // no prompt came up, so it's blocked in settings
+  }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+}
+function showGeoHelp() {
+  const ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1), chromeIos = /CriOS/.test(ua);
+  const steps = ios ? (chromeIos ? [
+    'Open the <b>Settings</b> app, then <b>Privacy &amp; Security</b> › <b>Location Services</b>. Make sure it\'s on.',
+    'In that list tap <b>Chrome</b> and pick <b>While Using the App</b>.',
+    'Come back here and tap <b>Try again</b>. Tap <b>Allow</b> if Chrome asks.',
+  ] : [
+    'Open the <b>Settings</b> app, then <b>Privacy &amp; Security</b> › <b>Location Services</b>. Make sure it\'s on.',
+    'In that list tap <b>Safari Websites</b> and pick <b>While Using the App</b>.',
+    'Back in Safari, tap <b>aA</b> (or the page icon) in the address bar › <b>Website Settings</b> › <b>Location</b> › <b>Allow</b>.',
+    'Tap <b>Try again</b> below.',
+  ]) : [
+    'Tap the icon just left of the web address (a lock or sliders) › <b>Permissions</b> › <b>Location</b> › <b>Allow</b>.',
+    'Make sure your phone\'s <b>Location</b> is on (swipe down from the top and tap it).',
+    'Tap <b>Try again</b> below.',
+  ];
+  modal(`<div class="geo-help"><h3>${ic('pin')} Turn on location</h3><p>Your phone blocked location for Ghostline, so it won't ask again by itself.</p><ol class="steps">${steps.map((x) => `<li>${x}</li>`).join('')}</ol><button class="btn primary" data-act="allowGeo" style="width:100%">Try again</button><button class="btn ghost" data-act="closeModal" style="width:100%">Close</button></div>`);
+}
+(async () => { try { const ps = await navigator.permissions.query({ name: 'geolocation' }); ps.onchange = () => { if (ps.state === 'granted' && geoBlocked) retryGeo(false); }; } catch {} })();
+window.addEventListener('focus', () => { if (geoBlocked) retryGeo(false); });
 // Fresh fixes only. A poor fix is skipped while a recent good one exists, and the last few
 // fixes that agree are averaged (weighted by accuracy) to take out jitter.
 const fixes = [];
@@ -1454,9 +1503,11 @@ function releaseWake() {
   wakeVideoOff();
 }
 // re-arm on every tap (a tap lets the video start on phones that need one) and when the app comes back
-document.addEventListener('pointerdown', () => { if (S) requestWake(); }, { passive: true });
+document.addEventListener('pointerdown', () => { if (S) requestWake(); unlockAudio(); }, { passive: true });
+document.addEventListener('touchend', unlockAudio, { passive: true });
+document.addEventListener('keydown', unlockAudio);
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') { requestWake(); if (L_.wentAway) { L_.wentAway = false; showAwayWarning(); } }
+  if (document.visibilityState === 'visible') { requestWake(); unlockAudio(); if (L_.wentAway) { L_.wentAway = false; showAwayWarning(); } }
   else screenWentAway();
 });
 window.addEventListener('pagehide', screenWentAway);
@@ -1625,6 +1676,7 @@ function renderSheet() {
 }
 
 function geoNote() {
+  if (geoBlocked) return `<p class="note warn">${ic('pin')}<span>${esc(geoError)}</span><button class="btn small primary" data-act="allowGeo">Allow location</button></p>`;
   if (geoError) return `<p class="note warn">${ic('pin')}<span>${esc(geoError)}</span></p>`;
   if (!myPos) return `<p class="note">${ic('pin')}<span>Finding your location…</span></p>`;
   if (myPos.acc > GPS_POOR) return `<p class="note warn">${ic('pin')}<span>Weak GPS (±${myPos.acc} m). Step outside, away from tall buildings, for fair tags.</span></p>`;
@@ -1910,7 +1962,7 @@ function modal(html) {
   m.hidden = false;
 }
 function closeModal() { $('#modal').hidden = true; }
-$('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal' || e.target.closest('[data-act="closeModal"]')) closeModal(); });
+$('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal' || e.target.closest('[data-act="closeModal"]')) closeModal(); else if (e.target.closest('[data-act="allowGeo"]')) retryGeo(true); });
 
 function inviteUrl() { return location.origin + location.pathname + '?room=' + S.code; }
 
@@ -1950,6 +2002,7 @@ function act(a, el) {
   const p = mine();
   switch (a) {
     case 'toggleSheet': sheetCollapsed = !sheetCollapsed; sheet.classList.toggle('collapsed', sheetCollapsed); document.documentElement.style.setProperty('--sheet-h', (window.innerWidth < 720 ? sheet.offsetHeight : 0) + 'px'); break;
+    case 'allowGeo': retryGeo(true); break;
     case 'leave': if (!S || S.phase === 'lobby' || S.phase === 'ended' || confirm('Leave this game?')) leave(); break;
     case 'share': {
       const url = inviteUrl();
@@ -2156,6 +2209,7 @@ function drawDraft() {
   }
 }
 
+$('#btn-fit').addEventListener('click', () => { if (S && S.zone) fitZone(S.zone); else toast('No play area yet'); });
 $('#btn-locate').addEventListener('click', () => { if (myPos) map.setView(myPos.p, Math.max(map.getZoom(), 17)); else toast('No location yet'); });
 $('#btn-chat').addEventListener('click', () => { chatOpen = !chatOpen; unread = false; $('#chat-dot').hidden = true; if (chatOpen) renderChat(); else renderSheet(); setMapBtn(); });
 $('#btn-map').addEventListener('click', () => setMapView(!(mapView && !chatOpen)));
@@ -2171,8 +2225,7 @@ function takeName() {
   const n = inName.value.trim();
   if (!n) { showHomeErr('Pick a name first.'); inName.focus(); return null; }
   me.name = n.slice(0, 16); saveMe(); showHomeErr('');
-  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {} // iOS: play even with the silent switch on
-  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch {}
+  unlockAudio();
   loadAlarm();
   return n;
 }
@@ -2207,7 +2260,7 @@ setInterval(clientTick, 500);
 
 // test and debug hooks
 window.__gl = {
-  get S() { return S; }, get me() { return me; }, get peers() { return [...peers]; }, get local() { return L_; },
+  get S() { return S; }, get map() { return map; }, get me() { return me; }, get peers() { return [...peers]; }, get local() { return L_; },
   get myPos() { return myPos; }, get alarmOn() { return alarm.on; }, get awake() { return !!wakeLock || !!(wakeVideo && !wakeVideo.paused); }, hostNow, currentZone,
   ...(DEBUG ? {
     setPos, act, send, feedFix: (lat, lng, acc) => onPos({ coords: { latitude: lat, longitude: lng, accuracy: acc } }),
@@ -2216,7 +2269,7 @@ window.__gl = {
     tapMap: (lat, lng) => map.fire('click', { latlng: L.latLng(lat, lng) }),
     give: (id, item) => hostApply((s) => { const q = s.players[id]; q.inv = q.inv || {}; q.inv[item] = (q.inv[item] || 0) + 1; }),
     spawnDrop: () => hostApply((s) => spawnDrop(s)),
-    startDuel: (a, b, game, ms) => hostApply((s) => startDuelIn(s, a, b, game, Date.now(), ms || 45000)), duelSubmit,
+    audio: () => actx && actx.state, startDuel: (a, b, game, ms) => hostApply((s) => startDuelIn(s, a, b, game, Date.now(), ms || 45000)), duelSubmit,
     spawnTreasure: (pt) => hostApply((s) => { s.treasure = { id: 'tx' + Date.now(), p: pt }; }),
     setWire: (id, ms) => hostApply((s) => { s.wire = id ? { holder: id, until: Date.now() + ms, from: null, at: Date.now() } : null; s.nextWireAt = Infinity; if (id) s.events.push({ id: evId(), k: 'wire', who: id, t: Date.now() }); }),
     setWallet: (id, n) => hostApply((s) => { s.wallet = s.wallet || {}; s.wallet[id] = n; }),
