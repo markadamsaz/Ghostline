@@ -189,6 +189,8 @@ const me = loadMe();
 
 // ---------------- runtime state ----------------
 let S = null;            // shared game state (host is the authority)
+let acct = null;         // signed-in account: { user, profile } or null for guests
+let acctGame = null;     // the game code we joined while signed in (only then do we save points back)
 let net = null;
 let code = null;
 let peers = new Set();
@@ -525,6 +527,7 @@ function newer(a, b) { // is a newer than b
 
 async function connect(roomCode, asHost) {
   code = roomCode;
+  acctGame = acct ? roomCode : null;
   if (net) { try { net.close(); } catch {} }
   setHomeBusy(true);
   try {
@@ -545,7 +548,7 @@ async function connect(roomCode, asHost) {
       players: {}, events: [], kicked: [], results: null, totals: {}, wallet: {},
       roundStart: 0, huntStart: 0, huntEnd: 0, endedAt: 0,
     };
-    addPlayer(S, me.id, me.name);
+    addPlayer(S, me.id, me.name, acctHello());
     clockOffset = 0; clockSet = true;
     broadcastState();
     onState(true);
@@ -558,14 +561,17 @@ async function connect(roomCode, asHost) {
   // keep saying hello until the host lists us
   const helloLoop = () => {
     if (!net || code !== roomCode) return;
-    if (!S || !S.players[me.id]) { send('hello', { name: me.name }); setTimeout(helloLoop, 2500); }
+    if (!S || !S.players[me.id]) { send('hello', { name: me.name, ...acctHello() }); setTimeout(helloLoop, 2500); }
   };
   helloLoop();
   if (!asHost) setTimeout(() => { if (!S && code === roomCode) banner(`Waiting for game ${esc(code)}… Is the host's app open?`, 'warn'); }, 7000);
   return true;
 }
 
-function addPlayer(st, id, name) {
+function addPlayer(st, id, name, acc) {
+  // signed-in players bring their saved points and badge into a new game
+  if (acc && Number.isFinite(+acc.pts) && (st.wallet || {})[id] === undefined) { st.wallet = st.wallet || {}; st.wallet[id] = Math.max(0, Math.min(1e6, Math.floor(+acc.pts))); }
+  const savedIcon = acc && BADGES.includes(acc.icon) ? acc.icon : null;
   const used = new Set(Object.values(st.players).map((p) => p.color));
   const color = COLORS.find((c) => !used.has(c)) || COLORS[Object.keys(st.players).length % COLORS.length];
   const late = st.phase === 'hiding' || st.phase === 'hunting';
@@ -574,6 +580,7 @@ function addPlayer(st, id, name) {
     role: late ? 'seeker' : 'hider', startRole: late ? 'seeker' : null,
     caughtAt: null, caughtBy: null, used: {}, seekerCount: 0,
   };
+  if (savedIcon && !st.players[id].icon) st.players[id].icon = savedIcon;
   st.totals[id] = st.totals[id] || 0;
 }
 
@@ -608,7 +615,7 @@ function handle(m, self) {
       if (S.players[m.from]) {
         if (d.name && S.players[m.from].name !== d.name) hostApply((s) => { s.players[m.from].name = d.name.slice(0, 16); });
         else broadcastState();
-      } else hostApply((s) => addPlayer(s, m.from, d.name));
+      } else hostApply((s) => addPlayer(s, m.from, d.name, d));
       break;
     }
     case 'ping': {
@@ -2495,6 +2502,7 @@ function takeName() {
   const n = inName.value.trim();
   if (!n) { showHomeErr('Pick a name first.'); inName.focus(); return null; }
   me.name = n.slice(0, 16); saveMe(); showHomeErr('');
+  if (acct && acct.profile.name !== me.name) acctSave({ name: me.name });
   unlockAudio();
   loadAlarm();
   return n;
@@ -2529,6 +2537,7 @@ inCode.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-join'
       const n = nm.value.trim();
       if (!n) { setErr('Enter your name first.'); nm.focus(); return; }
       me.name = n.slice(0, 16); saveMe(); setErr('');
+      if (acct && acct.profile.name !== me.name) acctSave({ name: me.name });
       unlockAudio(); loadAlarm();
       $('#inv-join').disabled = true;
       const ok = await connect(invited, false);
@@ -2539,6 +2548,106 @@ inCode.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-join'
     nm.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
   }
 }
+
+// ---------------- accounts (optional) ----------------
+// Guests play exactly as before. Signed-in players keep their points and badge between games.
+const authClient = (() => {
+  const c = window.GHOSTLINE_CONFIG || {};
+  if (!window.supabase || !c.supabaseUrl || params.get('net') === 'relay') return null;
+  try { return window.supabase.createClient(c.supabaseUrl, c.supabaseKey, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'gl-auth' } }); } catch { return null; }
+})();
+function acctHello() { return acct ? { pts: acct.profile.points || 0, icon: acct.profile.icon || null } : {}; }
+async function loadProfile(user) {
+  let { data, error } = await authClient.from('ghostline_profiles').select('name,icon,points').eq('user_id', user.id).maybeSingle();
+  if (error) { console.warn(error); return; }
+  if (!data) {
+    data = { name: (me.name || '').slice(0, 16), icon: null, points: 0 };
+    const r = await authClient.from('ghostline_profiles').insert({ user_id: user.id, name: data.name });
+    if (r.error) console.warn(r.error);
+  }
+  acct = { user, profile: data };
+  if (data.name) { me.name = data.name; saveMe(); inName.value = data.name; const iv = $('#inv-name'); if (iv) iv.value = data.name; }
+  renderAcct();
+}
+let saveT = 0, savePatch = {};
+function acctSave(patch) {
+  if (!acct || !authClient) return;
+  Object.assign(acct.profile, patch); Object.assign(savePatch, patch);
+  clearTimeout(saveT);
+  saveT = setTimeout(async () => {
+    const body = { ...savePatch, updated_at: new Date().toISOString() }; savePatch = {};
+    const { error } = await authClient.from('ghostline_profiles').update(body).eq('user_id', acct.user.id);
+    if (error) console.warn('profile save failed', error);
+  }, 800);
+}
+// keep the saved points and badge in step with the game
+setInterval(() => {
+  if (!acct || !S || acctGame !== S.code) return;
+  const pts = (S.wallet || {})[me.id], p = S.players[me.id];
+  const patch = {};
+  if (Number.isFinite(pts) && pts !== acct.profile.points) patch.points = Math.max(0, Math.floor(pts));
+  if (p && p.icon && p.icon !== acct.profile.icon) patch.icon = p.icon;
+  if (Object.keys(patch).length) acctSave(patch);
+}, 2000);
+
+function acctBadge() {
+  const pr = acct.profile;
+  return `<span class="av acct-av">${pr.icon && ICONS[pr.icon] ? ic(pr.icon) : esc(Array.from(pr.name || acct.user.email || '?')[0] || '?')}</span>`;
+}
+function renderAcct() {
+  for (const box of [$('#acct-box'), $('#inv-acct')]) {
+    if (!box) continue;
+    if (!authClient) { box.hidden = true; continue; }
+    box.hidden = false;
+    box.innerHTML = acct
+      ? `<div class="acct-in">${acctBadge()}<div class="acct-tx"><b>${esc(acct.profile.name || acct.user.email)}</b><span>${acct.profile.points || 0} pts saved</span></div><button class="acct-link" data-acct="out">Sign out</button></div>`
+      : `<div class="acct-out"><div class="acct-tx"><b>Playing as a guest</b><span>Make an account to keep your points and badge.</span></div><button class="btn small" data-acct="open">Sign in</button></div>`;
+  }
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-acct]'); if (!b || !authClient) return;
+  if (b.dataset.acct === 'out') { authClient.auth.signOut().then(() => { acct = null; renderAcct(); toast('Signed out. You are playing as a guest.'); }); }
+  if (b.dataset.acct === 'open') acctModal('in');
+});
+function acctModal(mode) {
+  const up = mode === 'up';
+  modal(`<h3>${up ? 'Create an account' : 'Sign in'}</h3>
+    <p>${up ? 'Your points and badge get saved, so you keep them next game.' : 'Welcome back. Your saved points come with you.'}</p>
+    <form id="acct-form" class="acct-form">
+      <input id="acct-email" type="email" autocomplete="email" placeholder="Email" required>
+      <input id="acct-pass" type="password" autocomplete="${up ? 'new-password' : 'current-password'}" placeholder="Password${up ? ' (6+ characters)' : ''}" minlength="6" required>
+      <p id="acct-err" class="err" hidden></p>
+      <button class="btn primary big" type="submit" style="width:100%">${up ? 'Create account' : 'Sign in'}</button>
+    </form>
+    <button class="btn ghost" id="acct-swap" style="width:100%">${up ? 'Have an account? Sign in' : 'New here? Create an account'}</button>
+    <button class="btn ghost" data-act="closeModal" style="width:100%">Keep playing as a guest</button>`);
+  $('#acct-swap').onclick = () => acctModal(up ? 'in' : 'up');
+  $('#acct-email').focus();
+  $('#acct-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const err = $('#acct-err'), btn = $('#acct-form button[type=submit]');
+    const email = $('#acct-email').value.trim(), password = $('#acct-pass').value;
+    const show = (t) => { err.textContent = t; err.hidden = !t; };
+    btn.disabled = true; show('');
+    const r = up
+      ? await authClient.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } })
+      : await authClient.auth.signInWithPassword({ email, password });
+    btn.disabled = false;
+    if (r.error) { show(/invalid login/i.test(r.error.message) ? 'Wrong email or password.' : r.error.message); return; }
+    if (up && !r.data.session) { modal(`<h3>Check your email</h3><p>We sent a link to <b>${esc(email)}</b>. Tap it to confirm, then sign in here.</p><button class="btn dark" data-act="closeModal" style="width:100%">OK</button>`); return; }
+    closeModal(); toast(up ? 'Account created. Your points will be saved.' : 'Signed in', 'good', 'check');
+  };
+}
+if (authClient) {
+  authClient.auth.onAuthStateChange((ev, session) => {
+    // run outside the callback so supabase-js isn't re-entered
+    setTimeout(() => {
+      if (session && session.user) { if (!acct || acct.user.id !== session.user.id) loadProfile(session.user); }
+      else if (acct) { acct = null; renderAcct(); }
+    }, 0);
+  });
+}
+renderAcct();
 
 function enterGameUI() {
   $('#home').hidden = true;

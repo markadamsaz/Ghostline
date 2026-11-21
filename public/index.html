@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/leaflet.css">
-<link rel="stylesheet" href="style.css?v=22">
+<link rel="stylesheet" href="style.css?v=23">
 </head>
 <body>
 <div id="map"></div>
@@ -68,6 +68,7 @@
     <label class="field"><span>Your name</span>
       <input id="in-name" maxlength="16" autocomplete="nickname" placeholder="e.g. Mark">
     </label>
+    <div id="acct-box" class="acct" hidden></div>
     <button id="btn-create" class="btn primary big">Create a game</button>
     <div class="or"><span>or join a friend</span></div>
     <div class="join-row">
@@ -104,6 +105,7 @@
       <button id="inv-geo" class="btn big inv-geo" type="button">Allow location</button>
     </div>
     <button id="inv-join" class="btn big inv-join" type="button">Join game</button>
+    <div id="inv-acct" class="acct inv" hidden></div>
     <p id="inv-err" class="err" hidden></p>
   </div>
 </section>
@@ -114,6 +116,6 @@
 <script src="vendor/qrcode.js"></script>
 <script src="vendor/supabase.js"></script>
 <script src="config.js"></script>
-<script type="module" src="app.js?v=22"></script>
+<script type="module" src="app.js?v=23"></script>
 </body>
 </html>

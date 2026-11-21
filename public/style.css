@@ -659,3 +659,21 @@ body.lobby #hud .map-ctl .icon-btn { background: var(--surface); color: var(--in
 .duo:not(.open) .card-tap { font-size: 16px; gap: 7px; }
 .noloc.sm { padding: 2px; margin-left: auto; }
 .noloc.sm .i { width: 16px; height: 16px; }
+
+/* accounts */
+.acct { border-radius: 14px; background: var(--surface-2); padding: 10px 12px; }
+.acct-in, .acct-out { display: flex; align-items: center; gap: 10px; }
+.acct-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.acct-tx b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acct-tx span { font-size: 13px; color: var(--muted); }
+.acct-av { width: 36px; height: 36px; background: var(--red); }
+.acct-av .i { width: 18px; height: 18px; }
+.acct-link { background: none; border: 0; color: var(--muted); font-weight: 700; font-size: 13px; text-decoration: underline; padding: 6px; }
+.acct-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 6px; }
+.acct-form input { border: 1.5px solid var(--line-2); border-radius: 12px; padding: 13px; font-size: 17px; min-height: 50px; outline: none; }
+.acct-form input:focus { border-color: var(--ink); }
+.acct-form .err { margin: 0; }
+.acct.inv { background: rgba(0,0,0,.18); color: #fff; text-align: left; }
+.acct.inv .acct-tx span, .acct.inv .acct-link { color: rgba(255,255,255,.85); }
+.acct.inv .acct-av { background: #fff; color: var(--red); }
+.acct.inv .btn { background: #fff; color: var(--red); border-color: #fff; }
