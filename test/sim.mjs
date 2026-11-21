@@ -529,9 +529,15 @@ await lp.page.evaluate(() => { navigator.geolocation.getCurrentPosition = (ok, n
 await G(lp, () => window.__gl.act('allowGeo', { dataset: {} }));
 ok(await until(() => lp.page.evaluate(() => !!document.querySelector('#modal:not([hidden]) .geo-help')), 4000, 'geohelp'), 'if location is blocked, Allow location shows how to turn it back on');
 ok(await until(() => lp.page.evaluate(() => !!document.querySelector('#sheet [data-act="allowGeo"]')), 4000, 'geobtn'), 'and an Allow location button stays on screen');
+ok(await until(() => others[1].page.evaluate(() => !!document.querySelector('#sheet .noloc')), 5000, 'noloc'), 'the lobby shows who has not shared their location');
+if (SHOTS) await others[1].page.screenshot({ path: SHOTS + '/16-lobby-noloc.png' });
 await lp.page.evaluate(() => { navigator.geolocation.getCurrentPosition = (ok) => setTimeout(() => ok({ coords: { latitude: 33.42, longitude: -111.83, accuracy: 8 } }), 50); }); // they turned it on in settings
 await lp.page.click('#modal [data-act="allowGeo"]');
 ok(await until(() => lp.page.evaluate(() => document.querySelector('#modal').hidden && !document.querySelector('#sheet [data-act="allowGeo"]')), 8000, 'geook'), 'once location is allowed, Try again picks it back up');
+ok(await until(() => others[1].page.evaluate(() => !document.querySelector('#sheet .noloc')), 5000, 'noloc2'), 'and the tag goes away once they share it');
+await lp.page.click('#btn-gear');
+ok(await until(() => lp.page.evaluate(() => !!document.querySelector('#modal:not([hidden]) .set-row') && !!document.querySelector('#modal [data-act="allowGeo"]')), 3000, 'gear'), 'the gear button opens settings with an Allow location button');
+await lp.page.click('#modal [data-act="closeModal"]');
 await lp.page.click('#sheet');
 await lp.page.evaluate(() => window.__gl.map.setView([0, 0], 3));
 ok(await lp.page.evaluate(() => document.querySelector('#btn-north').hidden), 'no turn button in the lobby');
@@ -541,7 +547,7 @@ ok(await lp.page.evaluate(() => { const m = window.__gl.map, r = document.queryS
 if (SHOTS) await lp.page.screenshot({ path: SHOTS + '/13-turned.png' });
 for (let i = 0; i < 3; i++) await lp.page.evaluate(() => document.querySelector('#btn-north').click());
 ok(await until(() => lp.page.evaluate(() => window.__gl.bear === 0 && !document.querySelector('#map').style.transform), 3000, 'north'), 'and turns it back to north');
-await lp.page.click('#btn-fit');
+await lp.page.evaluate(() => document.querySelector('#btn-fit').click());
 ok(await until(() => lp.page.evaluate(() => { const m = window.__gl.map, z = window.__gl.S.zone; const c = z.type === 'circle' ? z.c : z.pts[0]; return m.getZoom() > 8 && m.getBounds().contains(c); }), 4000, 'fit'), 'the whole-map button zooms to fit the play area');
 ok(await until(() => lp.page.evaluate(() => window.__gl.audio() === 'running'), 4000, 'audio'), 'game sound is on and running after a tap');
 

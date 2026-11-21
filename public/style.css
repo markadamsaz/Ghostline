@@ -416,7 +416,7 @@ body.blackout::after { content: 'BLACKOUT'; position: fixed; z-index: 15; top: 4
 .chat-log .sys .tm { color: var(--muted); font-size: 11px; white-space: nowrap; }
 .msg.mine { background: var(--surface); border: 1.5px solid var(--line-2); }
 .chat-form .to-btn { min-height: 44px; padding: 0 10px; }
-.play-row .shop-btn { flex: .8; }
+.play-row .shop-btn { flex: .9; margin-right: auto; }
 .shop-btn .i { width: 18px; height: 18px; margin-right: 5px; }
 .shop-btn.on { background: var(--ink); color: #fff; border-color: var(--ink); }
 .pu-panel .shop-box { margin: 0; }
@@ -428,3 +428,22 @@ body.blackout::after { content: 'BLACKOUT'; position: fixed; z-index: 15; top: 4
 body.turned #attr2 { display: block; }
 body.turned .leaflet-control-attribution { display: none; }
 body.turned .leaflet-marker-icon > * { rotate: calc(-1 * var(--bear, 0deg)); }
+
+/* smaller play bar: stats on one short line */
+.play-compact .stat-row { margin-bottom: 6px !important; }
+.play-compact .stat { display: flex; align-items: baseline; gap: 6px; padding: 6px 10px; }
+.play-compact .stat b { font-size: 18px; }
+.play-compact .stat span { font-size: 12px; line-height: 1.2; }
+/* settings and location */
+.set-row { display: flex; gap: 10px; align-items: flex-start; background: var(--surface-2); border-radius: 12px; padding: 12px; }
+.set-row .i { width: 22px; height: 22px; flex: none; }
+.set-row b { display: block; }
+.set-row span { color: var(--muted); font-size: 14px; }
+.set-row.bad .i, .set-row.bad b { color: var(--red); }
+.noloc { display: inline-flex; align-items: center; gap: 3px; color: var(--red); font-size: 12px; font-weight: 700; margin-right: 6px; white-space: nowrap; }
+.noloc .i { width: 14px; height: 14px; }
+
+/* map buttons sit in a column on the right, under the top bar, so the bar stays readable */
+.map-ctl { position: absolute; right: 0; top: calc(100% + 8px); display: flex; flex-direction: column; gap: 8px; }
+.map-ctl .icon-btn { background: var(--surface); box-shadow: var(--shadow); }
+.map-ctl .icon-btn[hidden] { display: none; }

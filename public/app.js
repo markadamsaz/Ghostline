@@ -566,6 +566,12 @@ function handle(m, self) {
       onState(false);
       break;
     }
+    case 'loc': { // who has shared their location (shown in the lobby)
+      const was = locOk[m.from]?.ok;
+      locOk[m.from] = { ok: !!d.ok, t: Date.now() };
+      if (was !== !!d.ok && S && S.phase === 'lobby' && !chatOpen && !mapView) renderSheet();
+      break;
+    }
     case 'hello': {
       if (!isHost()) return;
       if (S.kicked.includes(m.from)) return;
@@ -1342,7 +1348,23 @@ function shopHtml() {
   return `<div class="section shop-box"><button class="btn shop-h" data-act="toggleShop">${ic('shop')}Points shop<span class="bal mono">${bal} pts</span><span class="chev">${shopOpen ? '▴' : '▾'}</span></button>${body}</div>`;
 }
 
+const locOk = {};
+let locSent = null, locSentAt = 0;
+function locReport() {
+  if (!S || !net) return;
+  const ok = !!myPos && !geoBlocked;
+  if (ok !== locSent || Date.now() - locSentAt > 15000) { locSent = ok; locSentAt = Date.now(); send('loc', { ok }); }
+}
+function noLoc(id) { const x = locOk[id]; return x ? !x.ok : Date.now() - (S.players[id]?.joinedAt || 0) > 15000 && peers.has(id); }
+function settingsModal() {
+  const ok = !!myPos && !geoBlocked;
+  modal(`<h3>Settings</h3>
+    <div class="set-row ${ok ? '' : 'bad'}">${ic('pin')}<div><b>Location</b><span>${ok ? `On (±${myPos.acc} m)` : esc(geoError || 'Not shared yet. You need it to play.')}</span></div></div>
+    <button class="btn primary big" data-act="allowGeo" style="width:100%;margin:12px 0 8px">${ok ? 'Check location again' : 'Allow location'}</button>
+    <button class="btn dark" data-act="closeModal" style="width:100%">Done</button>`);
+}
 function clientTick() {
+  locReport();
   if (!S) return;
   if (!wakeLock && Date.now() - (L_.lastWakeTry || 0) > 5000) { L_.lastWakeTry = Date.now(); requestWake(); } // joiners get it as soon as they're in
   maybeTakeOverHost();
@@ -1490,7 +1512,7 @@ function retryGeo(fromTap) {
   if (!navigator.geolocation) return;
   if (geoWatch !== null) { navigator.geolocation.clearWatch(geoWatch); geoWatch = null; }
   const t0 = Date.now();
-  navigator.geolocation.getCurrentPosition((pos) => { geoBlocked = false; geoError = null; if (!$('#modal').hidden && $('#modal .geo-help')) closeModal(); onPos(pos); startGeo(); if (S) renderSheet(); }, async (err) => {
+  navigator.geolocation.getCurrentPosition((pos) => { geoBlocked = false; geoError = null; if (!$('#modal').hidden && $('#modal .geo-help')) closeModal(); else if (!$('#modal').hidden && $('#modal .set-row')) setTimeout(settingsModal, 0); onPos(pos); startGeo(); if (S) renderSheet(); }, async (err) => {
     if (err.code !== 1) { geoBlocked = false; startGeo(); return; }
     geoBlocked = true; geoError = 'Location is off for Ghostline. You need it to play.';
     if (S) renderSheet();
@@ -1808,6 +1830,7 @@ function setMapBtn() {
   b.hidden = !S || S.phase !== 'lobby';
   const c = $('#btn-chat'); if (c) c.hidden = inGame();
   const nb = $('#btn-north'); if (nb) nb.hidden = !S || S.phase === 'lobby';
+  const fb = $('#btn-fit'); if (fb) fb.hidden = !S || S.phase === 'lobby'; // the lobby's Map button shows the zone
   b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
 }
 function setMapView(on) {
@@ -1854,7 +1877,7 @@ function renderLobby() {
       <div class="row"><button class="btn small" data-act="share">${ic('share')}Invite</button><button class="btn small" data-act="qr">${ic('qr')}QR</button></div></div>
     ${geoNote()}
     <div class="section"><div class="section-t">Players · ${online.length} here</div><div class="players">
-      ${ids.map((id) => playerRow(id, `<span class="meta">${S.totals[id] ? S.totals[id] + ' pts' : ''}</span>${host && id !== me.id ? `<button class="x" data-act="kick" data-id="${id}" aria-label="Remove ${esc(S.players[id].name)}">${ic('close')}</button>` : ''}`)).join('')}
+      ${ids.map((id) => playerRow(id, `${noLoc(id) ? `<span class="noloc">${ic('pin')}No location</span>` : ''}<span class="meta">${S.totals[id] ? S.totals[id] + ' pts' : ''}</span>${host && id !== me.id ? `<button class="x" data-act="kick" data-id="${id}" aria-label="Remove ${esc(S.players[id].name)}">${ic('close')}</button>` : ''}`)).join('')}
     </div></div>
     ${shopHtml()}
     <div class="section"><div class="section-t">Play zone</div><p class="note" style="margin:0 0 10px">${zoneInfo}</p>${zoneTools}</div>
@@ -1862,6 +1885,7 @@ function renderLobby() {
     <div class="section"><div class="section-t">Rules${host ? '' : ' · set by the host'}</div>${rules}</div>
     <div class="big-actions">
       <button class="btn ghost" data-act="leave">Leave</button>
+      ${online.filter(noLoc).length ? `<p class="note warn">${ic('pin')}<span>${online.filter(noLoc).map((id) => esc(S.players[id].name)).join(', ')} ${online.filter(noLoc).length > 1 ? "haven't" : "hasn't"} shared location. They can tap the gear button at the top.</span></p>` : ''}
       ${host ? `<button class="btn primary big" data-act="start" ${canStart ? '' : 'disabled'}>Start round</button>` : `<button class="btn big" disabled>Waiting for host</button>`}
     </div>
     ${host && !canStart ? `<p class="hint">${!S.zone ? 'Set a play zone to start.' : 'Need at least 2 players.'}</p>` : ''}
@@ -1932,9 +1956,10 @@ function renderPlaying() {
   const tm = S.settings.tagMode || 'gps';
   const shop = shopHtml(), bal = (S.wallet || {})[me.id] || 0;
   const row = `<div class="play-row">
-    ${shop ? `<button class="btn small shop-btn ${L_.showShop ? 'on' : ''}" data-act="toggleShop" aria-expanded="${!!L_.showShop}">${ic('shop')}<span class="mono">${bal}</span></button>` : ''}
+    ${shop ? `<button class="btn small shop-btn ${L_.showShop ? 'on' : ''}" data-act="toggleShop" aria-expanded="${!!L_.showShop}">${ic('shop')}Shop <span class="mono">${bal}</span></button>` : ''}
+    <button class="btn small ghost" data-act="toggleMore" aria-expanded="${!!L_.showMore}">${L_.showMore ? 'Less' : 'More'}</button>
     ${canPU ? `<button class="btn small pu-btn ${L_.showPU ? 'on' : ''}" data-act="togglePU" aria-expanded="${!!L_.showPU}">${ic('bolt')}Power-ups${nPU ? ` <b class="pu-n">${nPU}</b>` : ''}</button>` : ''}
-    <button class="btn small ghost" data-act="toggleMore" aria-expanded="${!!L_.showMore}">${L_.showMore ? 'Less' : 'More'}</button></div>`;
+    </div>`;
   const tagBtn = p.role === 'seeker' ? `<button class="tag-btn" data-act="${tm === 'photo' ? 'snap' : 'tag'}" ${S.phase === 'hunting' && (myPos || tm !== 'gps') ? '' : 'disabled'}>${ic(tm === 'photo' ? 'camera' : 'tag')}${tm === 'photo' ? 'SNAP TAG' : 'TAG'}</button>
       <input type="file" id="snap-in" accept="image/*" capture="environment" hidden>` : '';
   setSheet(`<div class="play-compact">
@@ -2350,6 +2375,7 @@ $('#btn-fit').addEventListener('click', () => {
   if (S.phase !== 'lobby' && (L_.showPU || L_.showMore || sheetCollapsed === false)) { L_.showPU = false; L_.showMore = false; renderSheet(); }
   map.invalidateSize(); fitZone(S.zone);
 });
+$('#btn-gear').addEventListener('click', () => { unlockAudio(); settingsModal(); });
 $('#btn-north').addEventListener('click', () => setBearing(mapBear % 90 === 0 ? mapBear + 90 : 0));
 $('#btn-locate').addEventListener('click', () => { if (myPos) map.setView(myPos.p, Math.max(map.getZoom(), 17)); else toast('No location yet'); });
 $('#btn-chat').addEventListener('click', () => { chatOpen = !chatOpen; unread = false; $('#chat-dot').hidden = true; if (chatOpen) renderChat(); else renderSheet(); setMapBtn(); });
