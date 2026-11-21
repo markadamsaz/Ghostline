@@ -144,9 +144,9 @@ ok(await until(async () => (await Promise.all(all.map((ph) => G(ph, () => window
 const setVis = (ph, v) => G(ph, (v) => { Object.defineProperty(document, 'visibilityState', { value: v, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); }, v);
 await setVis(hiders[0], 'hidden');
 ok(await until(async () => (await G(seeker, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'away' && x.blur === 0 && x.p), hiders[0].pid)), 5000, 'away'), 'a hider who turns off their screen sends their exact spot to the seekers');
-ok(await G(seeker, () => /turned off their screen/.test(document.querySelector('#toasts').textContent)), 'the seeker is told');
+ok(await G(seeker, () => /turned off their screen/.test(window.__gl.feed())), 'the seeker is told');
 await setVis(hiders[0], 'visible');
-ok(await until(async () => G(hiders[0], () => /Keep Ghostline open/.test(document.querySelector('#toasts').textContent)), 3000, 'away warn'), 'the hider is warned when they come back');
+ok(await until(async () => G(hiders[0], () => /Keep Ghostline open/.test(window.__gl.feed())), 3000, 'away warn'), 'the hider is warned when they come back');
 
 // ---- zone breach
 await setPos(hiders[2], off(700, 0));
@@ -204,11 +204,11 @@ await G(seeker, () => window.__gl.act('tag'));
 await sleep(1500);
 ok(!(await state(host)).players[hiders[0].pid].caughtAt, 'a tag from 30 m does not count with a 20 m range');
 ok(await until(async () => (await state(host)).players[seekerPid].bonus === -10, 6000, 'miss'), 'a tag that reaches nobody costs the seeker 10 points');
-ok((await seeker.page.textContent('#toasts')).includes('Missed tag'), 'the seeker is told about the missed tag');
+ok((await G(seeker, () => window.__gl.feed())).includes('Missed tag'), 'the seeker is told about the missed tag');
 await G(hiders[0], ([a, b]) => window.__gl.setPos(a, b, 45), spots[0]); // hider's GPS goes weak
 await setPos(seeker, off(162, 100)); // 12 m away
 await G(seeker, () => window.__gl.act('tag'));
-ok(await until(async () => (await seeker.page.textContent('#toasts')).includes('Too close to call'), 5000, 'weak'), 'a close tag on weak GPS asks the seeker to get closer');
+ok(await until(async () => (await G(seeker, () => window.__gl.feed())).includes('Too close to call'), 5000, 'weak'), 'a close tag on weak GPS asks the seeker to get closer');
 ok(!(await state(host)).players[hiders[0].pid].caughtAt, 'and does not count');
 await sleep(4000);
 ok((await state(host)).players[seekerPid].bonus === -10, 'a too-close-to-call tag on weak GPS costs nothing');
@@ -226,6 +226,18 @@ ok(await until(() => hiders[1].page.evaluate(() => !!document.querySelector('#sh
 if (SHOTS) await hiders[1].page.screenshot({ path: SHOTS + '/4b-hider-powerups.png' });
 await hiders[1].page.click('[data-act="togglePU"]');
 ok(await until(() => hiders[1].page.evaluate(() => !document.querySelector('#sheet .pu-panel')), 4000, 'pu2'), 'and tapping it again closes them');
+ok(await hiders[1].page.evaluate(() => document.querySelectorAll('#toasts .toast').length === 0), 'no pop-ups during the round');
+await hiders[1].page.click('[data-act="toggleShop"]');
+ok(await until(() => hiders[1].page.evaluate(() => !!document.querySelector('#sheet .pu-panel [data-act="buy"]')), 4000, 'shop'), 'the Shop button on the map opens the points shop');
+await hiders[1].page.click('[data-act="toggleShop"]');
+await hiders[1].page.click('[data-act="modeChat"]');
+ok(await until(() => hiders[1].page.evaluate(() => document.querySelectorAll('#chat-log .sys').length >= 2), 4000, 'feed'), 'Chat mode shows the game updates as one-line messages');
+await hiders[1].page.fill('#chat-in', 'by the slide');
+await hiders[1].page.click('.chat-form .btn.primary');
+ok(await until(() => hiders[2].page.evaluate(() => window.__gl.feed().includes('by the slide')), 4000, 'msg'), 'players can message each other in the chat');
+if (SHOTS) await hiders[1].page.screenshot({ path: SHOTS + '/4c-hider-chat.png' });
+await hiders[1].page.click('[data-act="modeMap"]');
+ok(await until(() => hiders[1].page.evaluate(() => !!document.querySelector('#sheet .play-compact')), 4000, 'mapmode'), 'and Map mode brings the map back');
 await G(seeker, () => window.__gl.act('tag'));
 ok(await until(async () => !!(await state(host)).players[hiders[0].pid].caughtAt, 5000, 'tag'), `${seeker.name} tags ${hiders[0].name} from 5 m`);
 st = await state(host);
@@ -279,10 +291,16 @@ ok(!!st.jail && st.flags.length === 2 && !!st.potato && !!st.sprint && [A, B, Cc
 ok([A, B, Cc].every((h) => st.players[h.pid].inv.decoy === 1) && st.players[sk2.pid].inv.radar === 1, 'starter power-ups handed out');
 
 // mission
+const mOld = st.players[A.pid].mission;
 await setPos(A, st.players[A.pid].mission.p);
 ok(await until(async () => ((await state(host)).players[A.pid].missionsDone || 0) === 1, 6000, 'mission'), `${A.name} reaches their secret mission spot`);
 st = await state(host);
 ok(st.players[A.pid].bonus === 25 && Object.values(st.players[A.pid].inv).reduce((a, b) => a + b, 0) === 4, 'mission pays +25 and a power-up, and a new target appears');
+for (let i = 0; i < 3; i++) await G(A, ([id, p]) => window.__gl.send('mission', { id, p, acc: 5 }), [mOld.id, mOld.p]);
+await G(A, ([id, p]) => window.__gl.send('mission', { id, p, acc: 5 }), [st.players[A.pid].mission.id, mOld.p]);
+await sleep(1500);
+st = await state(host);
+ok(st.players[A.pid].missionsDone === 1 && st.players[A.pid].bonus === 25, 'a mission pays only once, even when the message repeats');
 await setPos(A, home.get(A));
 
 // supply drop: everyone sees it, first one there wins
@@ -516,6 +534,13 @@ await lp.page.click('#modal [data-act="allowGeo"]');
 ok(await until(() => lp.page.evaluate(() => document.querySelector('#modal').hidden && !document.querySelector('#sheet [data-act="allowGeo"]')), 8000, 'geook'), 'once location is allowed, Try again picks it back up');
 await lp.page.click('#sheet');
 await lp.page.evaluate(() => window.__gl.map.setView([0, 0], 3));
+ok(await lp.page.evaluate(() => document.querySelector('#btn-north').hidden), 'no turn button in the lobby');
+await lp.page.evaluate(() => document.querySelector('#btn-north').click());
+ok(await until(() => lp.page.evaluate(() => window.__gl.bear === 90 && /rotate\(90deg\)/.test(document.querySelector('#map').style.transform) && document.querySelector('#map').offsetWidth > innerWidth), 3000, 'turn'), 'the compass button turns the map');
+ok(await lp.page.evaluate(() => { const m = window.__gl.map, r = document.querySelector('#map').getBoundingClientRect(), q = m.mouseEventToContainerPoint({ clientX: r.left + r.width / 2 + 100, clientY: r.top + r.height / 2 }), z = m.getSize(); return Math.abs(q.x - z.x / 2) < 2 && Math.abs(q.y - (z.y / 2 - 100)) < 2; }), 'taps on a turned map land on the right spot');
+if (SHOTS) await lp.page.screenshot({ path: SHOTS + '/13-turned.png' });
+for (let i = 0; i < 3; i++) await lp.page.evaluate(() => document.querySelector('#btn-north').click());
+ok(await until(() => lp.page.evaluate(() => window.__gl.bear === 0 && !document.querySelector('#map').style.transform), 3000, 'north'), 'and turns it back to north');
 await lp.page.click('#btn-fit');
 ok(await until(() => lp.page.evaluate(() => { const m = window.__gl.map, z = window.__gl.S.zone; const c = z.type === 'circle' ? z.c : z.pts[0]; return m.getZoom() > 8 && m.getBounds().contains(c); }), 4000, 'fit'), 'the whole-map button zooms to fit the play area');
 ok(await until(() => lp.page.evaluate(() => window.__gl.audio() === 'running'), 4000, 'audio'), 'game sound is on and running after a tap');

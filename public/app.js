@@ -59,6 +59,7 @@ const ICONS = {
   trail: '<circle cx="12" cy="12" r="9"/><path d="M12 6l3 7-3-1.5L9 13z"/>',
   spotlight: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>',
   lockdown: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  chat: '<path d="M4 5h16v11H9l-5 4z"/>',
   shop: '<path d="M4 7h16l-1.5 12h-13z"/><path d="M9 7a3 3 0 0 1 6 0"/>',
   star: '<path d="M12 3l2.8 5.8 6.2.9-4.5 4.4 1 6.2L12 17.4 6.5 20.3l1-6.2L3 9.7l6.2-.9z"/>',
   heart: '<path d="M12 20s-8-4.6-8-10.2A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 8 2.8C20 15.4 12 20 12 20z"/>',
@@ -234,7 +235,26 @@ function newCode() {
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
 // ---------------- feedback: toasts, sound, vibration ----------------
+const inGame = () => !!S && (S.phase === 'hiding' || S.phase === 'hunting');
+let unreadN = 0, chatSeq = 0;
+function pushChat(c) { c.cid = ++chatSeq; chat.push(c); if (chat.length > 300) chat.shift(); }
+// during a round every update goes into the chat feed (one line each) instead of popping up
+function feed(html, cls = '', icon = null, who = null) {
+  pushChat(who ? { ...who, t: Date.now() } : { sys: true, html, cls, icon, t: Date.now() });
+  if (!chatOpen) { unreadN++; const n = $('#chat-n'); if (n) { n.textContent = unreadN; n.hidden = false; } }
+  const line = who ? `<b>${esc(who.name)}</b>: ${esc(who.text)}` : html;
+  L_.lastUp = { html: line, icon: who ? 'chat' : icon, t: Date.now() };
+  showLastUp();
+  if (chatOpen) renderChat();
+}
+function showLastUp() {
+  const el = $('#last-up'); if (!el) return;
+  const u = L_.lastUp, on = !!u && !chatOpen && Date.now() - u.t < 9000;
+  el.hidden = !on;
+  if (on) el.innerHTML = (u.icon && ICONS[u.icon] ? ic(u.icon) : '') + `<span>${u.html}</span>`;
+}
 function toast(text, cls = '', icon = null) {
+  if (inGame()) { feed(text, cls, icon); return; }
   const el = document.createElement('div');
   el.className = 'toast ' + cls;
   el.innerHTML = (icon ? ic(icon) : '') + `<div>${text}</div>`;
@@ -324,12 +344,74 @@ const layers = {
 };
 let meMarker = null, meAcc = null, fittedZone = false;
 
+// ---------------- map rotation ----------------
+// The map element is turned with CSS (twist with two fingers, or the compass button). While it's turned
+// it is made big enough to cover the screen at any angle, and taps and drags are turned back so
+// Leaflet still gets map coordinates.
+let mapBear = 0, mapBig = false;
+const mapEl = document.getElementById('map');
+const unturn = (dx, dy) => { const a = -mapBear * Math.PI / 180, c = Math.cos(a), s_ = Math.sin(a); return [dx * c - dy * s_, dx * s_ + dy * c]; };
+const _m2c = L.Map.prototype.mouseEventToContainerPoint;
+L.Map.prototype.mouseEventToContainerPoint = function (e) {
+  if (!mapBear || this !== map) return _m2c.call(this, e);
+  const r = mapEl.getBoundingClientRect(), [x, y] = unturn(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2));
+  return L.point(x + mapEl.offsetWidth / 2, y + mapEl.offsetHeight / 2);
+};
+function sizeMap(big) {
+  if (big === mapBig) return;
+  mapBig = big;
+  if (big) { const W = innerWidth, H = innerHeight, D = Math.ceil(Math.hypot(W, H)); Object.assign(mapEl.style, { inset: 'auto', width: D + 'px', height: D + 'px', left: (W - D) / 2 + 'px', top: (H - D) / 2 + 'px' }); }
+  else Object.assign(mapEl.style, { inset: '', width: '', height: '', left: '', top: '' });
+  map.invalidateSize({ pan: true });
+}
+function setBearing(b, live = false) {
+  mapBear = ((Math.round(b) % 360) + 360) % 360; if (mapBear > 180) mapBear -= 360;
+  if (Math.abs(mapBear) < 3 && !live) mapBear = 0;
+  if (!live) sizeMap(mapBear !== 0);
+  mapEl.style.transform = mapBear ? `rotate(${mapBear}deg)` : '';
+  document.documentElement.style.setProperty('--bear', mapBear + 'deg');
+  document.body.classList.toggle('turned', !!mapBear);
+  const n = document.getElementById('north-n'); if (n) n.style.transform = `rotate(${mapBear}deg)`;
+}
+
+
 function zoneLayer(z, style) {
   if (!z) return null;
   return z.type === 'circle' ? L.circle(z.c, { radius: z.r, ...style }) : L.polygon(z.pts, style);
 }
 function sheetPad() { return window.innerWidth < 720 && !sheet.hidden ? sheet.offsetHeight : 0; }
+{ // drags: turn the finger movement back into map directions
+  const dr = map.dragging && map.dragging._draggable;
+  if (dr) {
+    const mv = dr._onMove;
+    dr._onMove = function (e) {
+      const f = e.touches && e.touches.length === 1 ? e.touches[0] : e, s0 = this._startPoint, sc = this._parentScale;
+      if (!mapBear || !s0 || !f || f.clientX == null) return mv.call(this, e);
+      const [rx, ry] = unturn(f.clientX - s0.x, f.clientY - s0.y);
+      this._startPoint = L.point(f.clientX - rx, f.clientY - ry); this._parentScale = L.point(1, 1);
+      try { mv.call(this, e); } finally { this._startPoint = s0; this._parentScale = sc; }
+    };
+  }
+  let tw = null; // two-finger twist turns the map
+  const ang = (t) => Math.atan2(t[1].clientY - t[0].clientY, t[1].clientX - t[0].clientX) * 180 / Math.PI;
+  mapEl.addEventListener('touchstart', (e) => { if (e.touches.length === 2) tw = { a0: ang(e.touches), b0: mapBear, on: false }; }, { passive: true });
+  mapEl.addEventListener('touchmove', (e) => {
+    if (!tw || e.touches.length !== 2) return;
+    let d = ang(e.touches) - tw.a0; d = ((d + 540) % 360) - 180;
+    if (!tw.on && Math.abs(d) < 12) return;
+    tw.on = true; setBearing(tw.b0 + d - Math.sign(d) * 12, true);
+  }, { passive: true });
+  mapEl.addEventListener('touchend', (e) => { if (tw && e.touches.length < 2) { if (tw.on) setBearing(mapBear); tw = null; } }, { passive: true });
+  addEventListener('resize', () => { if (mapBig) { mapBig = false; sizeMap(true); } });
+}
 function fitTo(bounds) {
+  if (mapBear && mapBig) { // fit inside a square that stays on screen at any angle
+    const W = innerWidth, D = mapEl.offsetWidth, top = 110, bot = sheetPad() + 30;
+    const sz = Math.max(80, Math.min(W - 60, innerHeight - top - bot) / Math.SQRT2);
+    const [vx, vy] = unturn(0, (top + innerHeight - bot) / 2 - innerHeight / 2), bx = D / 2 + vx, by = D / 2 + vy;
+    map.fitBounds(bounds, { paddingTopLeft: [bx - sz / 2, by - sz / 2], paddingBottomRight: [D - bx - sz / 2, D - by - sz / 2], maxZoom: 18 });
+    return;
+  }
   map.fitBounds(bounds, { paddingTopLeft: [30, 110], paddingBottomRight: [30, sheetPad() + 30], maxZoom: 18 });
 }
 function fitZone(z) {
@@ -503,7 +585,7 @@ function handle(m, self) {
         toast(`<b>${nm(m.from)}</b> turned off their screen.${mine()?.role === 'seeker' && okPt(d.p) ? ' Exact spot showing.' : ''}`, 'seeker', 'alert');
         if (mine()?.role === 'seeker') { beep('alarm'); buzz([80, 60, 80]); }
       } else if (!self && mine()?.role === 'seeker') {
-        if (d.kind === 'breach') { toast(`<b>${nm(m.from)}</b> left the zone. Exact spot showing.`, 'seeker', 'alert'); beep('alarm'); buzz([80, 60, 80]); }
+        if (d.kind === 'breach') { toast(`<b>${nm(m.from)}</b> left the zone. Exact spot shown.`, 'seeker', 'alert'); beep('alarm'); buzz([80, 60, 80]); }
         else if (d.kind === 'jam') { toast(`<b>${nm(m.from)}</b> jammed their signal`, 'seeker', 'jammer'); }
         else if (d.kind === 'blackout') { /* nothing to show */ }
         else if (d.kind === 'ghost') { toast(`<b>${nm(m.from)}</b> is a ghost. No signal.`, 'seeker', 'ghost'); }
@@ -529,10 +611,10 @@ function handle(m, self) {
         send('caught', { who: me.id, by: m.from, how: 'tag', p: myPos.p });
       } else if (weak && dd <= R + u) {
         send('tagWeak', { to: m.from, acc: Math.round(Math.max(a, b)) });
-        toast(`<b>${nm(m.from)}</b> almost tagged you, but the GPS was too weak to call it.`, 'seeker', 'alert');
+        toast(`<b>${nm(m.from)}</b> almost tagged you (weak GPS).`, 'seeker', 'alert');
         buzz([40, 40, 40]);
       } else if (dd <= 60) {
-        toast(`<b>${nm(m.from)}</b> is close. They just tried a tag ${G.fmtDist(dd)} away.`, 'seeker', 'alert');
+        toast(`<b>${nm(m.from)}</b> tried a tag ${G.fmtDist(dd)} from you.`, 'seeker', 'alert');
         buzz([40, 40, 40]);
       }
       break;
@@ -540,7 +622,7 @@ function handle(m, self) {
     case 'tagWeak': {
       if (isHost()) markTagHit(d.to);
       if (d.to !== me.id || !S || S.phase !== 'hunting') return;
-      toast(`Too close to call: GPS is weak (±${Math.round(+d.acc || 0)} m). Get closer and tag again.`, 'seeker', 'alert');
+      toast(`Too close to call (weak GPS). Get closer and tag again.`, 'seeker', 'alert');
       break;
     }
     case 'caught': {
@@ -637,13 +719,18 @@ function handle(m, self) {
       }
       if (!alive(q)) return;
       if (m.t === 'mission') {
+        // once per mission: the id must match, the player must have moved since the last one, and not too soon after it
         if (!q.mission || q.mission.id !== d.id || !ok(q.mission.p)) return;
+        if (q.mission.from && G.dist(d.p, q.mission.from) < 40) return;
+        if (now - (q.missionAt || 0) < 20000) return;
         hostApply((s) => {
           const w = s.players[m.from];
+          if (!w.mission || w.mission.id !== d.id) return;
+          w.missionAt = now;
           w.bonus = (w.bonus || 0) + 25; w.missionsDone = (w.missionsDone || 0) + 1; credit(s, m.from, 25);
           const item = puOn(s.settings) ? pick(BASICS.hider) : null;
           if (item) { w.inv = w.inv || {}; w.inv[item] = (w.inv[item] || 0) + 1; }
-          w.mission = { id: 'm' + Math.random().toString(36).slice(2, 7), p: randomSpotIn(finalZone(), d.p, 80) };
+          w.mission = { id: 'm' + Math.random().toString(36).slice(2, 7), p: randomSpotIn(finalZone(), d.p, 80), from: d.p };
           s.events.push({ id: evId(), k: 'mission', who: m.from, item, t: now });
         });
       }
@@ -765,7 +852,9 @@ function handle(m, self) {
       if (!text) return;
       const sender = P(m.from);
       if (d.team !== 'all' && mine() && d.team !== mine().role && !self) return;
-      chat.push({ from: m.from, name: sender?.name || 'Someone', role: S.phase === 'lobby' ? '' : sender?.role || '', text, team: d.team, t: Date.now() });
+      const entry = { from: m.from, name: sender?.name || 'Someone', role: S.phase === 'lobby' ? '' : sender?.role || '', text, team: d.team };
+      if (inGame()) { if (self) { pushChat({ ...entry, t: Date.now() }); if (chatOpen) renderChat(); } else feed('', '', null, entry); break; }
+      pushChat({ ...entry, t: Date.now() });
       if (!chatOpen && !self) { unread = true; $('#chat-dot').hidden = false; toast(`<b>${esc(sender?.name)}</b>: ${esc(text)}`, sender?.role === 'seeker' ? 'seeker' : 'hider'); }
       if (chatOpen) renderChat();
       break;
@@ -850,11 +939,14 @@ function randomSpotIn(z, avoid = null, minD = 0) {
   const inner = G.scaleZone(z, 0.85);
   const c = G.zoneCenter(inner);
   const R = inner.type === 'circle' ? inner.r : Math.max(...inner.pts.map((q) => G.dist(c, q)));
+  let best = c, bestD = avoid ? G.dist(c, avoid) : 0;
   for (let i = 0; i < 300; i++) {
     const pt = G.randomInDisk(c, R);
-    if (G.inZone(pt, inner) && (!avoid || G.dist(pt, avoid) >= minD)) return pt;
+    if (!G.inZone(pt, inner)) continue;
+    if (!avoid || G.dist(pt, avoid) >= minD) return pt;
+    const dd = G.dist(pt, avoid); if (dd > bestD) { best = pt; bestD = dd; } // small zone: as far away as it can be
   }
-  return c;
+  return best;
 }
 function setupModes(s) {
   const fz = finalZone();
@@ -1015,6 +1107,7 @@ function onState(local) {
   banner(null);
   if (S.kicked.includes(me.id)) { leave('The host removed you from the game.'); return; }
   if (S.phase !== prevPhase || S.round !== prevRound) phaseChanged(prevPhase, S.phase);
+  if (S.phase === 'lobby' && prevPhase && prevPhase !== 'lobby' && mapBear) setBearing(0); // back to north for the next round
   prevPhase = S.phase; prevRound = S.round;
   for (const e of S.events) {
     if (processed.has(e.id)) continue;
@@ -1033,7 +1126,7 @@ function phaseChanged(from, to) {
     sheetCollapsed = false;
     const r = mine()?.role;
     beep('start'); buzz([200, 100, 200]);
-    toast(r === 'seeker' ? 'You are a <b>SEEKER</b>. Stay put until the hunt starts.' : 'You are a <b>HIDER</b>. Go hide inside the zone.', r === 'seeker' ? 'seeker' : 'hider', r === 'seeker' ? 'eye' : 'hide');
+    toast(r === 'seeker' ? 'You\'re a <b>SEEKER</b>. Wait for the hunt.' : 'You\'re a <b>HIDER</b>. Go hide in the zone.', r === 'seeker' ? 'seeker' : 'hider', r === 'seeker' ? 'eye' : 'hide');
     requestWake();
     if (S.zone) fitZone(S.zone);
   }
@@ -1055,38 +1148,38 @@ function onEvent(e) {
   const p = mine();
   const IN = (k) => `<b>${ITEM_INFO[k].name}</b>`;
   if (e.k === 'catch') {
-    if (e.who === me.id) { beep('caught'); buzz([500]); toast(S.settings.infection ? 'You got caught. You are a seeker now. Go get them.' : 'You got caught.', 'seeker', 'caught'); }
+    if (e.who === me.id) { beep('caught'); buzz([500]); toast(S.settings.infection ? 'You got caught. You\'re a seeker now.' : 'You got caught.', 'seeker', 'caught'); }
     else if (e.by === me.id) { beep('tag'); buzz([60, 40, 160]); toast(`You caught <b>${nm(e.who)}</b>. +50${e.reward ? ` and ${IN(e.reward)}` : ''}`, 'good', 'check'); }
     else toast(e.how === 'zone' ? `<b>${nm(e.who)}</b> left the zone and is out` : `<b>${nm(e.who)}</b> was caught${e.by ? ' by ' + nm(e.by) : ''}`, '', e.how === 'zone' ? 'strictZone' : 'caught');
-    if (e.who === me.id && S.jail) setTimeout(() => toast('Head to the jail on the map. A free hider can break you out.', 'hider', 'jail'), 2500);
+    if (e.who === me.id && S.jail) setTimeout(() => toast('Go to the jail. A free hider can break you out.', 'hider', 'jail'), 2500);
   }
   if (e.k === 'radar') {
-    if (p && p.role === 'hider' && alive(p)) { toast(`<b>${nm(e.by)}</b> ran a radar sweep. You just pinged.`, 'seeker', 'radar'); buzz([100, 50, 100]); sendPing('radar'); }
+    if (p && p.role === 'hider' && alive(p)) { toast(`<b>${nm(e.by)}</b> used radar. You pinged.`, 'seeker', 'radar'); buzz([100, 50, 100]); sendPing('radar'); }
     else toast(`Radar sweep by <b>${nm(e.by)}</b>`, 'seeker', 'radar');
   }
   const self_ = (id) => id === me.id;
   const tone = (id) => (P(id)?.role === 'seeker' ? 'seeker' : 'hider');
-  if (e.k === 'hunt' && S.settings.shrink && smoothShrink()) setTimeout(() => toast('The zone is closing in. Stay inside the red line.', '', 'shrink'), 1500);
-  if (e.k === 'drop') { beep('alarm'); buzz([100, 60, 100, 60, 300]); toast('Supply drop landed. Everyone can see it. First one there gets a super power-up.', 'good', 'drops'); }
+  if (e.k === 'hunt' && S.settings.shrink && smoothShrink()) setTimeout(() => toast('Zone is shrinking. Stay inside the red line.', '', 'shrink'), 1500);
+  if (e.k === 'drop') { beep('alarm'); buzz([100, 60, 100, 60, 300]); toast('Supply drop landed. First one there gets a super power-up.', 'good', 'drops'); }
   if (e.k === 'claim') {
-    if (self_(e.who)) { beep('tag'); buzz([60, 40, 160]); toast(`You got ${IN(e.item)}. ${ITEM_INFO[e.item].desc}.`, 'good', e.item); }
+    if (self_(e.who)) { beep('tag'); buzz([60, 40, 160]); toast(`You got ${IN(e.item)}. It's in Power-ups.`, 'good', e.item); }
     else toast(`<b>${nm(e.who)}</b> grabbed the supply drop`, tone(e.who), 'drops');
   }
   if (e.k === 'shieldHit') { beep('alarm'); toast(self_(e.who) ? `Your shield blocked ${e.by ? nm(e.by) + "'s" : 'a'} tag. Run!` : `<b>${nm(e.who)}</b>'s shield blocked a tag`, self_(e.who) ? 'good' : '', 'shield'); }
   if (e.k === 'shield' && self_(e.by)) toast('Shield up. The next tag on you won’t count.', 'hider', 'shield');
   if (e.k === 'ghost') toast(self_(e.by) ? 'Ghost mode: your next 2 pings are blocked.' : `<b>${nm(e.by)}</b> went ghost`, self_(e.by) ? 'hider' : '', 'ghost');
-  if (e.k === 'blackout') { beep('alarm'); toast(p && p.role === 'seeker' ? `<b>${nm(e.by)}</b> blacked out your map. You miss the next ping.` : `Blackout by <b>${nm(e.by)}</b>: seekers miss everyone's next ping`, p && p.role === 'seeker' ? 'seeker' : 'hider', 'blackout'); }
+  if (e.k === 'blackout') { beep('alarm'); toast(p && p.role === 'seeker' ? `<b>${nm(e.by)}</b> blacked out your map until the next ping.` : `Blackout by <b>${nm(e.by)}</b>: seekers miss the next ping`, p && p.role === 'seeker' ? 'seeker' : 'hider', 'blackout'); }
   if (e.k === 'xray') {
-    if (p && p.role === 'hider' && alive(p)) { beep('alarm'); buzz([200, 80, 200]); toast(`<b>${nm(e.by)}</b> used X-ray. Your exact spot just pinged.`, 'seeker', 'xray'); sendPing('xray'); }
+    if (p && p.role === 'hider' && alive(p)) { beep('alarm'); buzz([200, 80, 200]); toast(`<b>${nm(e.by)}</b> used X-ray. Your exact spot pinged.`, 'seeker', 'xray'); sendPing('xray'); }
     else toast(`X-ray by <b>${nm(e.by)}</b>: exact spots incoming`, 'seeker', 'xray');
   }
   if (e.k === 'tracker') {
-    if (p && p.role === 'hider' && alive(p)) { beep('alarm'); toast(`<b>${nm(e.by)}</b> launched a tracker: you ping every 15 s for a minute.`, 'seeker', 'tracker'); L_.lastTrack = hostNow(); sendPing('tracker'); }
-    else toast(`Tracker by <b>${nm(e.by)}</b>: hiders ping every 15 s for a minute`, 'seeker', 'tracker');
+    if (p && p.role === 'hider' && alive(p)) { beep('alarm'); toast(`<b>${nm(e.by)}</b> tracked you: you ping every 15 s for 1 min.`, 'seeker', 'tracker'); L_.lastTrack = hostNow(); sendPing('tracker'); }
+    else toast(`Tracker by <b>${nm(e.by)}</b>: hiders ping every 15 s for 1 min`, 'seeker', 'tracker');
   }
-  if (e.k === 'mission' && self_(e.who)) { beep('tag'); buzz([60, 40, 160]); toast(`Mission done. +25${e.item ? ` and ${IN(e.item)}` : ''}. New target on your map.`, 'good', 'missions'); }
+  if (e.k === 'mission' && self_(e.who)) { beep('tag'); buzz([60, 40, 160]); toast(`Mission done. +25${e.item ? ` and ${IN(e.item)}` : ''}. New target on the map.`, 'good', 'missions'); }
   if (e.k === 'flag') toast(self_(e.who) ? 'Flag captured. +50' : `<b>${nm(e.who)}</b> captured a flag`, self_(e.who) ? 'good' : tone(e.who), 'capture');
-  if (e.k === 'potato') { if (self_(e.who)) { toast('You grabbed the hot potato: double points, but you ping twice as often.', 'good', 'potato'); sendPing('potato'); } else toast(`<b>${nm(e.who)}</b> has the hot potato`, tone(e.who), 'potato'); }
+  if (e.k === 'potato') { if (self_(e.who)) { toast('You have the hot potato: 2x points, 2x pings.', 'good', 'potato'); sendPing('potato'); } else toast(`<b>${nm(e.who)}</b> has the hot potato`, tone(e.who), 'potato'); }
   if (e.k === 'potatoDrop' && !self_(e.who)) toast(`<b>${nm(e.who)}</b> dropped the hot potato`, '', 'potato');
   if (e.k === 'duel' && (self_(e.a) || self_(e.b))) toast(`Showdown! You vs <b>${nm(self_(e.a) ? e.b : e.a)}</b>: ${DUEL_NAMES[e.game]}`, 'good', 'duel');
   if (e.k === 'duelTie' && (self_(e.a) || self_(e.b))) toast('Tie! Go again.', '', 'duel');
@@ -1096,13 +1189,13 @@ function onEvent(e) {
     else if (self_(e.a) || self_(e.b)) toast(e.win ? `<b>${nm(e.win)}</b> won the showdown` : 'The showdown was a draw', '', 'duel');
     else if (e.win) toast(`<b>${nm(e.win)}</b> won a showdown vs <b>${nm(e.win === e.a ? e.b : e.a)}</b>`, '', 'duel');
   }
-  if (e.k === 'treasure') { beep('warn'); toast(`A treasure chest dropped. +${TREASURE_PTS} for the hider who grabs it.`, 'good', 'treasure'); }
-  if (e.k === 'treasureGot') { if (self_(e.who)) { beep('alarm'); toast(`+${TREASURE_PTS} points! Your exact spot just pinged. Move!`, 'good', 'treasure'); sendPing('treasure'); } else toast(`<b>${nm(e.who)}</b> grabbed the treasure`, tone(e.who), 'treasure'); }
-  if (e.k === 'wire') { L_.wireLocs = {}; if (self_(e.who)) { beep('alarm'); buzz([200, 80, 200]); toast(`You have the Live Wire! ${fmt(S.wire ? S.wire.until - hostNow() : 0)} on the fuse. Walk near another hider to pass it.`, 'seeker', 'wire'); } else toast(`<b>${nm(e.who)}</b> has the Live Wire`, '', 'wire'); }
+  if (e.k === 'treasure') { beep('warn'); toast(`Treasure dropped. +${TREASURE_PTS} to the first hider there.`, 'good', 'treasure'); }
+  if (e.k === 'treasureGot') { if (self_(e.who)) { beep('alarm'); toast(`+${TREASURE_PTS} treasure! Your spot pinged. Move!`, 'good', 'treasure'); sendPing('treasure'); } else toast(`<b>${nm(e.who)}</b> grabbed the treasure`, tone(e.who), 'treasure'); }
+  if (e.k === 'wire') { L_.wireLocs = {}; if (self_(e.who)) { beep('alarm'); buzz([200, 80, 200]); toast(`You have the Live Wire (${fmt(S.wire ? S.wire.until - hostNow() : 0)} fuse). Get near a hider to pass it.`, 'seeker', 'wire'); } else toast(`<b>${nm(e.who)}</b> has the Live Wire`, '', 'wire'); }
   if (e.k === 'wirePass') { L_.wireLocs = {}; if (self_(e.to)) { beep('alarm'); buzz([200, 80, 200]); toast(`${e.from ? `<b>${nm(e.from)}</b> passed you` : 'You got'} the Live Wire! Pass it before the fuse runs out.`, 'seeker', 'wire'); } else if (self_(e.from)) toast('Passed the Live Wire.', 'good', 'wire'); else toast(`<b>${nm(e.to)}</b> has the Live Wire`, '', 'wire'); }
-  if (e.k === 'wireLive') { if (self_(e.who)) { beep('alarm'); buzz([400, 100, 400]); toast('The fuse ran out. You are LIVE: seekers can see you for the rest of the round.', 'seeker', 'wire'); } else toast(`<b>${nm(e.who)}</b> is LIVE. Seekers can see them now.`, 'seeker', 'wire'); }
-  if (e.k === 'tagMiss' && self_(e.by)) { buzz([120]); toast(`Missed tag: nobody was in range. -${MISS_PTS} points.`, 'seeker', 'alert'); }
-  if (e.k === 'extract') { beep('alarm'); buzz([200, 100, 200, 100, 400]); toast('Extraction point is open. Hiders: reach it for +100. Seekers: guard it.', 'good', 'sprint'); }
+  if (e.k === 'wireLive') { if (self_(e.who)) { beep('alarm'); buzz([400, 100, 400]); toast('Fuse ran out. You\'re LIVE: seekers see you all round.', 'seeker', 'wire'); } else toast(`<b>${nm(e.who)}</b> is LIVE. Seekers can see them now.`, 'seeker', 'wire'); }
+  if (e.k === 'tagMiss' && self_(e.by)) { buzz([120]); toast(`Missed tag. -${MISS_PTS} points.`, 'seeker', 'alert'); }
+  if (e.k === 'extract') { beep('alarm'); buzz([200, 100, 200, 100, 400]); toast(p && p.role === 'seeker' ? 'Extraction is open. Guard it.' : 'Extraction is open. Reach it for +100.', 'good', 'sprint'); }
   if (e.k === 'extracted') toast(self_(e.who) ? 'You made it out. +100. You are safe.' : `<b>${nm(e.who)}</b> escaped`, self_(e.who) ? 'good' : tone(e.who), 'sprint');
   if (e.k === 'breakout') { beep('alarm'); toast((e.freed || []).includes(me.id) ? `<b>${nm(e.by)}</b> broke you out. Run!` : `<b>${nm(e.by)}</b> broke ${e.freed.length} out of jail`, (e.freed || []).includes(me.id) ? 'good' : tone(e.by), 'jail'); }
   if (e.k === 'buy' && self_(e.who)) toast(e.item === 'icon' ? 'New badge' : `<b>${shopInfo(e.item).name || e.item}</b> ${e.saved ? 'saved for your next round as ' + (SHOP[e.item]?.role || 'player') : 'is yours'}`, 'good', e.item === 'icon' ? 'star' : shopInfo(e.item).ic || 'shop');
@@ -1118,11 +1211,11 @@ function onEvent(e) {
     if (self_(e.by)) { L_.trailUntil = hostNow() + 20000; L_.trailLocs = {}; toast('Hot trail: follow the arrow for 20 s', 'seeker', 'trail'); }
   }
   if (e.k === 'spotlight') {
-    if (self_(e.target) && p && alive(p)) { beep('alarm'); buzz([200, 80, 200]); toast(`<b>${nm(e.by)}</b> put a spotlight on you: exact spot for 10 s`, 'hider', 'spotlight'); L_.spotUntil = hostNow() + 10000; L_.lastSpot = 0; }
+    if (self_(e.target) && p && alive(p)) { beep('alarm'); buzz([200, 80, 200]); toast(`<b>${nm(e.by)}</b> spotlighted you: exact spot for 10 s`, 'hider', 'spotlight'); L_.spotUntil = hostNow() + 10000; L_.lastSpot = 0; }
     else if (self_(e.by)) toast(`Spotlight on <b>${nm(e.target)}</b>`, 'seeker', 'spotlight');
   }
   if (e.k === 'sonar') {
-    if (p && p.role === 'seeker') { if (myPos) send('seekerLoc', { p: myPos.p }); toast('A hider used sonar. They can see you for 30 s.', 'seeker', 'sonar'); }
+    if (p && p.role === 'seeker') { if (myPos) send('seekerLoc', { p: myPos.p }); toast('A hider used sonar: they see you for 30 s.', 'seeker', 'sonar'); }
     else { L_.sonarUntil = hostNow() + 30000; toast(`Sonar by <b>${nm(e.by)}</b>: seekers visible for 30 s`, 'hider', 'sonar'); }
   }
 }
@@ -1230,7 +1323,7 @@ function updateTrail() {
   if (!best) { el.hidden = !(now < (L_.trailUntil || 0)); el.innerHTML = `${ic('trail')}<span class="tr-t">Picking up the trail…</span>`; return; }
   const band = best.d < 100 ? 'very close' : best.d < 300 ? 'close' : best.d < 800 ? 'getting warm' : 'far';
   el.hidden = false;
-  el.innerHTML = `<span class="tr-a" style="transform:rotate(${Math.round(bearing(myPos.p, best.p))}deg)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 17-7-4-7 4z"/></svg></span><span class="tr-t">Nearest hider · ${band} · ${Math.ceil((L_.trailUntil - now) / 1000)} s</span>`;
+  el.innerHTML = `<span class="tr-a" style="transform:rotate(${Math.round(bearing(myPos.p, best.p) + mapBear)}deg)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 17-7-4-7 4z"/></svg></span><span class="tr-t">Nearest hider · ${band} · ${Math.ceil((L_.trailUntil - now) / 1000)} s</span>`;
 }
 function shopHtml() {
   const p = mine();
@@ -1260,7 +1353,7 @@ function clientTick() {
   const p = mine();
   if (S.phase === 'hunting' && p && p.role === 'hider' && alive(p)) {
     const n = Math.floor((now - S.huntStart) / pingMs());
-    if (n > L_.lastPingN) { L_.lastPingN = n; sendPing('scheduled', n); if (n > 0) { beep('ping'); buzz(80); toast('You just pinged your location to the seekers.', 'seeker', 'pin'); } }
+    if (n > L_.lastPingN) { L_.lastPingN = n; sendPing('scheduled', n); if (n > 0) { beep('ping'); buzz(80); toast('You pinged. Seekers see your area.', 'seeker', 'pin'); } }
     if (now < (S.trackerUntil || 0) && now - (L_.lastTrack || 0) >= 15000) { L_.lastTrack = now; sendPing('tracker'); }
     if (now < (L_.trailSendUntil || 0) && now - (L_.lastTrailSend || 0) >= 5000 && myPos) { L_.lastTrailSend = now; send('hiderLoc', { p: G.randomInDisk(myPos.p, 20) }); }
     if (now < (L_.spotUntil || 0) && now - (L_.lastSpot || 0) >= 5000) { L_.lastSpot = now; sendPing('xray'); }
@@ -1323,7 +1416,7 @@ function reachThings(p, now) {
   for (const f of S.flags || []) {
     if (f.by) { delete L_.capStart[f.id]; continue; }
     if (!near(f.p)) { if (L_.capStart[f.id]) toast('You left the flag. Capture reset.', 'hider', 'capture'); delete L_.capStart[f.id]; continue; }
-    if (!L_.capStart[f.id]) { L_.capStart[f.id] = now; L_.capPing[f.id] = 0; toast('Capturing… stay here for 1 minute. Seekers can see you.', 'seeker', 'capture'); }
+    if (!L_.capStart[f.id]) { L_.capStart[f.id] = now; L_.capPing[f.id] = 0; toast('Capturing. Stay 1 min. Seekers see you.', 'seeker', 'capture'); }
     if (now - (L_.capPing[f.id] || 0) >= 15000) { L_.capPing[f.id] = now; sendPing('capture'); }
     const held = now - L_.capStart[f.id];
     if (held >= 60000) sendOnce('flag' + f.id, 'flag', { id: f.id, held }, now);
@@ -1527,7 +1620,7 @@ function screenWentAway() {
 }
 function showAwayWarning() {
   const hider = mine()?.role === 'hider';
-  toast(hider ? '<b>Keep Ghostline open.</b> You turned off your screen, so the seekers saw your exact spot.' : '<b>Keep Ghostline open.</b> Everyone was told you turned off your screen.', 'seeker', 'alert');
+  toast(hider ? '<b>Keep Ghostline open.</b> Seekers saw your exact spot.' : '<b>Keep Ghostline open.</b> Everyone was told.', 'seeker', 'alert');
   beep('warn'); buzz([200, 100, 200]);
 }
 
@@ -1649,6 +1742,7 @@ function setSheet(html, view = '') {
   sheet.hidden = false;
   sheet.classList.toggle('collapsed', sheetCollapsed);
   sheet.classList.toggle('play', view === 'play');
+  if (view !== 'chatmode') sheet.classList.remove('chatmode');
   requestAnimationFrame(() => document.documentElement.style.setProperty('--sheet-h', (window.innerWidth < 720 ? sheet.offsetHeight : 0) + 'px'));
 }
 function selectHtml(key, val, disabled) {
@@ -1712,6 +1806,8 @@ function setMapBtn() {
   const b = $('#btn-map'); if (!b) return;
   const on = mapView && !chatOpen;
   b.hidden = !S || S.phase !== 'lobby';
+  const c = $('#btn-chat'); if (c) c.hidden = inGame();
+  const nb = $('#btn-north'); if (nb) nb.hidden = !S || S.phase === 'lobby';
   b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
 }
 function setMapView(on) {
@@ -1819,6 +1915,9 @@ function goalCard(p) {
   return card('', 'hide', 'Hider', hunting ? `Stay hidden inside the red line. Your phone shows seekers your rough spot every ${optLabel('pingSec', S.settings.pingSec)}.` : 'Get inside the red line and find a hiding spot before the seekers are released.');
 }
 
+function modeSeg() {
+  return `<div class="seg mode-seg"><button class="${chatOpen ? '' : 'on'}" data-act="modeMap">${ic('pin')}Map</button><button class="${chatOpen ? 'on' : ''}" data-act="modeChat">${ic('chat')}Chat<b id="chat-n" class="pu-n" ${unreadN && !chatOpen ? '' : 'hidden'}>${unreadN}</b></button></div>`;
+}
 function renderPlaying() {
   const p = mine();
   if (!p) { setSheet(`<div class="sheet-h"><h2>Round in progress</h2></div><p class="note">You'll join as a seeker in a moment.</p>`); return; }
@@ -1831,24 +1930,28 @@ function renderPlaying() {
   const inv = p.inv || {}, nPU = Object.keys(ITEM_INFO).filter((k) => ITEM_INFO[k].role === role && (inv[k] || 0) > 0).reduce((a, k) => a + inv[k], 0);
   const canPU = p.role === 'seeker' || alive(p);
   const tm = S.settings.tagMode || 'gps';
+  const shop = shopHtml(), bal = (S.wallet || {})[me.id] || 0;
   const row = `<div class="play-row">
+    ${shop ? `<button class="btn small shop-btn ${L_.showShop ? 'on' : ''}" data-act="toggleShop" aria-expanded="${!!L_.showShop}">${ic('shop')}<span class="mono">${bal}</span></button>` : ''}
     ${canPU ? `<button class="btn small pu-btn ${L_.showPU ? 'on' : ''}" data-act="togglePU" aria-expanded="${!!L_.showPU}">${ic('bolt')}Power-ups${nPU ? ` <b class="pu-n">${nPU}</b>` : ''}</button>` : ''}
-    ${p.role === 'hider' && alive(p) ? '<button class="btn small" data-act="selfCaught">I got caught</button>' : ''}
     <button class="btn small ghost" data-act="toggleMore" aria-expanded="${!!L_.showMore}">${L_.showMore ? 'Less' : 'More'}</button></div>`;
   const tagBtn = p.role === 'seeker' ? `<button class="tag-btn" data-act="${tm === 'photo' ? 'snap' : 'tag'}" ${S.phase === 'hunting' && (myPos || tm !== 'gps') ? '' : 'disabled'}>${ic(tm === 'photo' ? 'camera' : 'tag')}${tm === 'photo' ? 'SNAP TAG' : 'TAG'}</button>
       <input type="file" id="snap-in" accept="image/*" capture="environment" hidden>` : '';
   setSheet(`<div class="play-compact">
+    ${modeSeg()}
+    <button class="last-up" id="last-up" data-act="modeChat" hidden></button>
     ${geoNote()}
     <div id="dyn"></div>
     ${tagBtn}
     ${L_.placingDecoy ? `<p class="hint" style="color:var(--red);font-weight:700">Tap the map inside the zone to place your decoy.</p>` : ''}
     ${row}
     ${L_.showPU && canPU ? `<div class="pu-panel">${itemsHtml(role) || '<p class="hint" style="text-align:left;margin:0">No power-ups in this game.</p>'}</div>` : ''}
-    ${L_.showMore ? `${goalCard(p)}${p.role === 'seeker' ? `<p class="hint">${TAG_HINT[tm](S.settings)}</p>` : ''}
-    ${shopHtml()}
+    ${L_.showShop && shop ? `<div class="pu-panel">${shop}</div>` : ''}
+    ${L_.showMore ? `${p.role === 'hider' && alive(p) ? '<div class="big-actions"><button class="btn small" data-act="selfCaught">I got caught</button></div>' : ''}${goalCard(p)}${p.role === 'seeker' ? `<p class="hint">${TAG_HINT[tm](S.settings)}</p>` : ''}
     ${hiders.length ? `<div class="section"><div class="section-t">Hiders · ${left} left</div><div class="hiders-row">${status}</div></div>` : ''}
     ${host ? `<div class="big-actions"><button class="btn small ghost" data-act="ruleCatch">Rule a catch</button><button class="btn small ghost" data-act="endNow">End round</button></div>` : ''}` : ''}
   </div>  `, 'play');
+  showLastUp();
   renderDynamicSheet();
 }
 
@@ -1950,15 +2053,35 @@ function renderReplay() {
 
 // ---------------- chat ----------------
 function renderChat() {
-  const role = mine()?.role;
-  const list = chat.filter((c) => (chatTab === 'all' ? c.team === 'all' : c.team !== 'all'));
+  const role = mine()?.role, game = inGame();
+  unreadN = 0;
+  const tm = (t) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const line = (c) => c.sys ? `<div class="sys ${c.cls || ''}">${c.icon && ICONS[c.icon] ? ic(c.icon) : ''}<span>${c.html}</span><span class="tm">${tm(c.t)}</span></div>`
+    : `<div class="msg ${c.team !== 'all' ? 'team' : ''} ${c.from === me.id ? 'mine' : ''}"><b class="${c.role === 'seeker' ? 'seeker' : ''}">${esc(c.name)}${c.team !== 'all' ? ' · team' : ''}</b><span class="tm">${tm(c.t)}</span><div>${esc(c.text)}</div></div>`;
+  // already showing: just add the new lines, so typing isn't interrupted
+  const key = `${game}|${chatTab}|${role}`, view = game ? 'chatmode' : 'chat', log0 = $('#chat-log');
+  if (log0 && sheetView === view && sheet.dataset.ck === key) {
+    const add = chat.filter((c) => c.cid > (+log0.dataset.last || 0));
+    if (add.length) {
+      const near = log0.scrollHeight - log0.scrollTop - log0.clientHeight < 80;
+      log0.querySelector(':scope > .note')?.remove();
+      log0.insertAdjacentHTML('beforeend', add.map(line).join(''));
+      log0.dataset.last = add[add.length - 1].cid;
+      if (near) log0.scrollTop = log0.scrollHeight;
+    }
+    return;
+  }
+  sheet.dataset.ck = key;
+  const draft = $('#chat-in')?.value || '';
   setSheet(`
-    <div class="sheet-h"><h2>Chat</h2><button class="btn small" data-act="closeChat">Close</button></div>
-    ${S && S.phase !== 'lobby' && role ? `<div class="seg"><button class="${chatTab === 'all' ? 'on' : ''}" data-act="chatTab" data-tab="all">Everyone</button><button class="${chatTab === 'team' ? 'on' : ''}" data-act="chatTab" data-tab="team">${role === 'seeker' ? 'Seekers' : 'Hiders'} only</button></div>` : ''}
-    <div class="chat-log" id="chat-log">${list.length ? list.map((c) => `<div class="msg ${c.team !== 'all' ? 'team' : ''}"><b class="${c.role === 'seeker' ? 'seeker' : ''}">${esc(c.name)}</b><span class="tm">${new Date(c.t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span><div>${esc(c.text)}</div></div>`).join('') : '<p class="note">No messages yet.</p>'}</div>
-    <form class="chat-form" data-act="chatSend"><input id="chat-in" maxlength="200" placeholder="Say something" autocomplete="off" aria-label="Message"><button class="btn primary">Send</button></form>
-  `, 'chat');
-  const log = $('#chat-log'); if (log) log.scrollTop = log.scrollHeight;
+    ${game ? modeSeg() : `<div class="sheet-h"><h2>Chat</h2><button class="btn small" data-act="closeChat">Close</button></div>`}
+    <div class="chat-log ${game ? 'full' : ''}" id="chat-log">${chat.length ? chat.map(line).join('') : `<p class="note">${game ? 'Game updates and messages show up here.' : 'No messages yet.'}</p>`}</div>
+    <form class="chat-form" data-act="chatSend"><input id="chat-in" maxlength="200" placeholder="${chatTab === 'team' && role && S.phase !== 'lobby' ? `Message ${role === 'seeker' ? 'seekers' : 'hiders'} only` : 'Message everyone'}" autocomplete="off" aria-label="Message">
+    ${S && S.phase !== 'lobby' && role ? `<button type="button" class="btn small ghost to-btn" data-act="chatTab" data-tab="${chatTab === 'team' ? 'all' : 'team'}">To ${chatTab === 'team' ? 'team' : 'all'}</button>` : ''}<button class="btn primary">Send</button></form>
+  `, game ? 'chatmode' : 'chat');
+  sheet.classList.toggle('chatmode', game);
+  const inp = $('#chat-in'); if (inp && draft) inp.value = draft;
+  const log = $('#chat-log'); if (log) { log.dataset.last = chat.length ? chat[chat.length - 1].cid : 0; log.scrollTop = log.scrollHeight; }
 }
 
 // ---------------- modal ----------------
@@ -2009,8 +2132,10 @@ function act(a, el) {
   switch (a) {
     case 'toggleSheet': sheetCollapsed = !sheetCollapsed; sheet.classList.toggle('collapsed', sheetCollapsed); document.documentElement.style.setProperty('--sheet-h', (window.innerWidth < 720 ? sheet.offsetHeight : 0) + 'px'); break;
     case 'allowGeo': retryGeo(true); break;
-    case 'togglePU': L_.showPU = !L_.showPU; if (L_.showPU) L_.showMore = false; renderSheet(); break;
-    case 'toggleMore': L_.showMore = !L_.showMore; if (L_.showMore) L_.showPU = false; renderSheet(); break;
+    case 'togglePU': L_.showPU = !L_.showPU; if (L_.showPU) L_.showMore = L_.showShop = false; renderSheet(); break;
+    case 'toggleMore': L_.showMore = !L_.showMore; if (L_.showMore) L_.showPU = L_.showShop = false; renderSheet(); break;
+    case 'modeMap': chatOpen = false; renderSheet(); break;
+    case 'modeChat': chatOpen = true; unreadN = 0; renderSheet(); break;
     case 'leave': if (!S || S.phase === 'lobby' || S.phase === 'ended' || confirm('Leave this game?')) leave(); break;
     case 'share': {
       const url = inviteUrl();
@@ -2057,8 +2182,8 @@ function act(a, el) {
       L_.tagCooldown = Date.now() + 3000;
       send('tag', { p: myPos.p, acc: myPos.acc });
       buzz(40);
-      if (myPos.acc > GPS_POOR) toast(`Your GPS is weak (±${myPos.acc} m), so close tags may not count.`, 'seeker', 'alert');
-      toast(`TAG sent. Anyone within ${S.settings.tagRadiusM} m is out. A miss costs ${MISS_PTS} points.`, 'seeker', 'tag');
+      if (myPos.acc > GPS_POOR) toast(`Weak GPS (±${myPos.acc} m): close tags may not count.`, 'seeker', 'alert');
+      toast(`TAG sent (${S.settings.tagRadiusM} m).`, 'seeker', 'tag');
       break;
     }
     case 'item': {
@@ -2074,7 +2199,10 @@ function act(a, el) {
       break;
     }
     case 'buy': send('buy', { k: el.dataset.k, opt: el.dataset.opt }); break;
-    case 'toggleShop': shopOpen = !shopOpen; renderSheet(); break;
+    case 'toggleShop':
+      if (inGame()) { L_.showShop = !L_.showShop; shopOpen = L_.showShop; if (L_.showShop) L_.showPU = L_.showMore = false; }
+      else shopOpen = !shopOpen;
+      renderSheet(); break;
     case 'spotTarget': L_.spotPick = false; send('useItem', { item: 'spotlight', target: el.dataset.id }); setTimeout(renderSheet, 50); break;
     case 'spotCancel': L_.spotPick = false; renderSheet(); break;
     case 'selfCaught': {
@@ -2138,7 +2266,7 @@ function sendTagReq(target, img) {
   const reqId = 'r' + Math.random().toString(36).slice(2, 9);
   send(img ? 'photoTag' : 'tagReq', { reqId, target, img: img || undefined });
   buzz(40);
-  toast(`${img ? 'Photo' : 'Tag'} sent to <b>${nm(target)}</b>. Waiting for them to confirm…`, 'seeker', img ? 'camera' : 'tag');
+  toast(`${img ? 'Photo' : 'Tag'} sent to <b>${nm(target)}</b>. Waiting…`, 'seeker', img ? 'camera' : 'tag');
 }
 async function shrinkImage(file) {
   const url = URL.createObjectURL(file);
@@ -2222,6 +2350,7 @@ $('#btn-fit').addEventListener('click', () => {
   if (S.phase !== 'lobby' && (L_.showPU || L_.showMore || sheetCollapsed === false)) { L_.showPU = false; L_.showMore = false; renderSheet(); }
   map.invalidateSize(); fitZone(S.zone);
 });
+$('#btn-north').addEventListener('click', () => setBearing(mapBear % 90 === 0 ? mapBear + 90 : 0));
 $('#btn-locate').addEventListener('click', () => { if (myPos) map.setView(myPos.p, Math.max(map.getZoom(), 17)); else toast('No location yet'); });
 $('#btn-chat').addEventListener('click', () => { chatOpen = !chatOpen; unread = false; $('#chat-dot').hidden = true; if (chatOpen) renderChat(); else renderSheet(); setMapBtn(); });
 $('#btn-map').addEventListener('click', () => setMapView(!(mapView && !chatOpen)));
@@ -2268,11 +2397,11 @@ function leave(msg) {
   if (msg) showHomeErr(msg);
 }
 
-setInterval(clientTick, 500);
+setInterval(() => { clientTick(); const u = $('#last-up'); if (u && !u.hidden) showLastUp(); }, 500);
 
 // test and debug hooks
 window.__gl = {
-  get S() { return S; }, get map() { return map; }, get me() { return me; }, get peers() { return [...peers]; }, get local() { return L_; },
+  get S() { return S; }, get map() { return map; }, get bear() { return mapBear; }, feed: () => chat.map((c) => (c.sys ? c.html : c.text)).join('\n'), setBearing, get me() { return me; }, get peers() { return [...peers]; }, get local() { return L_; },
   get myPos() { return myPos; }, get alarmOn() { return alarm.on; }, get awake() { return !!wakeLock || !!(wakeVideo && !wakeVideo.paused); }, hostNow, currentZone,
   ...(DEBUG ? {
     setPos, act, send, feedFix: (lat, lng, acc) => onPos({ coords: { latitude: lat, longitude: lng, accuracy: acc } }),
