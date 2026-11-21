@@ -2438,21 +2438,35 @@ $('#btn-join').addEventListener('click', () => {
 });
 inCode.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-join').click(); });
 
-// Invite links (?room=CODE): join straight away. Without a saved name, ask for one and join on Enter.
+// Invite links (?room=CODE): a dedicated landing (not the home screen) asks for a name and location, then joins.
 {
   const invited = (params.get('room') || '').toUpperCase().replace(/[^A-Z]/g, '');
   if (invited.length === 4) {
     inCode.value = invited;
-    if (me.name) {
-      me.name = me.name.slice(0, 16);
-      // browsers only allow audio after a tap, so unlock on the first touch
-      const unlockOnce = () => { unlockAudio(); loadAlarm(); };
-      addEventListener('pointerdown', unlockOnce, { once: true });
-      connect(invited, false);
-    } else {
-      showHomeErr(`You're invited to game ${invited}. Enter your name, then tap Join.`);
-      inName.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-join').click(); });
-    }
+    const inv = $('#invite'), nm = $('#inv-name'), geoBtn = $('#inv-geo'), err = $('#inv-err');
+    $('#inv-code').textContent = invited;
+    nm.value = me.name || '';
+    $('#home').hidden = true; inv.hidden = false;
+    const setErr = (t) => { err.textContent = t; err.hidden = !t; };
+    geoBtn.addEventListener('click', () => {
+      unlockAudio();
+      if (!navigator.geolocation) { setErr('This browser has no location support.'); return; }
+      navigator.geolocation.getCurrentPosition(() => { geoBtn.textContent = 'Location on \u2713'; geoBtn.classList.add('ok'); setErr(''); },
+        (e) => { if (e.code === 1) setErr('Location is blocked. You can still join, then turn it on in your phone settings.'); else { geoBtn.textContent = 'Location on \u2713'; geoBtn.classList.add('ok'); } },
+        { enableHighAccuracy: true, timeout: 15000 });
+    });
+    const go = async () => {
+      const n = nm.value.trim();
+      if (!n) { setErr('Enter your name first.'); nm.focus(); return; }
+      me.name = n.slice(0, 16); saveMe(); setErr('');
+      unlockAudio(); loadAlarm();
+      $('#inv-join').disabled = true;
+      const ok = await connect(invited, false);
+      $('#inv-join').disabled = false;
+      if (ok) inv.hidden = true; else { const h = $('#home-err'); setErr(h.textContent || 'Could not connect.'); }
+    };
+    $('#inv-join').addEventListener('click', go);
+    nm.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
   }
 }
 

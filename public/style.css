@@ -494,3 +494,19 @@ body.turned .leaflet-marker-icon > * { rotate: calc(-1 * var(--bear, 0deg)); }
   .endsplash, .endsplash h1, .endsplash p, .fx *, #sheet .pu-panel, #sheet .section, .chat-log .new, #sheet .lb .player, #sheet .result-hero { animation-duration: .01s !important; animation-delay: 0s !important; }
   .endsplash { animation: es-life 3.2s linear forwards !important; }
 }
+
+/* invite landing */
+#invite { background: var(--red); color: #fff; display: flex; align-items: center; justify-content: center; padding: 24px 20px calc(24px + var(--safe-b)); }
+#invite[hidden] { display: none; }
+.inv-card { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 16px; text-align: center; }
+.inv-kicker { font-size: 13px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; opacity: .85; }
+.inv-code { font-size: 64px; font-weight: 700; letter-spacing: 14px; padding-left: 14px; line-height: 1; }
+.inv-sub { margin: 0; opacity: .85; }
+.inv-field { display: flex; flex-direction: column; gap: 8px; text-align: left; font-weight: 700; }
+.inv-field input { background: #fff; color: #111; border: 0; border-radius: 12px; padding: 14px; font-size: 18px; min-height: 54px; outline: none; }
+.inv-lbl { font-weight: 700; }
+.inv-geo { background: rgba(255,255,255,.18); border: 2px solid #fff; color: #fff; }
+.inv-geo.ok { background: #fff; color: #0a8a4a; }
+.inv-join { background: #111; border-color: #111; color: #fff; margin-top: 4px; }
+#invite .err { color: #fff; background: rgba(0,0,0,.3); border-radius: 10px; padding: 8px 10px; margin: 0; }
+.inv-field > span { color: #fff; font-size: 15px; }

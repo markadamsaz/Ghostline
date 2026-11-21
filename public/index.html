@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/leaflet.css">
-<link rel="stylesheet" href="style.css?v=20">
+<link rel="stylesheet" href="style.css?v=21">
 </head>
 <body>
 <div id="map"></div>
@@ -91,12 +91,28 @@
   </div>
 </section>
 
+<section id="invite" class="overlay" hidden>
+  <div class="inv-card">
+    <div class="inv-kicker">You're invited</div>
+    <div class="inv-code mono" id="inv-code">----</div>
+    <p class="inv-sub">Join the game. Two quick steps.</p>
+    <label class="field inv-field"><span>1. What's your name?</span>
+      <input id="inv-name" maxlength="16" autocomplete="nickname" placeholder="Your name" enterkeyhint="go">
+    </label>
+    <div class="inv-field"><span class="inv-lbl">2. Turn on your location</span>
+      <button id="inv-geo" class="btn big inv-geo" type="button">Allow location</button>
+    </div>
+    <button id="inv-join" class="btn big inv-join" type="button">Join game</button>
+    <p id="inv-err" class="err" hidden></p>
+  </div>
+</section>
+
 <div id="modal" class="overlay" hidden><div class="modal-card"></div></div>
 
 <script src="vendor/leaflet.js"></script>
 <script src="vendor/qrcode.js"></script>
 <script src="vendor/supabase.js"></script>
 <script src="config.js"></script>
-<script type="module" src="app.js?v=20"></script>
+<script type="module" src="app.js?v=21"></script>
 </body>
 </html>
