@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/leaflet.css">
-<link rel="stylesheet" href="style.css?v=15">
+<link rel="stylesheet" href="style.css?v=16">
 </head>
 <body>
 <div id="map"></div>
@@ -34,12 +34,14 @@
     <button id="btn-map" class="icon-btn" aria-label="Map view" aria-pressed="false" hidden><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg></button>
     <button id="btn-chat" class="icon-btn" aria-label="Chat"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg><span id="chat-dot" hidden></span></button>
     <button id="btn-fit" class="icon-btn" aria-label="See the whole play area"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg></button>
+    <button id="btn-north" class="icon-btn" aria-label="Turn the map"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><g id="north-n" style="transform-origin:12px 12px"><path class="nn" d="M12 3l4 9h-8z"/><path d="M12 21l-4-9h8z"/></g></svg></button>
     <button id="btn-locate" class="icon-btn" aria-label="Center on me"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
   </div>
 </header>
 
 <div id="banner" hidden></div>
 <div id="outzone" hidden role="alert"><div class="oz-t"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.5"/></svg>OUT OF ZONE</div><div class="oz-n mono" id="oz-n">15</div><div class="oz-s" id="oz-s">Get back inside!</div></div>
+<div id="attr2">&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors</div>
 <div id="toasts" aria-live="polite"></div>
 
 <section id="sheet" hidden></section>
@@ -92,6 +94,6 @@
 <script src="vendor/qrcode.js"></script>
 <script src="vendor/supabase.js"></script>
 <script src="config.js"></script>
-<script type="module" src="app.js?v=15"></script>
+<script type="module" src="app.js?v=16"></script>
 </body>
 </html>
