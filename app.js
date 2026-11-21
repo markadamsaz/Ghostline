@@ -200,7 +200,7 @@ let replay = null;
 let lastStateSent = 0;
 let hostMissingSince = 0;
 
-let shopOpen = false;
+let shopOpen = false, endMore = false;
 function resetLocal() {
   L_ = {
     pings: [],             // {id, p, blur, kind, n, t}
@@ -246,6 +246,27 @@ function feed(html, cls = '', icon = null, who = null) {
   L_.lastUp = { html: line, icon: who ? 'chat' : icon, t: Date.now() };
   showLastUp();
   if (chatOpen) renderChat();
+}
+// quick animations for big moments: a ring burst with the icon (never blocks taps)
+function fx(icon, text = '', cls = '') {
+  const el = document.createElement('div');
+  el.className = 'fx ' + cls;
+  el.innerHTML = `<div class="fx-ring"></div><div class="fx-ic">${icon && ICONS[icon] ? ic(icon) : ''}</div>${text ? `<b>${text}</b>` : ''}`;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1300);
+}
+function endHeadline() {
+  const r = S.results || {}, survivors = Object.keys(S.players).filter((id) => r[id]?.survived);
+  return S.endWhy === 'allCaught' ? 'Seekers win! Everyone got caught.' : survivors.length ? `Hiders win! ${survivors.map(nm).join(', ')} made it.` : S.settings.sprint ? 'Seekers win! Nobody escaped.' : 'Round over';
+}
+function endSplash() {
+  document.querySelector('.endsplash')?.remove();
+  const el = document.createElement('div');
+  const r = S.results || {}, hidersWon = Object.keys(S.players).some((id) => r[id]?.survived);
+  el.className = 'endsplash ' + (hidersWon ? 'hiders' : '');
+  el.innerHTML = `<div><small>Round ${S.round}</small><h1>GAME OVER</h1><p>${endHeadline()}</p></div>`;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
 }
 function showLastUp() {
   const el = $('#last-up'); if (!el) return;
@@ -1141,6 +1162,7 @@ function phaseChanged(from, to) {
     toast(mine()?.role === 'seeker' ? 'The hunt is on. Go!' : 'Seekers are moving. Stay hidden.', mine()?.role === 'seeker' ? 'seeker' : 'hider', 'clock');
   }
   if (to === 'ended') {
+    endMore = false; endSplash();
     const pts = compactTrack(L_.myTrack);
     L_.tracks[me.id] = pts;
     if (pts.length) send('track', { pts });
@@ -1154,8 +1176,8 @@ function onEvent(e) {
   const p = mine();
   const IN = (k) => `<b>${ITEM_INFO[k].name}</b>`;
   if (e.k === 'catch') {
-    if (e.who === me.id) { beep('caught'); buzz([500]); toast(S.settings.infection ? 'You got caught. You\'re a seeker now.' : 'You got caught.', 'seeker', 'caught'); }
-    else if (e.by === me.id) { beep('tag'); buzz([60, 40, 160]); toast(`You caught <b>${nm(e.who)}</b>. +50${e.reward ? ` and ${IN(e.reward)}` : ''}`, 'good', 'check'); }
+    if (e.who === me.id) { beep('caught'); buzz([500]); fx('caught', 'Caught!', 'red'); toast(S.settings.infection ? 'You got caught. You\'re a seeker now.' : 'You got caught.', 'seeker', 'caught'); }
+    else if (e.by === me.id) { beep('tag'); buzz([60, 40, 160]); fx('check', 'Got them! +50', 'red'); toast(`You caught <b>${nm(e.who)}</b>. +50${e.reward ? ` and ${IN(e.reward)}` : ''}`, 'good', 'check'); }
     else toast(e.how === 'zone' ? `<b>${nm(e.who)}</b> left the zone and is out` : `<b>${nm(e.who)}</b> was caught${e.by ? ' by ' + nm(e.by) : ''}`, '', e.how === 'zone' ? 'strictZone' : 'caught');
     if (e.who === me.id && S.jail) setTimeout(() => toast('Go to the jail. A free hider can break you out.', 'hider', 'jail'), 2500);
   }
@@ -1168,7 +1190,7 @@ function onEvent(e) {
   if (e.k === 'hunt' && S.settings.shrink && smoothShrink()) setTimeout(() => toast('Zone is shrinking. Stay inside the red line.', '', 'shrink'), 1500);
   if (e.k === 'drop') { beep('alarm'); buzz([100, 60, 100, 60, 300]); toast('Supply drop landed. First one there gets a super power-up.', 'good', 'drops'); }
   if (e.k === 'claim') {
-    if (self_(e.who)) { beep('tag'); buzz([60, 40, 160]); toast(`You got ${IN(e.item)}. It's in Power-ups.`, 'good', e.item); }
+    if (self_(e.who)) { beep('tag'); buzz([60, 40, 160]); fx(e.item, ITEM_INFO[e.item].name); toast(`You got ${IN(e.item)}. It's in Power-ups.`, 'good', e.item); }
     else toast(`<b>${nm(e.who)}</b> grabbed the supply drop`, tone(e.who), 'drops');
   }
   if (e.k === 'shieldHit') { beep('alarm'); toast(self_(e.who) ? `Your shield blocked ${e.by ? nm(e.by) + "'s" : 'a'} tag. Run!` : `<b>${nm(e.who)}</b>'s shield blocked a tag`, self_(e.who) ? 'good' : '', 'shield'); }
@@ -1183,7 +1205,7 @@ function onEvent(e) {
     if (p && p.role === 'hider' && alive(p)) { beep('alarm'); toast(`<b>${nm(e.by)}</b> tracked you: you ping every 15 s for 1 min.`, 'seeker', 'tracker'); L_.lastTrack = hostNow(); sendPing('tracker'); }
     else toast(`Tracker by <b>${nm(e.by)}</b>: hiders ping every 15 s for 1 min`, 'seeker', 'tracker');
   }
-  if (e.k === 'mission' && self_(e.who)) { beep('tag'); buzz([60, 40, 160]); toast(`Mission done. +25${e.item ? ` and ${IN(e.item)}` : ''}. New target on the map.`, 'good', 'missions'); }
+  if (e.k === 'mission' && self_(e.who)) { beep('tag'); buzz([60, 40, 160]); fx('missions', 'Mission +25'); toast(`Mission done. +25${e.item ? ` and ${IN(e.item)}` : ''}. New target on the map.`, 'good', 'missions'); }
   if (e.k === 'flag') toast(self_(e.who) ? 'Flag captured. +50' : `<b>${nm(e.who)}</b> captured a flag`, self_(e.who) ? 'good' : tone(e.who), 'capture');
   if (e.k === 'potato') { if (self_(e.who)) { toast('You have the hot potato: 2x points, 2x pings.', 'good', 'potato'); sendPing('potato'); } else toast(`<b>${nm(e.who)}</b> has the hot potato`, tone(e.who), 'potato'); }
   if (e.k === 'potatoDrop' && !self_(e.who)) toast(`<b>${nm(e.who)}</b> dropped the hot potato`, '', 'potato');
@@ -1191,7 +1213,7 @@ function onEvent(e) {
   if (e.k === 'duelTie' && (self_(e.a) || self_(e.b))) toast('Tie! Go again.', '', 'duel');
   if (e.k === 'duelEnd') {
     if ($('#modal .duel-wait') || $('#modal [data-dg]')) closeModal();
-    if (self_(e.win)) { beep('ping'); toast(`You won the showdown! +${DUEL_PTS} points`, 'good', 'duel'); }
+    if (self_(e.win)) { beep('ping'); fx('duel', `You won! +${DUEL_PTS}`); toast(`You won the showdown! +${DUEL_PTS} points`, 'good', 'duel'); }
     else if (self_(e.a) || self_(e.b)) toast(e.win ? `<b>${nm(e.win)}</b> won the showdown` : 'The showdown was a draw', '', 'duel');
     else if (e.win) toast(`<b>${nm(e.win)}</b> won a showdown vs <b>${nm(e.win === e.a ? e.b : e.a)}</b>`, '', 'duel');
   }
@@ -1204,6 +1226,7 @@ function onEvent(e) {
   if (e.k === 'extract') { beep('alarm'); buzz([200, 100, 200, 100, 400]); toast(p && p.role === 'seeker' ? 'Extraction is open. Guard it.' : 'Extraction is open. Reach it for +100.', 'good', 'sprint'); }
   if (e.k === 'extracted') toast(self_(e.who) ? 'You made it out. +100. You are safe.' : `<b>${nm(e.who)}</b> escaped`, self_(e.who) ? 'good' : tone(e.who), 'sprint');
   if (e.k === 'breakout') { beep('alarm'); toast((e.freed || []).includes(me.id) ? `<b>${nm(e.by)}</b> broke you out. Run!` : `<b>${nm(e.by)}</b> broke ${e.freed.length} out of jail`, (e.freed || []).includes(me.id) ? 'good' : tone(e.by), 'jail'); }
+  if (e.k === 'buy' && self_(e.who)) fx(e.item === 'icon' ? 'star' : shopInfo(e.item).ic || 'shop', 'Bought!');
   if (e.k === 'buy' && self_(e.who)) toast(e.item === 'icon' ? 'New badge' : `<b>${shopInfo(e.item).name || e.item}</b> ${e.saved ? 'saved for your next round as ' + (SHOP[e.item]?.role || 'player') : 'is yours'}`, 'good', e.item === 'icon' ? 'star' : shopInfo(e.item).ic || 'shop');
   if (e.k === 'passHit') { beep('alarm'); toast(self_(e.who) ? 'Escape pass used. You got away. Run!' : `<b>${nm(e.who)}</b> used an escape pass and got away`, self_(e.who) ? 'good' : '', 'pass'); }
   if (e.k === 'cloak' && self_(e.by)) toast('Cloaked: your next ping is hidden.', 'hider', 'cloak');
@@ -1758,8 +1781,12 @@ function renderMarks() {
 // ---------------- the bottom sheet ----------------
 const sheet = $('#sheet');
 let sheetView = '';
+// animations play only when a screen or panel opens, not on every refresh
+let enterT = 0;
+function sheetEnter() { sheet.classList.add('enter'); clearTimeout(enterT); enterT = setTimeout(() => sheet.classList.remove('enter'), 800); }
 function setSheet(html, view = '') {
-  if (view !== sheetView) { sheetView = view; sheet.scrollTop = 0; } // a new screen starts at the top
+  if (view !== sheetView) { sheetView = view; sheet.scrollTop = 0; sheetEnter(); } // a new screen starts at the top
+  sheet.dataset.view = view;
   sheet.innerHTML = `<div class="grab" data-act="toggleSheet" role="button" aria-label="Expand or collapse"></div>` + html;
   sheet.hidden = false;
   sheet.classList.toggle('collapsed', sheetCollapsed);
@@ -2021,21 +2048,23 @@ function renderEnded() {
   const roundRank = ids.slice().sort((a, b) => (r[b]?.pts || 0) - (r[a]?.pts || 0));
   const totRank = ids.slice().sort((a, b) => (S.totals[b] || 0) - (S.totals[a] || 0));
   const survivors = ids.filter((id) => r[id]?.survived);
-  const headline = S.endWhy === 'allCaught' ? 'Seekers win. Everyone got caught.' : survivors.length ? `Hiders win: ${survivors.map(nm).join(', ')} made it` : S.settings.sprint ? 'Seekers win. Nobody reached extraction.' : 'Round over';
-  const line = (id, i, pts, meta, cls) => playerRow(id, `<span class="meta">${meta}</span><span class="pts">${pts}</span>`, cls, `<span class="rk">${i + 1}</span>`);
+  const medal = ['🥇', '🥈', '🥉'];
+  const line = (id, i, pts, meta, cls) => playerRow(id, `<span class="meta">${meta}</span><span class="pts">${pts}</span>`, cls, `<span class="rk">${medal[i] || i + 1}</span>`);
   setSheet(`
-    <div class="result-hero ${survivors.length ? 'hiders' : ''}"><small>${S.endWhy === 'host' ? 'Ended by the host' : 'Round ' + S.round}</small><h2>${headline}</h2></div>
-    <div class="section"><div class="section-t">This round</div><div class="lb">
+    <div class="result-hero ${survivors.length ? 'hiders' : ''}"><small>${S.endWhy === 'host' ? 'Ended by the host · ' : ''}Game over · Round ${S.round}</small><h2>${endHeadline()}</h2></div>
+    <div class="section"><div class="section-t">Scoreboard</div><div class="lb">
       ${roundRank.map((id, i) => { const x = r[id] || {}; const meta = x.startRole === 'hider' ? (x.extracted ? 'escaped' : x.survived ? 'survived' : 'hid ' + fmt(x.survivedMs)) : (x.catches ? x.catches + ' catch' + (x.catches > 1 ? 'es' : '') : 'seeker'); return line(id, i, '+' + (x.pts || 0), meta, roleCls(x.startRole)); }).join('')}
     </div></div>
-    <div class="section"><div class="section-t">Overall</div><div class="lb">
+    <div class="end-actions">
+      <button class="btn big dark" data-act="replay">${ic('play')}Watch the replay</button>
+      ${isHost() ? `<button class="btn primary big" data-act="again">Next round</button>` : `<button class="btn big" disabled>Host starts next round</button>`}
+    </div>
+    <button class="btn small ghost end-more" data-act="endMore" aria-expanded="${endMore}">${endMore ? 'Less' : 'Overall scores, shop and more'}</button>
+    ${endMore ? `<div class="pu-panel"><div class="section"><div class="section-t">Overall</div><div class="lb">
       ${totRank.map((id, i) => line(id, i, S.totals[id] || 0, '', '')).join('')}
     </div></div>
     ${shopHtml()}
-    <div class="section"><div class="section-t">Replay</div>
-      <button class="btn" data-act="replay" style="width:100%">${ic('play')}Watch everyone's paths</button></div>
-    <div class="big-actions"><button class="btn ghost" data-act="leave">Leave</button>
-      ${isHost() ? `<button class="btn primary big" data-act="again">Next round</button>` : `<button class="btn big" disabled>Host starts the next round</button>`}</div>
+    <div class="big-actions"><button class="btn ghost" data-act="leave">Leave game</button></div></div>` : ''}
   `, 'ended');
 }
 
@@ -2091,6 +2120,7 @@ function renderChat() {
       const near = log0.scrollHeight - log0.scrollTop - log0.clientHeight < 80;
       log0.querySelector(':scope > .note')?.remove();
       log0.insertAdjacentHTML('beforeend', add.map(line).join(''));
+      [...log0.children].slice(-add.length).forEach((x) => x.classList.add('new'));
       log0.dataset.last = add[add.length - 1].cid;
       if (near) log0.scrollTop = log0.scrollHeight;
     }
@@ -2154,11 +2184,13 @@ sheet.addEventListener('submit', (e) => {
 
 function act(a, el) {
   const p = mine();
+  if (/^(togglePU|toggleMore|toggleShop|endMore)$/.test(a)) sheetEnter();
   switch (a) {
     case 'toggleSheet': sheetCollapsed = !sheetCollapsed; sheet.classList.toggle('collapsed', sheetCollapsed); document.documentElement.style.setProperty('--sheet-h', (window.innerWidth < 720 ? sheet.offsetHeight : 0) + 'px'); break;
     case 'allowGeo': retryGeo(true); break;
     case 'togglePU': L_.showPU = !L_.showPU; if (L_.showPU) L_.showMore = L_.showShop = false; renderSheet(); break;
     case 'toggleMore': L_.showMore = !L_.showMore; if (L_.showMore) L_.showPU = L_.showShop = false; renderSheet(); break;
+    case 'endMore': endMore = !endMore; renderSheet(); break;
     case 'modeMap': chatOpen = false; renderSheet(); break;
     case 'modeChat': chatOpen = true; unreadN = 0; renderSheet(); break;
     case 'leave': if (!S || S.phase === 'lobby' || S.phase === 'ended' || confirm('Leave this game?')) leave(); break;
@@ -2220,6 +2252,7 @@ function act(a, el) {
       if (['sonar', 'ghost', 'shield', 'blackout', 'xray', 'tracker', 'cloak', 'peek', 'trail', 'lockdown'].includes(item)) send('useItem', { item });
       if (item === 'spotlight') { L_.spotPick = !L_.spotPick; renderSheet(); return; }
       if (item === 'radar') { send('useItem', { item }); toast('Radar sweep. Every hider pings now.', 'seeker', 'radar'); }
+      fx(item, ITEM_INFO[item].name, ITEM_INFO[item].role === 'seeker' ? 'red' : '');
       setTimeout(renderSheet, 50);
       break;
     }

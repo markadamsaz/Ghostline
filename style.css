@@ -447,3 +447,50 @@ body.turned .leaflet-marker-icon > * { rotate: calc(-1 * var(--bear, 0deg)); }
 .map-ctl { position: absolute; right: 0; top: calc(100% + 8px); display: flex; flex-direction: column; gap: 8px; }
 .map-ctl .icon-btn { background: var(--surface); box-shadow: var(--shadow); }
 .map-ctl .icon-btn[hidden] { display: none; }
+
+/* ---- batch 3: game over moment, scoreboard and animations ---- */
+.endsplash { position: fixed; inset: 0; z-index: 3000; display: grid; place-items: center; pointer-events: none; background: rgba(193, 18, 31, .92); color: #fff; text-align: center; animation: es-life 3.2s ease forwards; }
+.endsplash.hiders { background: rgba(20, 20, 24, .93); }
+.endsplash small { font-weight: 700; letter-spacing: .12em; text-transform: uppercase; opacity: .8; }
+.endsplash h1 { font-size: clamp(48px, 15vw, 96px); line-height: .95; margin: 6px 0 10px; letter-spacing: -.02em; animation: es-pop .7s cubic-bezier(.2, 1.6, .4, 1) both; }
+.endsplash p { font-size: 20px; font-weight: 700; margin: 0 24px; animation: es-up .5s .35s ease both; }
+@keyframes es-life { 0% { opacity: 0 } 8% { opacity: 1 } 80% { opacity: 1 } 100% { opacity: 0 } }
+@keyframes es-pop { 0% { transform: scale(.3) rotate(-8deg); opacity: 0 } 100% { transform: none; opacity: 1 } }
+@keyframes es-up { from { transform: translateY(16px); opacity: 0 } to { transform: none; opacity: 1 } }
+
+.fx { position: fixed; left: 50%; top: 38%; z-index: 2500; transform: translate(-50%, -50%); pointer-events: none; display: grid; justify-items: center; gap: 8px; }
+.fx-ring { position: absolute; top: 0; width: 88px; height: 88px; border-radius: 50%; border: 4px solid var(--ink, #111); animation: fx-ring .9s ease-out forwards; }
+.fx.red .fx-ring { border-color: #c1121f; }
+.fx-ic { width: 88px; height: 88px; border-radius: 50%; display: grid; place-items: center; background: var(--ink, #111); color: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, .3); animation: fx-pop 1.25s cubic-bezier(.2, 1.6, .4, 1) forwards; }
+.fx.red .fx-ic { background: #c1121f; }
+.fx-ic .i { width: 44px; height: 44px; }
+.fx b { background: rgba(0, 0, 0, .82); color: #fff; padding: 6px 14px; border-radius: 999px; font-size: 17px; white-space: nowrap; animation: fx-txt 1.25s ease forwards; }
+@keyframes fx-pop { 0% { transform: scale(.2); opacity: 0 } 25% { transform: scale(1.1); opacity: 1 } 40% { transform: scale(1) } 80% { opacity: 1 } 100% { transform: scale(.9) translateY(-20px); opacity: 0 } }
+@keyframes fx-ring { 0% { transform: scale(.6); opacity: .9 } 100% { transform: scale(2.6); opacity: 0 } }
+@keyframes fx-txt { 0% { transform: translateY(10px); opacity: 0 } 25% { transform: none; opacity: 1 } 80% { opacity: 1 } 100% { opacity: 0 } }
+
+/* panels and tabs open with a slide */
+#sheet.enter .pu-panel, #sheet.enter .section { animation: slide-in .28s ease both; }
+@keyframes slide-in { from { transform: translateY(12px); opacity: 0 } to { transform: none; opacity: 1 } }
+.btn { transition: transform .12s ease, box-shadow .12s ease, background .2s; }
+.btn:active:not(:disabled) { transform: scale(.94); }
+.item { transition: transform .15s ease, box-shadow .15s ease; }
+.item:active { transform: scale(.92); box-shadow: 0 0 0 4px rgba(193, 18, 31, .25); }
+.chat-log .new { animation: slide-in .3s ease both; }
+
+/* end screen */
+#sheet.enter[data-view=ended] .result-hero { animation: es-pop .5s cubic-bezier(.2, 1.4, .4, 1) both; }
+#sheet[data-view=ended] .result-hero h2 { font-size: 26px; line-height: 1.15; }
+#sheet.enter[data-view=ended] .lb .player { animation: slide-in .35s ease both; }
+#sheet[data-view=ended] .lb .player:nth-child(2) { animation-delay: .08s } #sheet[data-view=ended] .lb .player:nth-child(3) { animation-delay: .16s }
+#sheet[data-view=ended] .lb .player:nth-child(4) { animation-delay: .24s } #sheet[data-view=ended] .lb .player:nth-child(n+5) { animation-delay: .32s }
+#sheet[data-view=ended] .lb .rk { font-size: 18px; }
+.end-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0 8px; }
+.end-actions .btn { width: 100%; min-height: 54px; }
+.btn.dark { background: var(--ink, #111); color: #fff; border-color: var(--ink, #111); }
+.end-more { display: block; margin: 4px auto 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .endsplash, .endsplash h1, .endsplash p, .fx *, #sheet .pu-panel, #sheet .section, .chat-log .new, #sheet .lb .player, #sheet .result-hero { animation-duration: .01s !important; animation-delay: 0s !important; }
+  .endsplash { animation: es-life 3.2s linear forwards !important; }
+}
