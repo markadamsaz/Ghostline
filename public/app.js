@@ -2438,6 +2438,24 @@ $('#btn-join').addEventListener('click', () => {
 });
 inCode.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-join').click(); });
 
+// Invite links (?room=CODE): join straight away. Without a saved name, ask for one and join on Enter.
+{
+  const invited = (params.get('room') || '').toUpperCase().replace(/[^A-Z]/g, '');
+  if (invited.length === 4) {
+    inCode.value = invited;
+    if (me.name) {
+      me.name = me.name.slice(0, 16);
+      // browsers only allow audio after a tap, so unlock on the first touch
+      const unlockOnce = () => { unlockAudio(); loadAlarm(); };
+      addEventListener('pointerdown', unlockOnce, { once: true });
+      connect(invited, false);
+    } else {
+      showHomeErr(`You're invited to game ${invited}. Enter your name, then tap Join.`);
+      inName.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-join').click(); });
+    }
+  }
+}
+
 function enterGameUI() {
   $('#home').hidden = true;
   $('#hud').hidden = false;
