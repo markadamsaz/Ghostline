@@ -34,6 +34,15 @@ const ICONS = {
   sprint: '<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v6H4V6h6"/>',
   shrink: '<path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/>',
   strictZone: '<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>',
+  back: '<path d="M15 5l-7 7 7 7"/>',
+  chevR: '<path d="M9 5l7 7-7 7"/>',
+  chevD: '<path d="M5 9l7 7 7-7"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14a6.5 6.5 0 0 1 3.5 6"/>',
+  gamepad: '<path d="M6 7h12a4 4 0 0 1 4 4l-1 6a2.5 2.5 0 0 1-4.4 1.3L15 16H9l-1.6 2.3A2.5 2.5 0 0 1 3 17l-1-6a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3M15.5 12h.01M18 13.5h.01"/>',
+  box: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>',
+  layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+  sliders: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/>',
   crown: '<path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/>',
   caught: '<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>',
   pin: '<path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/>',
@@ -200,7 +209,7 @@ let replay = null;
 let lastStateSent = 0;
 let hostMissingSince = 0;
 
-let shopOpen = false, endMore = false;
+let shopOpen = false, endMore = false, playersOpen = false, rulesOpen = true;
 function resetLocal() {
   L_ = {
     pings: [],             // {id, p, blur, kind, n, t}
@@ -1354,7 +1363,7 @@ function updateTrail() {
   el.hidden = false;
   el.innerHTML = `<span class="tr-a" style="transform:rotate(${Math.round(bearing(myPos.p, best.p) + mapBear)}deg)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 17-7-4-7 4z"/></svg></span><span class="tr-t">Nearest hider · ${band} · ${Math.ceil((L_.trailUntil - now) / 1000)} s</span>`;
 }
-function shopHtml() {
+function shopHtml(card) {
   const p = mine();
   if (!p || !S) return '';
   const bal = (S.wallet || {})[me.id] || 0;
@@ -1368,6 +1377,7 @@ function shopHtml() {
     <div class="section-t" style="margin-top:12px">Badge · ${SHOP.icon.cost} pts</div>
     <div class="row badges">${BADGES.map((b) => `<button class="btn small badge ${p.icon === b ? 'on' : ''}" data-act="buy" data-k="icon" data-opt="${b}" aria-label="${b} badge" ${bal < SHOP.icon.cost || p.icon === b ? 'disabled' : ''}>${ic(b)}</button>`).join('')}</div>
     ${!inRound ? `<p class="hint" style="text-align:left">Picks you buy now wait for a round where you have that role.${saved.length ? ' Saved: ' + saved.join(', ') + '.' : ''}</p>` : ''}` : '';
+  if (card) return `<div class="card shop-box ${shopOpen ? 'open' : ''}"><button class="shop-h card-tap" data-act="toggleShop">${ic('shop')}<span class="ct">Points shop</span><span class="bal mono">${bal} pts</span>${ic(shopOpen ? 'chevD' : 'chevR', 'chev')}</button>${body}</div>`;
   return `<div class="section shop-box"><button class="btn shop-h" data-act="toggleShop">${ic('shop')}Points shop<span class="bal mono">${bal} pts</span><span class="chev">${shopOpen ? '▴' : '▾'}</span></button>${body}</div>`;
 }
 
@@ -1578,15 +1588,21 @@ function onPos(pos) {
   for (const x of fixes) { const k = 1 / (x.acc * x.acc); w += k; lat += x.p[0] * k; lng += x.p[1] * k; }
   setPos(lat / w, lng / w, Math.min(...fixes.map((x) => x.acc)));
 }
-function updateGpsChip() {
-  const el = $('#gps-chip');
-  if (!el) return;
-  if (!myPos) { el.hidden = true; return; }
+function gpsInfo() {
+  if (!myPos) return null;
   const acc = Math.max(myPos.acc, Date.now() - myPos.t > 15000 ? rawAcc || 0 : 0);
-  el.hidden = false;
-  el.className = 'gps-chip ' + (acc > GPS_POOR ? 'bad' : acc > GPS_OK ? 'fair' : 'good');
-  el.textContent = `GPS ±${acc} m`;
-  el.title = acc > GPS_POOR ? 'Weak GPS. Step outside, away from buildings.' : 'Location accuracy';
+  return { cls: acc > GPS_POOR ? 'bad' : acc > GPS_OK ? 'fair' : 'good', text: `GPS ±${acc} m`, title: acc > GPS_POOR ? 'Weak GPS. Step outside, away from buildings.' : 'Location accuracy' };
+}
+function updateGpsChip() {
+  const g = gpsInfo();
+  for (const el of [$('#gps-chip'), ...document.querySelectorAll('.gps-chip.lob')]) {
+    if (!el) continue;
+    const lob = el.classList.contains('lob');
+    if (!g) { if (lob) { el.className = 'gps-chip lob'; el.textContent = 'No GPS yet'; } else el.hidden = true; continue; }
+    el.hidden = false;
+    el.className = 'gps-chip ' + g.cls + (lob ? ' lob' : '');
+    el.textContent = g.text; el.title = g.title;
+  }
 }
 function setPos(lat, lng, acc = 10) {
   const first = !myPos;
@@ -1852,6 +1868,8 @@ function renderMapView() {
     <p class="note" style="margin:0 0 10px">${zoneInfo}</p>${zoneTools}`, 'map');
 }
 function setMapBtn() {
+  document.body.classList.toggle('lobby', !!S && S.phase === 'lobby');
+  document.body.classList.toggle('lobby-full', !!S && S.phase === 'lobby' && !mapView && !chatOpen);
   const b = $('#btn-map'); if (!b) return;
   const on = mapView && !chatOpen;
   b.hidden = !S || S.phase !== 'lobby';
@@ -1867,6 +1885,26 @@ function setMapView(on) {
   if (on && S && S.zone && !zoneDraft) requestAnimationFrame(() => fitZone(S.zone));
 }
 
+const CORE = [
+  ['classic', 'hide', 'Classic', 'Caught hiders are out'],
+  ['infection', 'infection', 'Infection', 'Caught hiders join the seekers'],
+  ['jail', 'jail', 'Jailbreak', 'Caught hiders go to jail and can be freed'],
+  ['fugitive', 'fugitive', 'Fugitive', 'One runner, everyone else hunts'],
+];
+const OTHER_MODES = ['missions', 'capture', 'treasure', 'duel', 'wire', 'potato', 'sprint'];
+const SHORT = { capture: 'Capture points', treasure: 'Treasure drops', duel: 'Showdown', wire: 'Live wire', potato: 'Hot potato', sprint: 'Final sprint', starter: 'Starter power-ups', drops: 'Supply drops', shrink: 'Shrinking zone', strictZone: 'Strict zone', missions: 'Missions' };
+const coreOf = (s) => (s.fugitive ? 'fugitive' : s.jail ? 'jail' : s.infection ? 'infection' : 'classic');
+function modeInfoModal() {
+  const row = (icn, t, d) => `<div class="mi-row">${ic(icn)}<div><b>${t}</b><span>${d}</span></div></div>`;
+  const desc = Object.fromEntries(MODES.map(([k, , d]) => [k, d]));
+  modal(`<h3>Game modes</h3><div class="mi-list">
+    <div class="mi-t">Core mode · pick one</div>${CORE.map(([k, icn, t, d]) => row(icn, t, k === 'classic' ? d : desc[k])).join('')}
+    <div class="mi-t">Other modes · mix and match</div>${OTHER_MODES.map((k) => row(k, SHORT[k], desc[k])).join('')}
+    <div class="mi-t">Power-ups &amp; events</div>${['starter', 'drops'].map((k) => row(k, SHORT[k], desc[k])).join('')}
+    <div class="mi-t">Zone rules</div>${['shrink', 'strictZone'].map((k) => row(k, SHORT[k], desc[k])).join('')}
+  </div><button class="btn dark" data-act="closeModal" style="width:100%;margin-top:14px">Got it</button>`);
+}
+
 function renderLobby() {
   const host = isHost();
   const s = S.settings;
@@ -1874,21 +1912,55 @@ function renderLobby() {
   const online = ids.filter((id) => peers.has(id));
   const canStart = host && S.zone && online.length >= 2;
   const { zoneInfo, zoneTools } = zonePanel(host, false);
-  // the host gets controls; everyone else gets a plain-English summary of the rules
-  const rules = host ? `<div class="settings">
-    <label class="set" style="grid-column:1/-1">How tags work${selectHtml('tagMode', s.tagMode, false)}</label>
-    <label class="set">Hide time${selectHtml('hideSec', s.hideSec, false)}</label>
-    <label class="set">Round length${selectHtml('huntSec', s.huntSec, false)}</label>
-    <label class="set">Ping every${selectHtml('pingSec', s.pingSec, false)}</label>
-    <label class="set">Ping fuzz${selectHtml('blurM', s.blurM, false)}</label>
-    ${s.fugitive ? '' : `<label class="set">Seekers${selectHtml('seekers', s.seekers, false)}</label>`}
-    ${s.tagMode === 'gps' ? `<label class="set">Tag range${selectHtml('tagRadiusM', s.tagRadiusM, false)}</label>` : ''}
-    ${s.duel ? `<label class="set">Showdowns${selectHtml('duelSec', s.duelSec, false)}</label>` : ''}
-    ${s.wire ? `<label class="set">Live Wire fuse${selectHtml('wireSec', s.wireSec, false)}</label>` : ''}
-    <label class="set" style="grid-column:1/-1">Seeker alarm (plays on hiders' phones)${selectHtml('alarmM', s.alarmM ?? 0, false)}</label>
-    ${s.shrink ? `<label class="set">Zone${selectHtml('shrinkStyle', s.shrinkStyle || 'steps', false)}</label><label class="set">Final zone${selectHtml('shrinkTo', s.shrinkTo, false)}</label>` : ''}
-    ${s.drops ? `<label class="set">Supply drops${selectHtml('dropSec', s.dropSec, false)}</label>` : ''}
-    ${s.drops || s.treasure ? `<label class="set">Drop size${selectHtml('dropM', s.dropM || 10, false)}</label>` : ''}
+  const g = gpsInfo();
+  const n = ids.length;
+
+  // 1. summary
+  const summary = `<div class="card sum">
+    <div class="sum-c sum-st"><span class="sum-l">Lobby</span><span class="gps-chip lob ${g ? g.cls : ''}">${g ? g.text : 'No GPS yet'}</span></div>
+    <div class="sum-c sum-code"><span class="sum-l">Game code</span><span class="code-big mono">${esc(S.code)}</span></div>
+    <div class="sum-c sum-n">${ic('users')}<span><b>${n}</b> player${n === 1 ? '' : 's'}<br>in lobby</span></div>
+    <div class="sum-btns"><button class="sq" data-act="share">${ic('share')}<span>Invite</span></button><button class="sq" data-act="qr">${ic('qr')}<span>QR</span></button></div>
+  </div>`;
+
+  // 2. players + shop
+  const pRow = (id, full) => playerRow(id, full ? `${noLoc(id) ? `<span class="noloc">${ic('pin')}No location</span>` : ''}<span class="meta">${S.totals[id] ? S.totals[id] + ' pts' : ''}</span>${host && id !== me.id ? `<button class="x" data-act="kick" data-id="${id}" aria-label="Remove ${esc(S.players[id].name)}">${ic('close')}</button>` : ''}` : '');
+  const shownIds = playersOpen ? ids : ids.slice(0, 2);
+  const players = `<div class="card pl-card ${playersOpen ? 'open' : ''}">
+    <button class="card-tap" data-act="togglePlayers">${ic('users')}<span class="ct">Players</span><span class="cnt">${online.length}</span>${ic(playersOpen ? 'chevD' : 'chevR', 'chev')}</button>
+    <div class="players">${shownIds.map((id) => pRow(id, playersOpen)).join('')}${!playersOpen && n > 2 ? `<button class="more" data-act="togglePlayers">+${n - 2} more</button>` : ''}</div>
+  </div>`;
+  const duo = `<div class="duo ${playersOpen || shopOpen ? 'open' : ''}">${players}${shopHtml(true)}</div>`;
+
+  // 3. zone
+  const zone = `<div class="card"><div class="card-h">${ic('locate')}<span class="ct">Play zone</span></div>${S.zone || !host ? `<p class="card-note">${zoneInfo}</p>` : ''}${zoneTools}</div>`;
+
+  // 4. modes
+  const tog = (k, cls) => `<label class="tg ${cls} ${s[k] ? 'on' : ''}"><span class="mi">${ic(k)}</span><span class="tn">${SHORT[k]}</span><span class="sw"><input type="checkbox" data-set="${k}" ${s[k] ? 'checked' : ''} aria-label="${SHORT[k]}"><span></span></span></label>`;
+  const chip = (k) => `<span class="mchip">${ic(k)}${SHORT[k]}</span>`;
+  const chips = (keys) => { const on = keys.filter((k) => s[k]); return on.length ? `<div class="mchips">${on.map(chip).join('')}</div>` : '<p class="card-note" style="margin:0">None</p>'; };
+  const core = coreOf(s);
+  const coreHtml = (host ? CORE : CORE.filter(([k]) => k === core)).map(([k, icn, t, d]) => `<button class="core ${k === core ? 'on' : ''}" ${host ? `data-act="core" data-k="${k}"` : 'disabled'} aria-pressed="${k === core}"><span class="mi">${ic(icn)}</span><span class="mt"><b>${t}</b><small>${d}</small></span>${k === core ? `<span class="ck">${ic('check')}</span>` : ''}</button>`).join('');
+  const modes = `<div class="card"><div class="card-h">${ic('gamepad')}<span class="ct">Game modes</span><button class="ib" data-act="modeInfo" aria-label="What the modes do">${ic('info')}</button></div>
+    <div class="sub-t">Core mode</div><div class="cores ${host ? '' : 'one'}">${coreHtml}</div>
+    <div class="sub-t">Other modes</div>${host ? `<div class="tg3">${OTHER_MODES.map((k) => tog(k, 'sm')).join('')}</div>` : chips(OTHER_MODES)}
+  </div>`;
+  const pu = `<div class="card"><div class="card-h">${ic('box')}<span class="ct">Power-ups &amp; events</span></div>${host ? `<div class="tg2">${tog('starter', 'lg')}${tog('drops', 'lg')}</div>` : chips(['starter', 'drops'])}</div>`;
+  const zr = `<div class="card"><div class="card-h">${ic('layers')}<span class="ct">Zone rules</span></div>${host ? `<div class="tg2">${tog('shrink', 'lg')}${tog('strictZone', 'lg')}</div>` : chips(['shrink', 'strictZone'])}</div>`;
+
+  // 5. rules
+  const set = (lbl, key, val, cls = '') => `<label class="st ${cls}"><span>${lbl}</span>${selectHtml(key, val, false)}</label>`;
+  const rulesBody = host ? `<div class="st-grid">
+    ${set('How tags work', 'tagMode', s.tagMode, 's4')}
+    ${set('Hide time', 'hideSec', s.hideSec)}${set('Round length', 'huntSec', s.huntSec)}${set('Ping every', 'pingSec', s.pingSec)}${set('Ping fuzz', 'blurM', s.blurM)}
+    ${s.fugitive ? '' : set('Seekers', 'seekers', s.seekers)}
+    ${s.tagMode === 'gps' ? set('Tag range', 'tagRadiusM', s.tagRadiusM) : ''}
+    ${set("Seeker alarm (hiders' phones)", 'alarmM', s.alarmM ?? 0, 's2')}
+    ${s.shrink ? set('Zone', 'shrinkStyle', s.shrinkStyle || 'steps', 's2') + set('Final zone', 'shrinkTo', s.shrinkTo, 's2') : ''}
+    ${s.drops ? set('Supply drops', 'dropSec', s.dropSec, 's2') : ''}
+    ${s.drops || s.treasure ? set('Drop size', 'dropM', s.dropM || 10) : ''}
+    ${s.duel ? set('Showdowns', 'duelSec', s.duelSec, 's2') : ''}
+    ${s.wire ? set('Live wire fuse', 'wireSec', s.wireSec) : ''}
   </div>` : `<div class="mode-lines" style="margin:0">
     <div>${ic('clock')}<span class="txt"><b>${optLabel('hideSec', s.hideSec)}</b> to hide, then a <b>${optLabel('huntSec', s.huntSec)}</b> hunt</span></div>
     <div>${ic('pin')}<span class="txt">Hiders ping every <b>${optLabel('pingSec', s.pingSec)}</b>${+s.blurM ? `, fuzzed by ${optLabel('blurM', s.blurM)}` : ', exact spot'}</span></div>
@@ -1896,27 +1968,19 @@ function renderLobby() {
     <div>${ic('eye')}<span class="txt">${s.fugitive ? 'One runner, everyone else seeks' : `<b>${s.seekers}</b> seeker${s.seekers > 1 ? 's' : ''} to start`}</span></div>
     ${+s.alarmM ? `<div>${ic('sonar')}<span class="txt">Hiders' phones play an alarm when a seeker is within <b>${s.alarmM} m</b>. It gets louder the closer they get</span></div>` : ''}
   </div>`;
-  const shown = host ? MODES : MODES.filter(([k]) => s[k]);
-  const modes = shown.length ? `<div class="modes">${shown.map(([k, t, d]) => `<label class="mode ${s[k] ? 'on' : ''} ${host ? '' : 'locked'}"><span class="mi">${ic(k)}</span><span class="mt"><b>${t}</b><small>${d}</small></span>${host ? `<span class="sw"><input type="checkbox" data-set="${k}" ${s[k] ? 'checked' : ''} aria-label="${t}"><span></span></span>` : ''}</label>`).join('')}</div>`
-    : '<p class="note" style="margin:0">Classic hide and seek. No extra modes.</p>';
-  setSheet(`
-    <div class="sheet-h"><div><div class="section-t" style="margin:0">Game code</div><div class="code-big mono">${esc(S.code)}</div></div>
-      <div class="row"><button class="btn small" data-act="share">${ic('share')}Invite</button><button class="btn small" data-act="qr">${ic('qr')}QR</button></div></div>
+  const rules = `<div class="card"><button class="card-tap" data-act="toggleRules">${ic('sliders')}<span class="ct">Rules &amp; settings${host ? '' : ' <small>· set by the host</small>'}</span>${ic('chevD', 'chev' + (rulesOpen ? ' up' : ''))}</button>${rulesOpen ? rulesBody : ''}</div>`;
+
+  const noLocIds = online.filter(noLoc);
+  setSheet(`<div class="lob">
     ${geoNote()}
-    <div class="section"><div class="section-t">Players · ${online.length} here</div><div class="players">
-      ${ids.map((id) => playerRow(id, `${noLoc(id) ? `<span class="noloc">${ic('pin')}No location</span>` : ''}<span class="meta">${S.totals[id] ? S.totals[id] + ' pts' : ''}</span>${host && id !== me.id ? `<button class="x" data-act="kick" data-id="${id}" aria-label="Remove ${esc(S.players[id].name)}">${ic('close')}</button>` : ''}`)).join('')}
-    </div></div>
-    ${shopHtml()}
-    <div class="section"><div class="section-t">Play zone</div><p class="note" style="margin:0 0 10px">${zoneInfo}</p>${zoneTools}</div>
-    <div class="section"><div class="section-t">${host ? 'Game modes · mix and match' : 'Game modes this round'}</div>${modes}</div>
-    <div class="section"><div class="section-t">Rules${host ? '' : ' · set by the host'}</div>${rules}</div>
-    <div class="big-actions">
-      <button class="btn ghost" data-act="leave">Leave</button>
-      ${online.filter(noLoc).length ? `<p class="note warn">${ic('pin')}<span>${online.filter(noLoc).map((id) => esc(S.players[id].name)).join(', ')} ${online.filter(noLoc).length > 1 ? "haven't" : "hasn't"} shared location. They can tap the gear button at the top.</span></p>` : ''}
-      ${host ? `<button class="btn primary big" data-act="start" ${canStart ? '' : 'disabled'}>Start round</button>` : `<button class="btn big" disabled>Waiting for host</button>`}
+    ${summary}${duo}${zone}${modes}${pu}${zr}${rules}
+    ${noLocIds.length ? `<p class="note warn">${ic('pin')}<span>${noLocIds.map((id) => esc(S.players[id].name)).join(', ')} ${noLocIds.length > 1 ? "haven't" : "hasn't"} shared location. They can tap the settings button at the top.</span></p>` : ''}
+    <div class="lob-foot">
+      ${host && !canStart ? `<p class="hint">${!S.zone ? 'Set a play zone to start.' : 'Need at least 2 players.'}</p>` : ''}
+      <div class="lob-btns"><button class="btn big lv" data-act="leave">Leave</button>
+      ${host ? `<button class="btn primary big" data-act="start" ${canStart ? '' : 'disabled'}>Start round</button>` : `<button class="btn big" disabled>Waiting for host</button>`}</div>
     </div>
-    ${host && !canStart ? `<p class="hint">${!S.zone ? 'Set a play zone to start.' : 'Need at least 2 players.'}</p>` : ''}
-  `, 'lobby');
+  </div>`, 'lobby');
 }
 
 function itemsHtml(role) {
@@ -2188,6 +2252,10 @@ function act(a, el) {
   switch (a) {
     case 'toggleSheet': sheetCollapsed = !sheetCollapsed; sheet.classList.toggle('collapsed', sheetCollapsed); document.documentElement.style.setProperty('--sheet-h', (window.innerWidth < 720 ? sheet.offsetHeight : 0) + 'px'); break;
     case 'allowGeo': retryGeo(true); break;
+    case 'togglePlayers': playersOpen = !playersOpen; renderSheet(); break;
+    case 'toggleRules': rulesOpen = !rulesOpen; renderSheet(); break;
+    case 'modeInfo': modeInfoModal(); break;
+    case 'core': { const k = el.dataset.k; if (isHost()) hostApply((st) => { st.settings.infection = k === 'infection'; st.settings.jail = k === 'jail'; st.settings.fugitive = k === 'fugitive'; }); break; }
     case 'togglePU': L_.showPU = !L_.showPU; if (L_.showPU) L_.showMore = L_.showShop = false; renderSheet(); break;
     case 'toggleMore': L_.showMore = !L_.showMore; if (L_.showMore) L_.showPU = L_.showShop = false; renderSheet(); break;
     case 'endMore': endMore = !endMore; renderSheet(); break;
@@ -2408,6 +2476,7 @@ $('#btn-fit').addEventListener('click', () => {
   if (S.phase !== 'lobby' && (L_.showPU || L_.showMore || sheetCollapsed === false)) { L_.showPU = false; L_.showMore = false; renderSheet(); }
   map.invalidateSize(); fitZone(S.zone);
 });
+$('#btn-back').addEventListener('click', () => act('leave'));
 $('#btn-gear').addEventListener('click', () => { unlockAudio(); settingsModal(); });
 $('#btn-north').addEventListener('click', () => setBearing(mapBear % 90 === 0 ? mapBear + 90 : 0));
 $('#btn-locate').addEventListener('click', () => { if (myPos) map.setView(myPos.p, Math.max(map.getZoom(), 17)); else toast('No location yet'); });
