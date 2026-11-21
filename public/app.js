@@ -114,7 +114,8 @@ const TREASURE_PTS = 30, WIRE_PASS_M = 15, DUEL_PTS = 25;
 const DUEL_GAMES = ['rps', 'tap', 'react', 'memory'];
 const DUEL_NAMES = { rps: 'Rock paper scissors', tap: 'Tap race', react: 'Reaction test', memory: 'Memory' };
 const MISS_PTS = 10; // a GPS tag that reaches nobody costs the seeker this much
-const REACH_M = 20; // how close you have to get to a drop, flag, jail, mission or extraction point
+const REACH_M = 20; // how close you have to get to a flag, jail, mission or extraction point
+const dropR = () => (S && S.settings.dropM) || 10; // supply drops and treasure: the host picks how small
 // game modes the host can mix and match
 const MODES = [
   ['infection', 'Infection', 'Caught hiders join the seekers'],
@@ -145,6 +146,7 @@ const OPTS = {
   wireSec: [[60, '1 min'], [120, '2 min'], [180, '3 min'], [300, '5 min'], [600, '10 min']],
   alarmM: [[0, 'Off'], [20, 'Within 20 m'], [30, 'Within 30 m'], [50, 'Within 50 m'], [75, 'Within 75 m'], [100, 'Within 100 m'], [150, 'Within 150 m'], [200, 'Within 200 m']],
   seekers: [[1, '1'], [2, '2'], [3, '3']],
+  dropM: [[5, '5 m'], [10, '10 m'], [15, '15 m'], [20, '20 m'], [30, '30 m']],
   dropSec: [[60, 'Every 1 min'], [120, 'Every 2 min'], [180, 'Every 3 min'], [300, 'Every 5 min'], [600, 'Every 10 min']],
   shrinkStyle: [['smooth', 'Closes in smoothly'], ['steps', 'Jumps in at each ping']],
   shrinkTo: [[0.6, 'Down to 60%'], [0.4, 'Down to 40%'], [0.2, 'Down to 20%']],
@@ -157,7 +159,7 @@ const TAG_HINT = {
 };
 const DEFAULT_SETTINGS = {
   hideSec: 120, huntSec: 1200, pingSec: 300, blurM: 25, tagRadiusM: 20, seekers: 1,
-  tagMode: 'gps', infection: true, fugitive: false, jail: false, starter: true, drops: true, dropSec: 180,
+  tagMode: 'gps', infection: true, fugitive: false, jail: false, starter: true, drops: true, dropSec: 180, dropM: 10,
   missions: false, capture: false, potato: false, sprint: false, treasure: false, duel: false, duelSec: 180, wire: false, wireSec: 180,
   shrink: true, shrinkStyle: 'smooth', shrinkTo: 0.4, strictZone: true, graceSec: 15,
   alarmM: 50, // seeker alarm: hiders hear "wanna sprite cranberry?" on repeat when a seeker is this close (0 = off)
@@ -606,11 +608,11 @@ function handle(m, self) {
       if (!isHost() || S.phase !== 'hunting') return;
       const q = S.players[m.from];
       if (!q || !Array.isArray(d.p) || !d.p.every(Number.isFinite)) return;
-      const ok = (pt) => pt && G.dist(d.p, pt) <= REACH_M + Math.min(10, (+d.acc || 0) / 2);
+      const ok = (pt, r = REACH_M) => pt && G.dist(d.p, pt) <= r + Math.min(10, (+d.acc || 0) / 2);
       const now = Date.now();
       if (m.t === 'claim') {
         const dr = (S.drops || []).find((x) => x.id === d.id && !x.claimedBy);
-        if (!dr || !ok(dr.p) || !(q.role === 'seeker' || alive(q))) return;
+        if (!dr || !ok(dr.p, dropR()) || !(q.role === 'seeker' || alive(q))) return;
         hostApply((s) => {
           const x = s.drops.find((y) => y.id === d.id);
           if (!x || x.claimedBy) return;
@@ -655,7 +657,7 @@ function handle(m, self) {
         });
       }
       if (m.t === 'treasure') {
-        if (!S.treasure || S.treasure.id !== d.id || q.role !== 'hider' || !alive(q) || !ok(S.treasure.p)) return;
+        if (!S.treasure || S.treasure.id !== d.id || q.role !== 'hider' || !alive(q) || !ok(S.treasure.p, dropR())) return;
         hostApply((s) => { const w = s.players[m.from]; w.bonus = (w.bonus || 0) + TREASURE_PTS; credit(s, m.from, TREASURE_PTS); s.events.push({ id: evId(), k: 'treasureGot', who: m.from, p: s.treasure.p, t: now }); s.treasure = null; s.nextTreasureAt = now + 90000; });
       }
       if (m.t === 'potato') {
@@ -1303,18 +1305,18 @@ function clientTick() {
   if (Math.floor(now / 1000) !== clientTick.lastSec) { clientTick.lastSec = Math.floor(now / 1000); renderMarks(); if (S.phase === 'hunting' || S.phase === 'hiding') renderDynamicSheet(); }
 }
 
-function near(pt) { return myPos && pt && G.dist(myPos.p, pt) <= REACH_M + Math.min(10, (myPos.acc || 0) / 2); }
+function near(pt, r = REACH_M) { return myPos && pt && G.dist(myPos.p, pt) <= r + Math.min(10, (myPos.acc || 0) / 2); }
 function sendOnce(key, t, d, now, gap = 4000) { if ((L_.sentAt[key] || 0) > now - gap) return; L_.sentAt[key] = now; send(t, { ...d, p: myPos.p, acc: myPos.acc }); }
 function reachThings(p, now) {
   if (!myPos) return;
   const free = p.role === 'hider' && alive(p);
-  for (const x of S.drops || []) if (!x.claimedBy && (free || p.role === 'seeker') && near(x.p)) sendOnce('drop' + x.id, 'claim', { id: x.id }, now);
+  for (const x of S.drops || []) if (!x.claimedBy && (free || p.role === 'seeker') && near(x.p, dropR())) sendOnce('drop' + x.id, 'claim', { id: x.id }, now);
   if (!free) {
     if (p.role === 'hider' && p.caughtAt && S.jail) L_.capStart = {};
     return;
   }
   if (p.mission && near(p.mission.p)) sendOnce('m' + p.mission.id, 'mission', { id: p.mission.id }, now);
-  if (S.treasure && near(S.treasure.p)) sendOnce('tr' + S.treasure.id, 'treasure', { id: S.treasure.id }, now);
+  if (S.treasure && near(S.treasure.p, dropR())) sendOnce('tr' + S.treasure.id, 'treasure', { id: S.treasure.id }, now);
   if (S.potato && !S.potato.holder && near(S.potato.p)) sendOnce('potato' + S.potato.p.join(), 'potato', {}, now);
   if (S.sprint && S.sprint.p && near(S.sprint.p)) sendOnce('extract', 'extract', {}, now);
   if (S.jail && near(S.jail.p) && now >= (S.jailCooldownUntil || 0) && Object.values(S.players).some((x) => x.role === 'hider' && x.caughtAt)) sendOnce('breakout', 'breakout', {}, now, 6000);
@@ -1591,13 +1593,13 @@ function renderMarks() {
   const blind = iSeek && S.phase === 'hunting' && now < (S.blackoutUntil || 0);
   document.body.classList.toggle('blackout', !!blind);
   const pin = (pt, html, z = 700, size = 34) => L.marker(pt, { icon: L.divIcon({ className: '', html, iconSize: [size, size], iconAnchor: [size / 2, size / 2] }), zIndexOffset: z, interactive: false }).addTo(layers.marks);
-  const ring = (pt, color) => L.circle(pt, { radius: REACH_M, color, weight: 2, dashArray: '4 4', fillOpacity: .1, interactive: false }).addTo(layers.marks);
+  const ring = (pt, color, r = REACH_M) => L.circle(pt, { radius: r, color, weight: 2, dashArray: '4 4', fillOpacity: .1, interactive: false }).addTo(layers.marks);
   const RED = ROLE_INK.seeker, INK = ROLE_INK.hider;
   if (S.phase === 'hunting') {
-    for (const x of S.drops || []) if (!x.claimedBy) { ring(x.p, RED); pin(x.p, `<div class="map-pin solid bob">${ic('drops')}</div>`); }
+    for (const x of S.drops || []) if (!x.claimedBy) { ring(x.p, RED, dropR()); pin(x.p, `<div class="map-pin solid bob">${ic('drops')}</div>`, 700, 28); }
     for (const f of S.flags || []) { ring(f.p, f.by ? INK : RED); pin(f.p, `<div class="map-pin ${f.by ? 'dark' : 'red'}">${ic('capture')}</div>`); }
     if (S.jail) { ring(S.jail.p, INK); pin(S.jail.p, `<div class="map-pin dark">${ic('jail')}</div>`); }
-    if (S.treasure) { ring(S.treasure.p, RED); pin(S.treasure.p, `<div class="map-pin solid bob">${ic('treasure')}</div>`); }
+    if (S.treasure) { ring(S.treasure.p, RED, dropR()); pin(S.treasure.p, `<div class="map-pin solid bob">${ic('treasure')}</div>`, 700, 28); }
     if (S.potato && !S.potato.holder) { ring(S.potato.p, RED); pin(S.potato.p, `<div class="map-pin red bob">${ic('potato')}</div>`); }
     if (S.sprint && S.sprint.p) { ring(S.sprint.p, RED); pin(S.sprint.p, `<div class="map-pin solid bob">${ic('sprint')}</div>`, 800); }
     if (p && p.mission && alive(p)) { ring(p.mission.p, INK); pin(p.mission.p, `<div class="map-pin">${ic('missions')}</div>`); }
@@ -1646,6 +1648,7 @@ function setSheet(html, view = '') {
   sheet.innerHTML = `<div class="grab" data-act="toggleSheet" role="button" aria-label="Expand or collapse"></div>` + html;
   sheet.hidden = false;
   sheet.classList.toggle('collapsed', sheetCollapsed);
+  sheet.classList.toggle('play', view === 'play');
   requestAnimationFrame(() => document.documentElement.style.setProperty('--sheet-h', (window.innerWidth < 720 ? sheet.offsetHeight : 0) + 'px'));
 }
 function selectHtml(key, val, disabled) {
@@ -1738,7 +1741,8 @@ function renderLobby() {
     ${s.wire ? `<label class="set">Live Wire fuse${selectHtml('wireSec', s.wireSec, false)}</label>` : ''}
     <label class="set" style="grid-column:1/-1">Seeker alarm (plays on hiders' phones)${selectHtml('alarmM', s.alarmM ?? 0, false)}</label>
     ${s.shrink ? `<label class="set">Zone${selectHtml('shrinkStyle', s.shrinkStyle || 'steps', false)}</label><label class="set">Final zone${selectHtml('shrinkTo', s.shrinkTo, false)}</label>` : ''}
-    ${s.drops ? `<label class="set" style="grid-column:1/-1">Supply drops${selectHtml('dropSec', s.dropSec, false)}</label>` : ''}
+    ${s.drops ? `<label class="set">Supply drops${selectHtml('dropSec', s.dropSec, false)}</label>` : ''}
+    ${s.drops || s.treasure ? `<label class="set">Drop size${selectHtml('dropM', s.dropM || 10, false)}</label>` : ''}
   </div>` : `<div class="mode-lines" style="margin:0">
     <div>${ic('clock')}<span class="txt"><b>${optLabel('hideSec', s.hideSec)}</b> to hide, then a <b>${optLabel('huntSec', s.huntSec)}</b> hunt</span></div>
     <div>${ic('pin')}<span class="txt">Hiders ping every <b>${optLabel('pingSec', s.pingSec)}</b>${+s.blurM ? `, fuzzed by ${optLabel('blurM', s.blurM)}` : ', exact spot'}</span></div>
@@ -1822,27 +1826,29 @@ function renderPlaying() {
   const hiders = Object.entries(S.players).filter(([, x]) => x.startRole === 'hider');
   const left = hiders.filter(([, x]) => !x.caughtAt && !x.extracted).length;
   const status = hiders.map(([, x]) => `<span class="chip ${x.caughtAt ? 'out' : ''}">${avatar(x, x.caughtAt ? 'out' : 'hider')}${esc(x.name)}</span>`).join('');
-  let body = '';
-  if (p.role === 'seeker') {
-    const tm = S.settings.tagMode || 'gps';
-    body = `<div id="dyn"></div>
-      <button class="tag-btn" data-act="${tm === 'photo' ? 'snap' : 'tag'}" ${S.phase === 'hunting' && (myPos || tm !== 'gps') ? '' : 'disabled'}>${ic(tm === 'photo' ? 'camera' : 'tag')}${tm === 'photo' ? 'SNAP TAG' : 'TAG'}</button>
-      <input type="file" id="snap-in" accept="image/*" capture="environment" hidden>
-      <p class="hint">${TAG_HINT[tm](S.settings)}</p>
-      ${itemsHtml('seeker')}`;
-  } else {
-    body = `<div id="dyn"></div>${alive(p) ? itemsHtml('hider') : ''}
-      ${L_.placingDecoy ? `<p class="hint" style="color:var(--red);font-weight:700">Tap the map inside the zone to place your decoy.</p>` : ''}
-      ${alive(p) ? '<div class="big-actions"><button class="btn small" data-act="selfCaught">I got caught</button></div>' : ''}`;
-  }
-  setSheet(`
-    ${goalCard(p)}
+  // play screen stays small so the map shows: stats, TAG, and buttons that open power-ups and the rest
+  const role = p.role === 'seeker' ? 'seeker' : 'hider';
+  const inv = p.inv || {}, nPU = Object.keys(ITEM_INFO).filter((k) => ITEM_INFO[k].role === role && (inv[k] || 0) > 0).reduce((a, k) => a + inv[k], 0);
+  const canPU = p.role === 'seeker' || alive(p);
+  const tm = S.settings.tagMode || 'gps';
+  const row = `<div class="play-row">
+    ${canPU ? `<button class="btn small pu-btn ${L_.showPU ? 'on' : ''}" data-act="togglePU" aria-expanded="${!!L_.showPU}">${ic('bolt')}Power-ups${nPU ? ` <b class="pu-n">${nPU}</b>` : ''}</button>` : ''}
+    ${p.role === 'hider' && alive(p) ? '<button class="btn small" data-act="selfCaught">I got caught</button>' : ''}
+    <button class="btn small ghost" data-act="toggleMore" aria-expanded="${!!L_.showMore}">${L_.showMore ? 'Less' : 'More'}</button></div>`;
+  const tagBtn = p.role === 'seeker' ? `<button class="tag-btn" data-act="${tm === 'photo' ? 'snap' : 'tag'}" ${S.phase === 'hunting' && (myPos || tm !== 'gps') ? '' : 'disabled'}>${ic(tm === 'photo' ? 'camera' : 'tag')}${tm === 'photo' ? 'SNAP TAG' : 'TAG'}</button>
+      <input type="file" id="snap-in" accept="image/*" capture="environment" hidden>` : '';
+  setSheet(`<div class="play-compact">
     ${geoNote()}
-    ${body}
+    <div id="dyn"></div>
+    ${tagBtn}
+    ${L_.placingDecoy ? `<p class="hint" style="color:var(--red);font-weight:700">Tap the map inside the zone to place your decoy.</p>` : ''}
+    ${row}
+    ${L_.showPU && canPU ? `<div class="pu-panel">${itemsHtml(role) || '<p class="hint" style="text-align:left;margin:0">No power-ups in this game.</p>'}</div>` : ''}
+    ${L_.showMore ? `${goalCard(p)}${p.role === 'seeker' ? `<p class="hint">${TAG_HINT[tm](S.settings)}</p>` : ''}
     ${shopHtml()}
     ${hiders.length ? `<div class="section"><div class="section-t">Hiders · ${left} left</div><div class="hiders-row">${status}</div></div>` : ''}
-    ${host ? `<div class="big-actions"><button class="btn small ghost" data-act="ruleCatch">Rule a catch</button><button class="btn small ghost" data-act="endNow">End round</button></div>` : ''}
-  `, 'play');
+    ${host ? `<div class="big-actions"><button class="btn small ghost" data-act="ruleCatch">Rule a catch</button><button class="btn small ghost" data-act="endNow">End round</button></div>` : ''}` : ''}
+  </div>  `, 'play');
   renderDynamicSheet();
 }
 
@@ -2003,6 +2009,8 @@ function act(a, el) {
   switch (a) {
     case 'toggleSheet': sheetCollapsed = !sheetCollapsed; sheet.classList.toggle('collapsed', sheetCollapsed); document.documentElement.style.setProperty('--sheet-h', (window.innerWidth < 720 ? sheet.offsetHeight : 0) + 'px'); break;
     case 'allowGeo': retryGeo(true); break;
+    case 'togglePU': L_.showPU = !L_.showPU; if (L_.showPU) L_.showMore = false; renderSheet(); break;
+    case 'toggleMore': L_.showMore = !L_.showMore; if (L_.showMore) L_.showPU = false; renderSheet(); break;
     case 'leave': if (!S || S.phase === 'lobby' || S.phase === 'ended' || confirm('Leave this game?')) leave(); break;
     case 'share': {
       const url = inviteUrl();
@@ -2209,7 +2217,11 @@ function drawDraft() {
   }
 }
 
-$('#btn-fit').addEventListener('click', () => { if (S && S.zone) fitZone(S.zone); else toast('No play area yet'); });
+$('#btn-fit').addEventListener('click', () => {
+  if (!S || !S.zone) { toast('No play area yet'); return; }
+  if (S.phase !== 'lobby' && (L_.showPU || L_.showMore || sheetCollapsed === false)) { L_.showPU = false; L_.showMore = false; renderSheet(); }
+  map.invalidateSize(); fitZone(S.zone);
+});
 $('#btn-locate').addEventListener('click', () => { if (myPos) map.setView(myPos.p, Math.max(map.getZoom(), 17)); else toast('No location yet'); });
 $('#btn-chat').addEventListener('click', () => { chatOpen = !chatOpen; unread = false; $('#chat-dot').hidden = true; if (chatOpen) renderChat(); else renderSheet(); setMapBtn(); });
 $('#btn-map').addEventListener('click', () => setMapView(!(mapView && !chatOpen)));

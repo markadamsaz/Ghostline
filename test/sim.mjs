@@ -220,6 +220,12 @@ await setPos(seeker, off(152, 104)); // ~5 m from hider 0
 await sleep(300);
 if (SHOTS) await seeker.page.screenshot({ path: SHOTS + '/3-seeker-hunt.png' });
 if (SHOTS) await hiders[1].page.screenshot({ path: SHOTS + '/4-hider-hunt.png' });
+ok(await hiders[1].page.evaluate(() => document.querySelector('#sheet').offsetHeight <= innerHeight * 0.5), 'during the hunt the map gets most of the screen');
+await hiders[1].page.click('[data-act="togglePU"]');
+ok(await until(() => hiders[1].page.evaluate(() => !!document.querySelector('#sheet .pu-panel .items [data-act="item"]')), 4000, 'pu'), 'the Power-ups button opens your power-ups');
+if (SHOTS) await hiders[1].page.screenshot({ path: SHOTS + '/4b-hider-powerups.png' });
+await hiders[1].page.click('[data-act="togglePU"]');
+ok(await until(() => hiders[1].page.evaluate(() => !document.querySelector('#sheet .pu-panel')), 4000, 'pu2'), 'and tapping it again closes them');
 await G(seeker, () => window.__gl.act('tag'));
 ok(await until(async () => !!(await state(host)).players[hiders[0].pid].caughtAt, 5000, 'tag'), `${seeker.name} tags ${hiders[0].name} from 5 m`);
 st = await state(host);
@@ -394,6 +400,7 @@ ok(+cd >= 10 && +cd <= 15, 'the alert counts down from 15 (' + cd + ' s left aft
 ok(await until(async () => (await state(host)).events.some((e) => e.k === 'catch' && e.who === A.pid && e.how === 'zone'), 20000, 'dq'), 'out of the zone for 15 s gets you knocked out');
 
 // end the round from the host
+await host.page.click('[data-act="toggleMore"]');
 host.page.once('dialog', (d) => d.accept());
 await host.page.click('[data-act="endNow"]');
 ok(await until(async () => (await state(host)).phase === 'ended', 5000, 'end2'), 'host can end the round');
