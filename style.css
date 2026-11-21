@@ -382,3 +382,18 @@ body.blackout::after { content: 'BLACKOUT'; position: fixed; z-index: 15; top: 4
 .geo-help .steps { margin: 10px 0 14px; padding-left: 20px; line-height: 1.45; }
 .geo-help .steps li { margin-bottom: 8px; }
 .geo-help .btn + .btn { margin-top: 8px; }
+/* play screen: keep the sheet small so the map shows */
+#sheet.play { max-height: 46vh; padding-top: 6px; }
+.play-compact .stat-row { margin-bottom: 8px !important; gap: 8px; }
+.play-compact .stat { padding: 8px 12px; }
+.play-compact .stat b { font-size: 22px; }
+.play-compact .stat span { font-size: 12px; }
+.play-compact .tag-btn { min-height: 56px; padding: 10px; font-size: 22px; margin-bottom: 10px; }
+.play-row { display: flex; gap: 8px; margin: 4px 0 2px; }
+.play-row .btn { flex: 1; min-height: 44px; }
+.pu-btn .i { width: 18px; height: 18px; margin-right: 6px; }
+.pu-btn.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.pu-n { display: inline-grid; place-items: center; min-width: 20px; height: 20px; margin-left: 6px; padding: 0 5px; border-radius: 10px; background: var(--red); color: #fff; font-size: 12px; }
+.pu-panel .section-t { margin-top: 10px !important; }
+.play-row .btn { white-space: nowrap; font-size: 15px; padding-left: 10px; padding-right: 10px; }
+.play-row .pu-btn { flex: 1.3; }
