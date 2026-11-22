@@ -200,6 +200,16 @@ function loadMe() {
 }
 function saveMe() { try { localStorage.setItem('gl:me', JSON.stringify({ id: me.id, name: me.name })); } catch {} }
 const me = loadMe();
+// characters you bought are yours forever: kept on this phone, and on your account when signed in
+const cleanOwned = (a) => [...new Set((Array.isArray(a) ? a : []).filter((c) => typeof c === 'string' && CHARS[c]))].slice(0, 64);
+const loadLocal = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch { return d; } };
+let myOwned = cleanOwned(loadLocal('gl:owned', []));
+let myLook = isLook(loadLocal('gl:look', null)) ? loadLocal('gl:look', null) : null;
+function keepOwned(list) {
+  const n = cleanOwned([...myOwned, ...(list || [])]);
+  if (n.length !== myOwned.length) { myOwned = n; try { localStorage.setItem('gl:owned', JSON.stringify(n)); } catch {} }
+}
+function keepLook(icon) { if (isLook(icon) && icon !== myLook) { myLook = icon; try { localStorage.setItem('gl:look', JSON.stringify(icon)); } catch {} } }
 
 // ---------------- runtime state ----------------
 let S = null;            // shared game state (host is the authority)
@@ -587,7 +597,9 @@ async function connect(roomCode, asHost) {
 function addPlayer(st, id, name, acc) {
   // signed-in players bring their saved points and badge into a new game
   if (acc && Number.isFinite(+acc.pts) && (st.wallet || {})[id] === undefined) { st.wallet = st.wallet || {}; st.wallet[id] = Math.max(0, Math.min(1e6, Math.floor(+acc.pts))); }
-  const savedIcon = acc && isLook(acc.icon) ? acc.icon : null; // a saved character stays yours
+  const owned = cleanOwned(acc && acc.owned);
+  let savedIcon = acc && isLook(acc.icon) ? acc.icon : null;
+  if (charOf(savedIcon) && !owned.includes(charOf(savedIcon))) { if (acc.pts !== undefined) owned.push(charOf(savedIcon)); else savedIcon = null; } // accounts saved before owned lists existed
   const used = new Set(Object.values(st.players).map((p) => p.color));
   const color = COLORS.find((c) => !used.has(c)) || COLORS[Object.keys(st.players).length % COLORS.length];
   const late = st.phase === 'hiding' || st.phase === 'hunting';
@@ -596,7 +608,8 @@ function addPlayer(st, id, name, acc) {
     role: late ? 'seeker' : 'hider', startRole: late ? 'seeker' : null,
     caughtAt: null, caughtBy: null, used: {}, seekerCount: 0,
   };
-  if (savedIcon && !st.players[id].icon) { st.players[id].icon = savedIcon; if (charOf(savedIcon)) st.players[id].owned = [charOf(savedIcon)]; }
+  if (owned.length) st.players[id].owned = owned;
+  if (savedIcon && !st.players[id].icon) st.players[id].icon = savedIcon;
   st.totals[id] = st.totals[id] || 0;
 }
 
@@ -1406,7 +1419,7 @@ function shopHtml(card) {
   const saved = Object.entries(p.bank || {}).filter(([, n]) => n > 0).map(([k, n]) => `${shopInfo(k).name}${n > 1 ? ' ×' + n : ''}`);
   const body = shopOpen ? `
     ${roles.map((r) => `${inRound ? '' : `<div class="section-t" style="margin-top:12px">${r === 'hider' ? 'If you hide' : 'If you seek'}</div>`}<div class="items">${Object.keys(SHOP).filter((k) => SHOP[k].role === r).map(btn).join('')}</div>`).join('')}
-    <div class="section-t" style="margin-top:12px">Characters · be one all game</div>
+    <div class="section-t" style="margin-top:12px">Characters · yours forever once bought</div>
     <div class="chars">${Object.entries(CHARS).map(([id, c]) => { const own = (p.owned || []).includes(id), on = p.icon === 'c:' + id; return `<button class="char ${on ? 'on' : ''}" data-act="buy" data-k="char" data-opt="${id}" aria-label="${c.name}" ${on || (!own && bal < c.cost) ? 'disabled' : ''}><img src="chars/${id}.png" alt=""><span class="cn">${c.name}</span><span class="cost ${own ? 'own' : ''}">${on ? 'You' : own ? 'Owned' : c.cost}</span><small>${CHAR_TIERS[c.cost]}</small></button>`; }).join('')}</div>
     <div class="section-t" style="margin-top:12px">Shape · ${SHOP.icon.cost} pts</div>
     <div class="row badges">${BADGES.map((b) => `<button class="btn small badge ${p.icon === b ? 'on' : ''}" data-act="buy" data-k="icon" data-opt="${b}" aria-label="${b} shape" ${bal < SHOP.icon.cost || p.icon === b ? 'disabled' : ''}>${ic(b)}</button>`).join('')}</div>
@@ -2585,16 +2598,23 @@ const authClient = (() => {
   if (!window.supabase || !c.supabaseUrl || params.get('net') === 'relay') return null;
   try { return window.supabase.createClient(c.supabaseUrl, c.supabaseKey, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'gl-auth' } }); } catch { return null; }
 })();
-function acctHello() { return acct ? { pts: acct.profile.points || 0, icon: acct.profile.icon || null } : {}; }
+function acctHello() {
+  const owned = cleanOwned([...myOwned, ...((acct && acct.profile.owned) || [])]);
+  return acct ? { pts: acct.profile.points || 0, icon: acct.profile.icon || myLook, owned } : { icon: myLook, owned };
+}
 async function loadProfile(user) {
-  let { data, error } = await authClient.from('ghostline_profiles').select('name,icon,points').eq('user_id', user.id).maybeSingle();
+  let { data, error } = await authClient.from('ghostline_profiles').select('name,icon,points,owned').eq('user_id', user.id).maybeSingle();
   if (error) { console.warn(error); return; }
   if (!data) {
-    data = { name: (me.name || '').slice(0, 16), icon: null, points: 0 };
+    data = { name: (me.name || '').slice(0, 16), icon: null, points: 0, owned: [] };
     const r = await authClient.from('ghostline_profiles').insert({ user_id: user.id, name: data.name });
     if (r.error) console.warn(r.error);
   }
   acct = { user, profile: data };
+  // characters bought on this phone before signing in join the account, and the account's show up here
+  const all = cleanOwned([...(data.owned || []), ...myOwned]);
+  keepOwned(all);
+  if (all.length !== cleanOwned(data.owned).length) acctSave({ owned: all });
   if (data.name) { me.name = data.name; saveMe(); inName.value = data.name; const iv = $('#inv-name'); if (iv) iv.value = data.name; }
   renderAcct();
 }
@@ -2609,13 +2629,17 @@ function acctSave(patch) {
     if (error) console.warn('profile save failed', error);
   }, 800);
 }
-// keep the saved points and badge in step with the game
+// keep the saved points, look and characters in step with the game
 setInterval(() => {
+  const mp = S && S.players[me.id];
+  if (mp) { keepOwned(mp.owned); keepLook(mp.icon); }
   if (!acct || !S || acctGame !== S.code) return;
   const pts = (S.wallet || {})[me.id], p = S.players[me.id];
   const patch = {};
   if (Number.isFinite(pts) && pts !== acct.profile.points) patch.points = Math.max(0, Math.floor(pts));
   if (p && p.icon && p.icon !== acct.profile.icon) patch.icon = p.icon;
+  const owned = cleanOwned([...(acct.profile.owned || []), ...((p && p.owned) || [])]);
+  if (owned.length !== cleanOwned(acct.profile.owned).length) patch.owned = owned;
   if (Object.keys(patch).length) acctSave(patch);
 }, 2000);
 

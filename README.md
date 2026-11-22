@@ -34,7 +34,7 @@ Points you earn (survival minutes, catches, missions, flags, extraction) can be 
 
 - Hiders: Power-up 50, Peek 65 (see the nearest seeker for 10 s), Cloak 75 (your next ping is hidden), Escape pass 150 (get away from one catch)
 - Seekers: Radar 50, Hot trail 75 (arrow to the nearest hider for 20 s), Lockdown 90 (hiders can't use power-ups for 30 s), Spotlight 100 (one hider's exact spot for 10 s)
-- Characters (art from the Mafia game, shown as your avatar and your own map dot): Common 100 (Toad, Toadette, Crewmate), Rare 200 (Yoshi, Luigi, Peach, Mike, Rumi, Sparky, Clawd, Gooigi and the Phantom, Wraith, Ember and Crimson ghosts), Epic 350 (Pikachu, Shrek, Gru, Kirby, Specter), Legendary 600 (Mewtwo, Godzilla, Mega Clawd, Rolling Hero). Once bought, switching back to it is free for the rest of the game; a signed-in player keeps the one they wear.
+- Characters (art from the Mafia game, shown as your avatar and your own map dot): Common 100 (Toad, Toadette, Crewmate), Rare 200 (Yoshi, Luigi, Peach, Mike, Rumi, Sparky, Clawd, Gooigi and the Phantom, Wraith, Ember and Crimson ghosts), Epic 350 (Pikachu, Shrek, Gru, Kirby, Specter), Legendary 600 (Mewtwo, Godzilla, Mega Clawd, Rolling Hero). Once bought, a character is yours forever: it's saved on the phone, and on the account when signed in (so it follows you to other phones). Switching back to one you own is free.
 - Shapes 10, colors 5
 
 ## GPS accuracy

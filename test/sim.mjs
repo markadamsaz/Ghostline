@@ -455,6 +455,7 @@ ok(await until(async () => (await state(host)).players[B.pid].icon === 'star', 4
 ok((await Wl(B.pid)) === 365, 'shapes are cheap (10)');
 await Bp.page.click('[data-act="buy"][data-k="char"][data-opt="toad"]');
 ok(await until(async () => (await state(host)).players[B.pid].icon === 'c:toad', 4000, 'char'), 'a character can be bought');
+await Bp.page.click('.card-tap[data-act="togglePlayers"]');
 ok((await Wl(B.pid)) === 265 && await until(async () => (await Bp.page.$$('.av img.ch[src="chars/toad.png"]')).length > 0, 3000, 'toad av'), 'Toad costs 100 and shows as your avatar');
 await G(Bp, () => window.__gl.send('buy', { k: 'char', opt: 'mewtwo' }));
 await sleep(800);
@@ -463,6 +464,7 @@ await Bp.page.click('[data-act="buy"][data-k="icon"][data-opt="moon"]');
 await until(async () => (await state(host)).players[B.pid].icon === 'moon', 4000, 'icon2');
 await Bp.page.click('[data-act="buy"][data-k="char"][data-opt="toad"]');
 ok(await until(async () => (await state(host)).players[B.pid].icon === 'c:toad', 4000, 'char2') && (await Wl(B.pid)) === 255, 'switching back to a character you own is free');
+ok(await until(async () => (await G(Bp, () => localStorage.getItem('gl:owned') || '')).includes('toad'), 4000, 'owned saved'), 'a bought character is saved on the phone for future games');
 { const taken = (await state(host)).players[A.pid].color;
   await G(Bp, (c) => window.__gl.send('buy', { k: 'color', opt: c }), taken); await sleep(800);
   ok((await state(host)).players[B.pid].color !== taken, "you can't take someone else's color");
