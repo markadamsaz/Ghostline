@@ -102,17 +102,31 @@ const ITEM_INFO = {
 };
 // points shop: spend the points you earn. Bought in the lobby, an item waits until a round where you have that role
 const SHOP = {
-  powerup: { ic: 'starter', name: 'Power-up', desc: 'A random decoy, jammer or sonar', cost: 40, role: 'hider' },
-  peek: { cost: 50, role: 'hider' },
-  cloak: { cost: 60, role: 'hider' },
-  pass: { cost: 120, role: 'hider' },
-  radar: { cost: 40, role: 'seeker' },
-  trail: { cost: 60, role: 'seeker' },
-  lockdown: { cost: 70, role: 'seeker' },
-  spotlight: { cost: 80, role: 'seeker' },
-  icon: { ic: 'star', name: 'Badge', desc: 'Your badge shows instead of your initial. Lasts all game', cost: 25 },
+  powerup: { ic: 'starter', name: 'Power-up', desc: 'A random decoy, jammer or sonar', cost: 50, role: 'hider' },
+  peek: { cost: 65, role: 'hider' },
+  cloak: { cost: 75, role: 'hider' },
+  pass: { cost: 150, role: 'hider' },
+  radar: { cost: 50, role: 'seeker' },
+  trail: { cost: 75, role: 'seeker' },
+  lockdown: { cost: 90, role: 'seeker' },
+  spotlight: { cost: 100, role: 'seeker' },
+  icon: { ic: 'star', name: 'Shape', desc: 'Your shape shows instead of your initial. Lasts all game', cost: 10 },
+  color: { ic: 'star', name: 'Color', desc: 'Your color behind your initial, shape or character', cost: 5 },
 };
 const BADGES = ['star', 'heart', 'diamond', 'flame', 'bolt', 'moon'];
+// characters (art from the Mafia game, in public/chars/). The cooler they are, the more they cost. Once bought, free to switch back to all game
+const CHAR_TIERS = { 600: 'Legendary', 350: 'Epic', 200: 'Rare', 100: 'Common' };
+const CHARS = Object.fromEntries([
+  ['mewtwo', 'Mewtwo', 600], ['godzilla', 'Godzilla', 600], ['mega_clawd', 'Mega Clawd', 600], ['rolling_hero', 'Rolling Hero', 600],
+  ['pikachu', 'Pikachu', 350], ['shrek', 'Shrek', 350], ['gru', 'Gru', 350], ['kirby', 'Kirby', 350], ['ghost_gold', 'Specter', 350],
+  ['yoshi', 'Yoshi', 200], ['luigi', 'Luigi', 200], ['peach', 'Peach', 200], ['mike', 'Mike', 200], ['rumi', 'Rumi', 200], ['sparky', 'Sparky', 200],
+  ['clawd', 'Clawd', 200], ['gooigi', 'Gooigi', 200], ['ghost_blue', 'Phantom', 200], ['ghost_purple', 'Wraith', 200], ['ghost_orange', 'Ember', 200], ['ghost_red', 'Crimson', 200],
+  ['toad', 'Toad', 100], ['toadette', 'Toadette', 100], ['crewmate', 'Crewmate', 100],
+].map(([id, name, cost]) => [id, { name, cost }]));
+const charOf = (icon) => typeof icon === 'string' && icon.startsWith('c:') && CHARS[icon.slice(2)] ? icon.slice(2) : null;
+const isLook = (icon) => BADGES.includes(icon) || !!charOf(icon);
+// what goes inside an avatar circle: a character, a shape, or nothing (caller shows the initial)
+const lookHtml = (icon) => { const c = charOf(icon); return c ? `<img class="ch" src="chars/${c}.png" alt="">` : icon && ICONS[icon] ? ic(icon) : ''; };
 const shopInfo = (k) => ({ ...(ITEM_INFO[k] || {}), ...SHOP[k] });
 function giveShop(w, k) { const item = k === 'powerup' ? pick(BASICS.hider) : k; w.inv = w.inv || {}; w.inv[item] = (w.inv[item] || 0) + 1; return item; }
 function credit(s, id, pts) { s.wallet = s.wallet || {}; s.wallet[id] = (s.wallet[id] || 0) + pts; const w = s.players[id]; if (w) w.banked = (w.banked || 0) + pts; }
@@ -460,7 +474,9 @@ function updateMeMarker() {
   if (!myPos) return;
   const role = mine()?.role;
   const col = role === 'hider' ? 'var(--hider)' : 'var(--seeker)';
-  const icon = L.divIcon({ className: '', iconSize: [22, 22], iconAnchor: [11, 11], html: `<div class="me-dot ${role === 'seeker' ? 'seeker' : ''}" style="background:${col}"></div>` });
+  const ch = charOf(mine()?.icon);
+  const icon = ch ? L.divIcon({ className: '', iconSize: [40, 40], iconAnchor: [20, 20], html: `<div class="me-ch ${role === 'seeker' ? 'seeker' : ''}" style="border-color:${col}"><img src="chars/${ch}.png" alt=""></div>` })
+    : L.divIcon({ className: '', iconSize: [22, 22], iconAnchor: [11, 11], html: `<div class="me-dot ${role === 'seeker' ? 'seeker' : ''}" style="background:${col}"></div>` });
   if (!meMarker) {
     meMarker = L.marker(myPos.p, { icon, zIndexOffset: 1000, interactive: false }).addTo(map);
     meAcc = L.circle(myPos.p, { radius: myPos.acc, color: '#111', weight: 1, opacity: .25, fillOpacity: .04, interactive: false }).addTo(map);
@@ -571,7 +587,7 @@ async function connect(roomCode, asHost) {
 function addPlayer(st, id, name, acc) {
   // signed-in players bring their saved points and badge into a new game
   if (acc && Number.isFinite(+acc.pts) && (st.wallet || {})[id] === undefined) { st.wallet = st.wallet || {}; st.wallet[id] = Math.max(0, Math.min(1e6, Math.floor(+acc.pts))); }
-  const savedIcon = acc && BADGES.includes(acc.icon) ? acc.icon : null;
+  const savedIcon = acc && isLook(acc.icon) ? acc.icon : null; // a saved character stays yours
   const used = new Set(Object.values(st.players).map((p) => p.color));
   const color = COLORS.find((c) => !used.has(c)) || COLORS[Object.keys(st.players).length % COLORS.length];
   const late = st.phase === 'hiding' || st.phase === 'hunting';
@@ -580,7 +596,7 @@ function addPlayer(st, id, name, acc) {
     role: late ? 'seeker' : 'hider', startRole: late ? 'seeker' : null,
     caughtAt: null, caughtBy: null, used: {}, seekerCount: 0,
   };
-  if (savedIcon && !st.players[id].icon) st.players[id].icon = savedIcon;
+  if (savedIcon && !st.players[id].icon) { st.players[id].icon = savedIcon; if (charOf(savedIcon)) st.players[id].owned = [charOf(savedIcon)]; }
   st.totals[id] = st.totals[id] || 0;
 }
 
@@ -840,19 +856,25 @@ function handle(m, self) {
     }
     case 'buy': {
       if (!isHost() || !S) return;
-      const q = S.players[m.from], it = SHOP[d.k], now = Date.now();
-      if (!q || !it || ((S.wallet || {})[m.from] || 0) < it.cost) return;
+      const q = S.players[m.from], now = Date.now();
+      if (!q) return;
       const inRound = S.phase === 'hiding' || S.phase === 'hunting';
-      if (d.k === 'icon') { if (!BADGES.includes(d.opt)) return; }
-      else if (inRound) { if (it.role !== q.role || (q.role === 'hider' && !alive(q))) return; }
+      let cost;
+      if (d.k === 'char') { const c = CHARS[d.opt]; if (!c || q.icon === 'c:' + d.opt) return; cost = (q.owned || []).includes(d.opt) ? 0 : c.cost; }
+      else if (d.k === 'color') { if (!COLORS.includes(d.opt) || Object.values(S.players).some((x) => x.color === d.opt)) return; cost = SHOP.color.cost; }
+      else if (d.k === 'icon') { if (!BADGES.includes(d.opt) || q.icon === d.opt) return; cost = SHOP.icon.cost; }
+      else { const it = SHOP[d.k]; if (!it) return; cost = it.cost; if (inRound && (it.role !== q.role || (q.role === 'hider' && !alive(q)))) return; }
+      if (((S.wallet || {})[m.from] || 0) < cost) return;
       hostApply((s) => {
-        s.wallet = s.wallet || {}; s.wallet[m.from] -= it.cost;
+        s.wallet = s.wallet || {}; s.wallet[m.from] -= cost;
         const w = s.players[m.from];
         let got = d.k, saved = false;
         if (d.k === 'icon') w.icon = d.opt;
+        else if (d.k === 'char') { w.icon = 'c:' + d.opt; w.owned = [...new Set([...(w.owned || []), d.opt])]; got = 'char'; }
+        else if (d.k === 'color') { w.color = d.opt; w.tinted = true; }
         else if (inRound) got = giveShop(w, d.k);
         else { w.bank = w.bank || {}; w.bank[d.k] = (w.bank[d.k] || 0) + 1; saved = true; }
-        s.events.push({ id: evId(), k: 'buy', who: m.from, item: got, saved, t: now });
+        s.events.push({ id: evId(), k: 'buy', who: m.from, item: got, opt: d.opt, saved, t: now });
       });
       break;
     }
@@ -1242,8 +1264,11 @@ function onEvent(e) {
   if (e.k === 'extract') { beep('alarm'); buzz([200, 100, 200, 100, 400]); toast(p && p.role === 'seeker' ? 'Extraction is open. Guard it.' : 'Extraction is open. Reach it for +100.', 'good', 'sprint'); }
   if (e.k === 'extracted') toast(self_(e.who) ? 'You made it out. +100. You are safe.' : `<b>${nm(e.who)}</b> escaped`, self_(e.who) ? 'good' : tone(e.who), 'sprint');
   if (e.k === 'breakout') { beep('alarm'); toast((e.freed || []).includes(me.id) ? `<b>${nm(e.by)}</b> broke you out. Run!` : `<b>${nm(e.by)}</b> broke ${e.freed.length} out of jail`, (e.freed || []).includes(me.id) ? 'good' : tone(e.by), 'jail'); }
-  if (e.k === 'buy' && self_(e.who)) fx(e.item === 'icon' ? 'star' : shopInfo(e.item).ic || 'shop', 'Bought!');
-  if (e.k === 'buy' && self_(e.who)) toast(e.item === 'icon' ? 'New badge' : `<b>${shopInfo(e.item).name || e.item}</b> ${e.saved ? 'saved for your next round as ' + (SHOP[e.item]?.role || 'player') : 'is yours'}`, 'good', e.item === 'icon' ? 'star' : shopInfo(e.item).ic || 'shop');
+  if (e.k === 'buy' && self_(e.who)) {
+    const look = e.item === 'icon' || e.item === 'char' || e.item === 'color';
+    fx(look ? 'star' : shopInfo(e.item).ic || 'shop', e.item === 'char' ? (CHARS[e.opt]?.name || 'New look') : 'Bought!');
+    toast(e.item === 'char' ? `You're <b>${CHARS[e.opt]?.name || 'someone new'}</b> now` : e.item === 'icon' ? 'New shape' : e.item === 'color' ? 'New color' : `<b>${shopInfo(e.item).name || e.item}</b> ${e.saved ? 'saved for your next round as ' + (SHOP[e.item]?.role || 'player') : 'is yours'}`, 'good', look ? 'star' : shopInfo(e.item).ic || 'shop');
+  }
   if (e.k === 'passHit') { beep('alarm'); toast(self_(e.who) ? 'Escape pass used. You got away. Run!' : `<b>${nm(e.who)}</b> used an escape pass and got away`, self_(e.who) ? 'good' : '', 'pass'); }
   if (e.k === 'cloak' && self_(e.by)) toast('Cloaked: your next ping is hidden.', 'hider', 'cloak');
   if (e.k === 'lockdown') { beep('alarm'); toast(p && p.role === 'hider' ? `<b>${nm(e.by)}</b> locked down your power-ups for 30 s` : `Lockdown by <b>${nm(e.by)}</b>: hiders can't use power-ups for 30 s`, p && p.role === 'hider' ? 'hider' : 'seeker', 'lockdown'); }
@@ -1381,8 +1406,12 @@ function shopHtml(card) {
   const saved = Object.entries(p.bank || {}).filter(([, n]) => n > 0).map(([k, n]) => `${shopInfo(k).name}${n > 1 ? ' ×' + n : ''}`);
   const body = shopOpen ? `
     ${roles.map((r) => `${inRound ? '' : `<div class="section-t" style="margin-top:12px">${r === 'hider' ? 'If you hide' : 'If you seek'}</div>`}<div class="items">${Object.keys(SHOP).filter((k) => SHOP[k].role === r).map(btn).join('')}</div>`).join('')}
-    <div class="section-t" style="margin-top:12px">Badge · ${SHOP.icon.cost} pts</div>
-    <div class="row badges">${BADGES.map((b) => `<button class="btn small badge ${p.icon === b ? 'on' : ''}" data-act="buy" data-k="icon" data-opt="${b}" aria-label="${b} badge" ${bal < SHOP.icon.cost || p.icon === b ? 'disabled' : ''}>${ic(b)}</button>`).join('')}</div>
+    <div class="section-t" style="margin-top:12px">Characters · be one all game</div>
+    <div class="chars">${Object.entries(CHARS).map(([id, c]) => { const own = (p.owned || []).includes(id), on = p.icon === 'c:' + id; return `<button class="char ${on ? 'on' : ''}" data-act="buy" data-k="char" data-opt="${id}" aria-label="${c.name}" ${on || (!own && bal < c.cost) ? 'disabled' : ''}><img src="chars/${id}.png" alt=""><span class="cn">${c.name}</span><span class="cost ${own ? 'own' : ''}">${on ? 'You' : own ? 'Owned' : c.cost}</span><small>${CHAR_TIERS[c.cost]}</small></button>`; }).join('')}</div>
+    <div class="section-t" style="margin-top:12px">Shape · ${SHOP.icon.cost} pts</div>
+    <div class="row badges">${BADGES.map((b) => `<button class="btn small badge ${p.icon === b ? 'on' : ''}" data-act="buy" data-k="icon" data-opt="${b}" aria-label="${b} shape" ${bal < SHOP.icon.cost || p.icon === b ? 'disabled' : ''}>${ic(b)}</button>`).join('')}</div>
+    <div class="section-t" style="margin-top:12px">Color · ${SHOP.color.cost} pts</div>
+    <div class="row badges">${COLORS.map((c) => { const taken = Object.values(S.players).some((x) => x.color === c); return `<button class="btn small badge swatch ${p.color === c ? 'on' : ''}" data-act="buy" data-k="color" data-opt="${c}" aria-label="Color ${c}" style="--sw:${c}" ${bal < SHOP.color.cost || taken ? 'disabled' : ''}></button>`; }).join('')}</div>
     ${!inRound ? `<p class="hint" style="text-align:left">Picks you buy now wait for a round where you have that role.${saved.length ? ' Saved: ' + saved.join(', ') + '.' : ''}</p>` : ''}` : '';
   if (card) return `<div class="card shop-box ${shopOpen ? 'open' : ''}"><button class="shop-h card-tap" data-act="toggleShop">${ic('shop')}<span class="ct">Points shop</span><span class="bal mono">${bal} pts</span>${ic(shopOpen ? 'chevD' : 'chevR', 'chev')}</button>${body}</div>`;
   return `<div class="section shop-box"><button class="btn shop-h" data-act="toggleShop">${ic('shop')}Points shop<span class="bal mono">${bal} pts</span><span class="chev">${shopOpen ? '▴' : '▾'}</span></button>${body}</div>`;
@@ -1826,7 +1855,7 @@ function optLabel(key, val) {
   if (/Sec$/.test(key)) return +val % 60 ? `${val} s` : `${val / 60} min`;
   return /M$/.test(key) ? `${val} m` : String(val);
 }
-function avatar(p, cls = '') { return `<span class="av ${cls}">${p && p.icon && ICONS[p.icon] ? ic(p.icon) : esc(Array.from((p && p.name) || '?')[0] || '?')}</span>`; }
+function avatar(p, cls = '') { return `<span class="av ${cls} ${p && charOf(p.icon) ? 'has-ch' : ''}"${p && p.tinted && !/\bout\b/.test(cls) ? ` style="background:${p.color};color:#111"` : ''}>${(p && lookHtml(p.icon)) || esc(Array.from((p && p.name) || '?')[0] || '?')}</span>`; }
 const roleCls = (r) => (r === 'seeker' ? 'seeker' : r === 'hider' ? 'hider' : '');
 function playerRow(id, extra = '', cls = '', pre = '') {
   const p = P(id); const on = peers.has(id);
@@ -2592,7 +2621,7 @@ setInterval(() => {
 
 function acctBadge() {
   const pr = acct.profile;
-  return `<span class="av acct-av">${pr.icon && ICONS[pr.icon] ? ic(pr.icon) : esc(Array.from(pr.name || acct.user.email || '?')[0] || '?')}</span>`;
+  return `<span class="av acct-av ${charOf(pr.icon) ? 'has-ch' : ''}">${lookHtml(pr.icon) || esc(Array.from(pr.name || acct.user.email || '?')[0] || '?')}</span>`;
 }
 function renderAcct() {
   for (const box of [$('#acct-box'), $('#inv-acct')]) {
