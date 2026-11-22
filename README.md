@@ -32,9 +32,10 @@ GPS tag range is set in 10 m steps (10 to 50 m). A tag that reaches nobody costs
 
 Points you earn (survival minutes, catches, missions, flags, extraction) can be spent. Each player sees picks for their own role during a round; picks bought in the lobby wait for a round where you have that role.
 
-- Hiders: Power-up 40, Peek 50 (see the nearest seeker for 10 s), Cloak 60 (your next ping is hidden), Escape pass 120 (get away from one catch)
-- Seekers: Radar 40, Hot trail 60 (arrow to the nearest hider for 20 s), Lockdown 70 (hiders can't use power-ups for 30 s), Spotlight 80 (one hider's exact spot for 10 s)
-- Anyone: Map icon 25
+- Hiders: Power-up 50, Peek 65 (see the nearest seeker for 10 s), Cloak 75 (your next ping is hidden), Escape pass 150 (get away from one catch)
+- Seekers: Radar 50, Hot trail 75 (arrow to the nearest hider for 20 s), Lockdown 90 (hiders can't use power-ups for 30 s), Spotlight 100 (one hider's exact spot for 10 s)
+- Characters (art from the Mafia game, shown as your avatar and your own map dot): Common 100 (Toad, Toadette, Crewmate), Rare 200 (Yoshi, Luigi, Peach, Mike, Rumi, Sparky, Clawd, Gooigi and the Phantom, Wraith, Ember and Crimson ghosts), Epic 350 (Pikachu, Shrek, Gru, Kirby, Specter), Legendary 600 (Mewtwo, Godzilla, Mega Clawd, Rolling Hero). Once bought, switching back to it is free for the rest of the game; a signed-in player keeps the one they wear.
+- Shapes 10, colors 5
 
 ## GPS accuracy
 
