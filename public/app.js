@@ -2606,7 +2606,7 @@ async function loadProfile(user) {
   let { data, error } = await authClient.from('ghostline_profiles').select('name,icon,points,owned').eq('user_id', user.id).maybeSingle();
   if (error) { console.warn(error); return; }
   if (!data) {
-    data = { name: (me.name || '').slice(0, 16), icon: null, points: 0, owned: [] };
+    data = { name: (me.name || (user.user_metadata && user.user_metadata.username) || '').slice(0, 16), icon: null, points: 0, owned: [] };
     const r = await authClient.from('ghostline_profiles').insert({ user_id: user.id, name: data.name });
     if (r.error) console.warn(r.error);
   }
@@ -2643,9 +2643,13 @@ setInterval(() => {
   if (Object.keys(patch).length) acctSave(patch);
 }, 2000);
 
+// accounts are a username + password: the username maps to an address that never gets mail
+const ACCT_DOMAIN = 'players.ghostline.invalid';
+const acctUser = () => { const u = acct && acct.user; return (u && u.user_metadata && u.user_metadata.username) || ((u && u.email) || '').replace('@' + ACCT_DOMAIN, ''); };
+const acctEmail = (u) => u.includes('@') ? u : `${u.toLowerCase()}@${ACCT_DOMAIN}`;
 function acctBadge() {
   const pr = acct.profile;
-  return `<span class="av acct-av ${charOf(pr.icon) ? 'has-ch' : ''}">${lookHtml(pr.icon) || esc(Array.from(pr.name || acct.user.email || '?')[0] || '?')}</span>`;
+  return `<span class="av acct-av ${charOf(pr.icon) ? 'has-ch' : ''}">${lookHtml(pr.icon) || esc(Array.from(pr.name || acctUser() || '?')[0] || '?')}</span>`;
 }
 function renderAcct() {
   for (const box of [$('#acct-box'), $('#inv-acct')]) {
@@ -2653,7 +2657,7 @@ function renderAcct() {
     if (!authClient) { box.hidden = true; continue; }
     box.hidden = false;
     box.innerHTML = acct
-      ? `<div class="acct-in">${acctBadge()}<div class="acct-tx"><b>${esc(acct.profile.name || acct.user.email)}</b><span>${acct.profile.points || 0} pts saved</span></div><button class="acct-link" data-acct="out">Sign out</button></div>`
+      ? `<div class="acct-in">${acctBadge()}<div class="acct-tx"><b>${esc(acct.profile.name || acctUser())}</b><span>${acct.profile.points || 0} pts saved</span></div><button class="acct-link" data-acct="out">Sign out</button></div>`
       : `<div class="acct-out"><div class="acct-tx"><b>Playing as a guest</b><span>Make an account to keep your points and badge.</span></div><button class="btn small" data-acct="open">Sign in</button></div>`;
   }
 }
@@ -2667,7 +2671,7 @@ function acctModal(mode) {
   modal(`<h3>${up ? 'Create an account' : 'Sign in'}</h3>
     <p>${up ? 'Your points and badge get saved, so you keep them next game.' : 'Welcome back. Your saved points come with you.'}</p>
     <form id="acct-form" class="acct-form">
-      <input id="acct-email" type="email" autocomplete="email" placeholder="Email" required>
+      <input id="acct-email" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Username${up ? ' (letters, numbers, _)' : ''}" maxlength="${up ? 16 : 80}" required>
       <input id="acct-pass" type="password" autocomplete="${up ? 'new-password' : 'current-password'}" placeholder="Password${up ? ' (6+ characters)' : ''}" minlength="6" required>
       <p id="acct-err" class="err" hidden></p>
       <button class="btn primary big" type="submit" style="width:100%">${up ? 'Create account' : 'Sign in'}</button>
@@ -2679,16 +2683,23 @@ function acctModal(mode) {
   $('#acct-form').onsubmit = async (e) => {
     e.preventDefault();
     const err = $('#acct-err'), btn = $('#acct-form button[type=submit]');
-    const email = $('#acct-email').value.trim(), password = $('#acct-pass').value;
+    const user = $('#acct-email').value.trim(), password = $('#acct-pass').value;
     const show = (t) => { err.textContent = t; err.hidden = !t; };
+    if (up && !/^[A-Za-z0-9_]{3,16}$/.test(user)) { show('Usernames are 3 to 16 letters, numbers or _'); return; }
     btn.disabled = true; show('');
-    let r = up
-      ? await authClient.auth.signUp({ email, password })
-      : await authClient.auth.signInWithPassword({ email, password });
-    // no confirmation step: if sign-up didn't hand back a session, sign straight in
-    if (up && !r.error && !r.data.session) r = await authClient.auth.signInWithPassword({ email, password });
+    if (up) {
+      // made on the server already confirmed, so no email is ever sent
+      let res = null;
+      try {
+        const c = window.GHOSTLINE_CONFIG || {};
+        const resp = await fetch(c.supabaseUrl + '/functions/v1/ghostline-signup', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: c.supabaseKey, Authorization: 'Bearer ' + c.supabaseKey }, body: JSON.stringify({ username: user, password }) });
+        res = await resp.json().catch(() => ({}));
+        if (!resp.ok) { btn.disabled = false; show(res.error || 'Could not create the account. Try again.'); return; }
+      } catch { btn.disabled = false; show('No connection. Try again.'); return; }
+    }
+    const r = await authClient.auth.signInWithPassword({ email: acctEmail(user), password });
     btn.disabled = false;
-    if (r.error) { show(/invalid login/i.test(r.error.message) ? 'Wrong email or password.' : r.error.message); return; }
+    if (r.error) { show(/invalid login/i.test(r.error.message) ? 'Wrong username or password.' : r.error.message); return; }
     closeModal(); toast(up ? 'Account created. Your points will be saved.' : 'Signed in', 'good', 'check');
   };
 }
