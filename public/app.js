@@ -2682,12 +2682,13 @@ function acctModal(mode) {
     const email = $('#acct-email').value.trim(), password = $('#acct-pass').value;
     const show = (t) => { err.textContent = t; err.hidden = !t; };
     btn.disabled = true; show('');
-    const r = up
-      ? await authClient.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } })
+    let r = up
+      ? await authClient.auth.signUp({ email, password })
       : await authClient.auth.signInWithPassword({ email, password });
+    // no confirmation step: if sign-up didn't hand back a session, sign straight in
+    if (up && !r.error && !r.data.session) r = await authClient.auth.signInWithPassword({ email, password });
     btn.disabled = false;
     if (r.error) { show(/invalid login/i.test(r.error.message) ? 'Wrong email or password.' : r.error.message); return; }
-    if (up && !r.data.session) { modal(`<h3>Check your email</h3><p>We sent a link to <b>${esc(email)}</b>. Tap it to confirm, then sign in here.</p><button class="btn dark" data-act="closeModal" style="width:100%">OK</button>`); return; }
     closeModal(); toast(up ? 'Account created. Your points will be saved.' : 'Signed in', 'good', 'check');
   };
 }
