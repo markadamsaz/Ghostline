@@ -1608,8 +1608,8 @@ function settingsModal() {
     ? `<div class="set-l">Account</div>
     <div class="set-list set-acct">
       <div class="set-item set-me">${acctBadge()}<span class="set-tx"><b>${esc(acct.profile.name || acctUser())}</b><small>${acct.profile.points || 0} pts saved</small></span></div>
-      <div class="set-item"><span class="set-k">Username</span><span class="set-v">${esc(acctUser())}</span></div>
-      <div class="set-item"><span class="set-k">Password</span>${pwSaved() != null ? `<span class="set-v set-pw">${esc(pwSaved())}</span>` : `<span class="set-v">Not saved yet</span><button type="button" class="set-btn" data-act="setPwAdd">Show</button>`}</div>
+      <div class="set-item"><span class="set-k">Username</span><span class="set-v set-wrap">${esc(acctUser())}</span><button type="button" class="set-btn" data-act="copyUser">Copy</button></div>
+      <div class="set-item"><span class="set-k">Password</span>${pwSaved() != null ? `<span class="set-v set-pw">${esc(pwSaved())}</span><button type="button" class="set-btn" data-act="copyPw">Copy</button>` : `<span class="set-v">Not saved yet</span><button type="button" class="set-btn" data-act="setPwAdd">Show</button>`}</div>
       <button type="button" class="set-item set-link" data-act="setPass"><span class="set-tx"><b>Change password</b></span><span class="set-chev">›</span></button>
       <button type="button" class="set-item set-link set-out" data-acct="out"><span class="set-tx"><b>Sign out</b></span></button>
     </div>
@@ -2726,6 +2726,8 @@ $('#modal').addEventListener('click', (e) => {
   if (e.target.closest('[data-act="setKey"]')) { closeModal(); showMapKey(); return; }
   if (e.target.closest('[data-act="setPass"]')) { passModal(); return; }
   if (e.target.closest('[data-act="setPwAdd"]')) { pwAddModal(); return; }
+  const cp = e.target.closest('[data-act="copyUser"], [data-act="copyPw"]');
+  if (cp) { const t = cp.dataset.act === 'copyPw' ? pwSaved() : acctUser(); if (t != null) copyText(t).then((ok) => { cp.textContent = ok ? 'Copied' : 'Hold to copy'; setTimeout(() => { cp.textContent = 'Copy'; }, 1500); }); return; }
   if (e.target.closest('[data-act="setBack"]')) { settingsModal(); return; }
   if (e.target.id === 'modal' || e.target.closest('[data-act="closeModal"]')) closeModal(); else if (e.target.closest('[data-act="allowGeo"]')) retryGeo(true);
 });
@@ -2739,6 +2741,7 @@ function pwAddModal() {
       <p id="pwa-err" class="err" hidden></p>
       <button class="btn primary big" type="submit" style="width:100%">Save on this phone</button>
     </form>
+    <button class="btn ghost" data-act="setPass" style="width:100%">Forgot it? Set a new password</button>
     <button class="btn ghost" data-act="setBack" style="width:100%">Back to settings</button>`);
   $('#pwa-form').onsubmit = async (e) => {
     e.preventDefault();
@@ -2747,7 +2750,7 @@ function pwAddModal() {
     btn.disabled = true; show('');
     try {
       const chk = await authClient.auth.signInWithPassword({ email: acct.user.email || acctEmail(acctUser()), password: pw });
-      if (chk.error) { btn.disabled = false; show("That isn't your password. If you forgot it, use Change password."); return; }
+      if (chk.error) { btn.disabled = false; show("That isn't your password. Forgot it? Set a new one below."); return; }
     } catch { btn.disabled = false; show('No connection. Try again.'); return; }
     pwKeep(acctUser(), pw); settingsModal();
   };
@@ -2755,11 +2758,10 @@ function pwAddModal() {
 }
 function passModal() {
   if (!acct || !authClient) return;
-  modal(`<h3>Change password</h3>
-    <p>Signed in as <b>${esc(acctUser())}</b>.</p>
+  modal(`<h3>${pwSaved() != null ? 'Change password' : 'Set a new password'}</h3>
+    <p>Signed in as <b>${esc(acctUser())}</b>. You don't need your old password.</p>
     <form id="pw-form" class="acct-form">
       <input type="text" autocomplete="username" value="${esc(acctUser())}" hidden>
-      <input id="pw-old" type="text" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Current password" value="${esc(pwSaved() || '')}" required>
       <input id="pw-new" type="text" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="New password (6+ characters)" minlength="6" required>
       <input id="pw-new2" type="text" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="New password again" minlength="6" required>
       <p id="pw-err" class="err" hidden></p>
@@ -2770,20 +2772,22 @@ function passModal() {
     e.preventDefault();
     const err = $('#pw-err'), btn = $('#pw-form button[type=submit]');
     const show = (t) => { err.textContent = t; err.hidden = !t; };
-    const old = $('#pw-old').value, nw = $('#pw-new').value;
+    const nw = $('#pw-new').value;
     if (nw.length < 6) { show('Use at least 6 characters.'); return; }
     if (nw !== $('#pw-new2').value) { show("The new passwords don't match."); return; }
     btn.disabled = true; show('');
     try {
-      const chk = await authClient.auth.signInWithPassword({ email: acct.user.email || acctEmail(acctUser()), password: old });
-      if (chk.error) { btn.disabled = false; show('Your current password is wrong.'); return; }
       const r = await authClient.auth.updateUser({ password: nw });
-      if (r.error) { btn.disabled = false; show(r.error.message || 'Could not change it. Try again.'); return; }
-      pwKeep(acctUser(), nw);
+      if (r.error) { btn.disabled = false; show(/different from the old/i.test(r.error.message) ? "That's already your password." : r.error.message || 'Could not change it. Try again.'); return; }
     } catch { btn.disabled = false; show('No connection. Try again.'); return; }
-    settingsModal(); toast('Password changed', 'good', 'check');
+    pwKeep(acctUser(), nw);
+    settingsModal(); toast('Password saved. Tap Copy to copy it.', 'good', 'check');
   };
-  $(pwSaved() ? '#pw-new' : '#pw-old').focus();
+  $('#pw-new').focus();
+}
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); return true; } catch {}
+  try { const ta = document.createElement('textarea'); ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0'; document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, t.length); const ok = document.execCommand('copy'); ta.remove(); return ok; } catch { return false; }
 }
 $('#modal').addEventListener('change', (e) => { const t = e.target; if (t.matches('input[type=checkbox][data-pref]')) setPref(t.dataset.pref, t.checked); });
 
