@@ -68,7 +68,8 @@ input, select { font: inherit; color: var(--ink); }
 /* ---------- map ---------- */
 #map { position: fixed; inset: 0; background: #ecebe8; z-index: 0; }
 .leaflet-container { background: #ecebe8; font-family: inherit; }
-.map-tiles { filter: saturate(1.05); }
+/* brighten the satellite photo so it reads like Apple Maps' imagery (Esri's is darker and flatter) */
+.map-tiles { filter: brightness(1.18) contrast(1.06) saturate(1.22); }
 .leaflet-control-attribution { background: rgba(255,255,255,.85) !important; color: var(--muted) !important; font-size: 10px; }
 .leaflet-control-attribution a { color: var(--muted) !important; }
 .leaflet-bottom { bottom: calc(var(--sheet-h, 0px) + 4px); transition: bottom .2s; }
@@ -461,7 +462,7 @@ body.blackout::after { content: 'BLACKOUT'; position: fixed; z-index: 15; top: 4
 #attr2 a { color: var(--muted); }
 body.turned #attr2 { display: block; }
 body.turned .leaflet-control-attribution { display: none; }
-body.turned .leaflet-marker-icon > * { rotate: calc(-1 * var(--bear, 0deg)); }
+body.turned .leaflet-marker-icon > *:not(.me-cone) { rotate: calc(-1 * var(--bear, 0deg)); }
 
 /* smaller play bar: stats on one short line */
 .play-compact .stat-row { margin-bottom: 6px !important; }
@@ -733,10 +734,12 @@ body.lobby #hud .map-ctl .icon-btn { background: var(--surface); color: var(--in
 /* ---------- facing beam on my dot, and the map key ---------- */
 .me-wrap { position: relative; }
 .me-wrap > .me-dot, .me-wrap > .me-ch { position: relative; }
-.me-cone { position: absolute; width: 80px; height: 80px; transform-origin: 40px 40px; pointer-events: none;
-  background: conic-gradient(from -30deg at 50% 50%, rgba(10,132,255,0) 0deg, rgba(10,132,255,.6) 30deg, rgba(10,132,255,0) 60deg, transparent 60deg);
-  -webkit-mask: radial-gradient(circle at 50% 50%, #000 0, #000 55%, transparent 70%); mask: radial-gradient(circle at 50% 50%, #000 0, #000 55%, transparent 70%);
-  transition: transform .25s ease-out; }
+.me-cone { position: absolute; width: 144px; height: 144px; pointer-events: none; z-index: 0;
+  /* a ~70° wedge pointing up, bright blue at the dot and fading out, like Apple Maps' heading beam */
+  background: conic-gradient(from -36deg at 50% 50%, rgba(10,132,255,0) 0deg, rgba(10,132,255,.95) 7deg, rgba(10,132,255,.95) 65deg, rgba(10,132,255,0) 72deg, transparent 72deg);
+  -webkit-mask: radial-gradient(closest-side, #000 18%, rgba(0,0,0,.6) 55%, transparent 100%); mask: radial-gradient(closest-side, #000 18%, rgba(0,0,0,.6) 55%, transparent 100%);
+  transition: transform .2s linear; will-change: transform; }
+.me-wrap { z-index: 1; }
 .key { display: grid; gap: 12px; }
 .key-row { display: grid; grid-template-columns: 44px 1fr; gap: 10px; align-items: center; }
 .key-row b { display: block; font-size: 15px; }
@@ -745,7 +748,7 @@ body.lobby #hud .map-ctl .icon-btn { background: var(--surface); color: var(--in
 .key-dot { width: 16px; height: 16px; border-radius: 16px; border: 3px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.2), 0 2px 5px rgba(0,0,0,.3); display: inline-block; position: relative; }
 .key-dot.sq { border-radius: 4px; transform: rotate(45deg); }
 .key-me { position: relative; width: 22px; height: 22px; display: grid; place-items: center; }
-.key-me .me-cone { left: -29px; top: -29px; }
+.key-me .me-cone { width: 80px; height: 80px; left: -29px; top: -29px; }
 .key-tag { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 6px; background: var(--red); color: #fff; }
 .key-line { width: 32px; height: 0; border-top: 3px solid var(--red); }
 .key-pin .i { width: 22px; height: 22px; }

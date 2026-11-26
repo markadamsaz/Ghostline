@@ -492,20 +492,29 @@ function updateMeMarker() {
   const role = mine()?.role;
   const col = role === 'hider' ? 'var(--hider)' : 'var(--seeker)';
   const ch = charOf(mine()?.icon);
-  // the beam sits inside the map, so it turns along with the map when the map is rotated
-  const cone = (sz) => heading === null ? '' : `<div class="me-cone" style="left:${sz / 2 - 40}px;top:${sz / 2 - 40}px;transform:rotate(${Math.round(heading)}deg)"></div>`;
-  const icon = ch ? L.divIcon({ className: '', iconSize: [40, 40], iconAnchor: [20, 20], html: `<div class="me-wrap">${cone(40)}<div class="me-ch ${role === 'seeker' ? 'seeker' : ''}" style="border-color:${col}"><img src="chars/${ch}.png" alt=""></div></div>` })
-    : L.divIcon({ className: '', iconSize: [22, 22], iconAnchor: [11, 11], html: `<div class="me-wrap">${cone(22)}<div class="me-dot ${role === 'seeker' ? 'seeker' : ''}" style="background:${col}"></div></div>` });
+  // Apple Maps-style flashlight beam. It's a direct child of the marker icon (not inside .me-wrap) so it
+  // isn't counter-rotated with the character when the map is turned: it stays pointing at the real compass direction.
+  const cone = (sz) => { if (heading === null) return ''; const R = sz < 30 ? 56 : 72;
+    return `<div class="me-cone" style="width:${2 * R}px;height:${2 * R}px;left:${sz / 2 - R}px;top:${sz / 2 - R}px;transform:rotate(${beamAngle()}deg)"></div>`; };
+  const icon = ch ? L.divIcon({ className: '', iconSize: [40, 40], iconAnchor: [20, 20], html: `${cone(40)}<div class="me-wrap"><div class="me-ch ${role === 'seeker' ? 'seeker' : ''}" style="border-color:${col}"><img src="chars/${ch}.png" alt=""></div></div>` })
+    : L.divIcon({ className: '', iconSize: [22, 22], iconAnchor: [11, 11], html: `${cone(22)}<div class="me-wrap"><div class="me-dot ${role === 'seeker' ? 'seeker' : ''}" style="background:${col}"></div></div>` });
   if (meMarker && replay) { map.removeLayer(meMarker); map.removeLayer(meAcc); meMarker = null; meAcc = null; }
   if (replay) return;
   if (!meMarker) {
     meMarker = L.marker(myPos.p, { icon, zIndexOffset: 1000, interactive: false }).addTo(map);
-    meAcc = L.circle(myPos.p, { radius: myPos.acc, color: '#111', weight: 1, opacity: .25, fillOpacity: .04, interactive: false }).addTo(map);
+    meAcc = L.circle(myPos.p, { radius: myPos.acc, color: '#0a84ff', weight: 1, opacity: .35, fillColor: '#0a84ff', fillOpacity: .12, interactive: false }).addTo(map);
   } else { meMarker.setLatLng(myPos.p); meMarker.setIcon(icon); meAcc.setLatLng(myPos.p); meAcc.setRadius(myPos.acc); }
 }
 
 // ---------------- compass: which way my phone is facing ----------------
-let heading = null, headingOn = false, headingAsked = false, headingDrawn = null;
+let heading = null, headingOn = false, headingAsked = false, headingDrawn = null, beamDeg = null;
+// keeps counting past 360 so the beam turns the short way (359° -> 1° is a 2° turn, not a full spin)
+function beamAngle() {
+  if (heading === null) return 0;
+  if (beamDeg === null) beamDeg = heading;
+  else beamDeg += ((heading - beamDeg) % 360 + 540) % 360 - 180;
+  return Math.round(beamDeg * 10) / 10;
+}
 function onOrient(e) {
   let h = null;
   if (typeof e.webkitCompassHeading === 'number') h = e.webkitCompassHeading; // iPhone: degrees from north
@@ -513,8 +522,12 @@ function onOrient(e) {
   if (h === null || Number.isNaN(h)) return;
   const ang = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
   heading = (h + ang + 360) % 360;
-  // only redraw when it turns a few degrees, to save battery
-  if (headingDrawn === null || Math.abs(((heading - headingDrawn + 540) % 360) - 180) > 4) { headingDrawn = heading; updateMeMarker(); }
+  if (headingDrawn !== null && Math.abs(((heading - headingDrawn + 540) % 360) - 180) < 1.5) return; // ignore jitter
+  headingDrawn = heading;
+  // turn the beam that's already on screen (smooth, cheap); only rebuild the marker the first time
+  const el = meMarker && meMarker.getElement() && meMarker.getElement().querySelector('.me-cone');
+  if (el) el.style.transform = `rotate(${beamAngle()}deg)`;
+  else updateMeMarker();
 }
 function startHeading() {
   if (headingOn) return;
