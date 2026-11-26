@@ -1343,3 +1343,13 @@ body.lobby-full #hud { z-index: 40; background: color-mix(in srgb, var(--glass) 
 .modal-card .set-row { margin: 0; }
 /* the street map keeps its own colors; dim it a touch in dark mode */
 :root[data-theme=dark] .map-street { filter: brightness(.85) contrast(1.05); }
+
+/* chat takes the whole screen on phones: no strip of map above it, just the glass top bar */
+@media (max-width: 719px) {
+  body.chat-full #sheet.chatmode, body.chat-full #sheet.chatmode.collapsed {
+    top: 0 !important; bottom: 0; left: 0; right: 0; height: auto !important; max-height: none !important; border-radius: 0;
+    padding-top: calc(var(--hud-b, calc(100px + var(--safe-t))) + 10px); box-shadow: none; }
+  body.chat-full #sheet.chatmode > .grab { display: none; }
+  body.chat-full #hud { z-index: 35; }
+  body.chat-full .map-ctl { display: none; }
+}

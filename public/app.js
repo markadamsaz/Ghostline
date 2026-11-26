@@ -2046,6 +2046,8 @@ function setSheet(html, view = '') {
   sheet.classList.toggle('collapsed', sheetCollapsed);
   sheet.classList.toggle('play', view === 'play');
   if (view !== 'chatmode') sheet.classList.remove('chatmode');
+  document.body.classList.toggle('chat-full', view === 'chatmode'); // chat fills the screen under the top bar
+  const hud = $('#hud'); if (hud && !hud.hidden) document.documentElement.style.setProperty('--hud-b', hud.getBoundingClientRect().bottom + 'px');
   requestAnimationFrame(() => document.documentElement.style.setProperty('--sheet-h', (window.innerWidth < 720 ? sheet.offsetHeight : 0) + 'px'));
 }
 function selectHtml(key, val, disabled) {
@@ -3231,7 +3233,7 @@ function leave(msg) {
   net = null; S = null; code = null; prevPhase = null; prevRound = 0; zoneDraft = null; replay = null; fittedZone = false;
   processed.clear(); chat.length = 0; resetLocal();
   layers.zone.clearLayers(); layers.marks.clearLayers(); layers.replay.clearLayers(); layers.draft.clearLayers();
-  mapView = false; $('#home').hidden = false; $('#hud').hidden = true; sheet.hidden = true; banner(null);
+  mapView = false; $('#home').hidden = false; $('#hud').hidden = true; sheet.hidden = true; document.body.classList.remove('chat-full'); banner(null);
   $('#blindfold')?.remove();
   history.replaceState(null, '', location.pathname);
   if (msg) showHomeErr(msg);
