@@ -48,7 +48,7 @@ Phones ask for their most accurate fresh fix. A weak fix (worse than 30 m) is sk
 
 ## Look and motion
 
-The UI follows iOS conventions: system font (SF on Apple devices), grouped cards, frosted bars, iOS switches and segmented controls, light and dark mode, and one tint (system red). Seekers are red, hiders are graphite.
+The UI follows iOS conventions: system font (SF on Apple devices), grouped cards, frosted bars, iOS switches and segmented controls, light and dark mode, and one tint (iMessage blue, `#007AFF`). Panels are frosted glass: translucent, blurred, with a bright top edge, over a soft blue wash. Seekers are blue, hiders are graphite.
 
 The home screen's radar loop and the "Watch how it works" film are made with [HyperFrames](https://hyperframes.heygen.com) in `motion/hero` and `motion/how-to-play` (HTML + GSAP rendered to MP4). To change one, edit its `index.html`, then render and re-encode into `public/media/` (needs Node 22+ and ffmpeg):
 

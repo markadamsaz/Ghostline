@@ -11,7 +11,7 @@
          The last three use a mock of the play bar and a tap finger. Captions swap underneath. */
       :root {
         --ground: #0b0b0f;
-        --red: #ff3b30;
+        --red: #007aff;
         --ink: #ffffff;
         --muted: rgba(235, 235, 245, 0.6);
         --hider: #2c2c2e;
@@ -30,8 +30,8 @@
       .dot { position: absolute; left: 480px; top: 410px; width: 0; height: 0; }
       .dot i { position: absolute; left: -26px; top: -26px; width: 52px; height: 52px; border-radius: 50%; background: var(--hider); border: 9px solid #fff; box-shadow: 0 8px 20px rgba(0,0,0,.5); }
       #seeker i { border-radius: 14px; background: var(--red); }
-      #seeker i { box-shadow: 0 8px 24px rgba(255,59,48,.55); }
-      .fuzz { position: absolute; width: 190px; height: 190px; margin: -95px 0 0 -95px; border-radius: 50%; background: rgba(255,59,48,.22); border: 5px solid var(--red); opacity: 0; }
+      #seeker i { box-shadow: 0 8px 24px rgba(0, 122, 255, .55); }
+      .fuzz { position: absolute; width: 190px; height: 190px; margin: -95px 0 0 -95px; border-radius: 50%; background: rgba(0, 122, 255, .22); border: 5px solid var(--red); opacity: 0; }
       #code-chip { position: absolute; left: 50%; top: 44px; width: 340px; margin-left: -170px; height: 92px; border-radius: 46px; background: rgba(255,255,255,.12);
         display: flex; align-items: center; justify-content: center; gap: 18px; font-size: 30px; font-weight: 400; color: var(--muted); opacity: 0; }
       #code-chip b { font-size: 44px; font-weight: 700; letter-spacing: .16em; color: #fff; }
@@ -40,7 +40,7 @@
       #timer-chip span { color: var(--muted); font-weight: 400; }
       #caught { position: absolute; left: 0; top: 0; padding: 10px 22px; border-radius: 24px; background: #fff; color: #000; font-size: 30px; font-weight: 700; opacity: 0; white-space: nowrap; }
       #tag-btn { position: absolute; left: 50%; bottom: 48px; width: 520px; margin-left: -260px; height: 120px; border-radius: 36px; background: var(--red); color: #fff;
-        display: flex; align-items: center; justify-content: center; font-size: 52px; font-weight: 900; letter-spacing: .06em; box-shadow: 0 18px 40px -10px rgba(255,59,48,.7); opacity: 0; }
+        display: flex; align-items: center; justify-content: center; font-size: 52px; font-weight: 900; letter-spacing: .06em; box-shadow: 0 18px 40px -10px rgba(0, 122, 255, .7); opacity: 0; }
 
       /* play bar mock (steps 5-7) */
       #sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 230px; border-radius: 44px 44px 0 0; background: rgba(28,28,30,.97);
@@ -91,7 +91,7 @@
 
       /* end card */
       #end { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-      #end-icon { width: 220px; height: 220px; border-radius: 52px; background: var(--red); display: grid; place-items: center; box-shadow: 0 30px 70px -10px rgba(255,59,48,.6); opacity: 0; }
+      #end-icon { width: 220px; height: 220px; border-radius: 52px; background: var(--red); display: grid; place-items: center; box-shadow: 0 30px 70px -10px rgba(0, 122, 255, .6); opacity: 0; }
       #end h1 { margin-top: 56px; font-size: 120px; font-weight: 700; letter-spacing: -.04em; opacity: 0; }
       #end p { margin-top: 20px; font-size: 44px; color: var(--muted); opacity: 0; }
     </style>
@@ -114,8 +114,8 @@
               </g>
             </svg>
             <svg id="zone-svg" viewBox="0 0 960 820" aria-hidden="true">
-              <circle id="zone-fill" cx="480" cy="410" r="330" fill="rgba(255,59,48,.08)" opacity="0" />
-              <circle id="zone-line" cx="480" cy="410" r="330" fill="none" stroke="#ff3b30" stroke-width="10" stroke-linecap="round"
+              <circle id="zone-fill" cx="480" cy="410" r="330" fill="rgba(0, 122, 255, .08)" opacity="0" />
+              <circle id="zone-line" cx="480" cy="410" r="330" fill="none" stroke="#007aff" stroke-width="10" stroke-linecap="round"
                 stroke-dasharray="2074" stroke-dashoffset="2074" transform="rotate(-90 480 410)" />
             </svg>
             <div id="fz1" class="fuzz" style="left: 345px; top: 290px"></div>
@@ -285,7 +285,7 @@
       pop("#shop-panel", 19.75);
       fingerTo(680, 375, 20.4);
       tap("#it-cloak", 21.0);
-      tl.to("#it-cloak", { backgroundColor: "rgba(255,59,48,.35)", duration: 0.2 }, 21.05);
+      tl.to("#it-cloak", { backgroundColor: "rgba(0, 122, 255, .35)", duration: 0.2 }, 21.05);
       tl.set("#p-bal", { textContent: "45 pts" }, 21.1);
       tl.set("#b-bal", { textContent: "45" }, 21.1);
       tl.fromTo("#bought", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(1.8)" }, 21.1);
@@ -299,7 +299,7 @@
       pop("#pu-panel", 23.45);
       fingerTo(260, 375, 24.1);
       tap("#it-decoy", 24.7);
-      tl.to("#it-decoy", { backgroundColor: "rgba(255,59,48,.35)", duration: 0.2 }, 24.75);
+      tl.to("#it-decoy", { backgroundColor: "rgba(0, 122, 255, .35)", duration: 0.2 }, 24.75);
       drop("#pu-panel", 25.1);
       tl.to("#pu-n", { opacity: 0, scale: 0.4, duration: 0.25 }, 25.1);
       tl.to("#finger", { x: 560, y: 520, duration: 0.5, ease: "power3.inOut" }, 25.2);
