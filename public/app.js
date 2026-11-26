@@ -399,6 +399,9 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/Worl
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
   maxZoom: 20, maxNativeZoom: 19,
 }).addTo(map);
+// cool tint over the photo (see .map-tint in style.css); sits above the tiles, below zones and markers
+map.createPane('tint').style.zIndex = 250;
+L.DomUtil.create('div', 'map-tint', map.getPane('tint'));
 const layers = {
   zone: L.layerGroup().addTo(map),
   draft: L.layerGroup().addTo(map),
