@@ -5,9 +5,10 @@
     <meta name="viewport" content="width=1080, height=1350" />
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
     <style>
-      /* Ghostline: how to play. 4:5, 21 s, silent (it plays muted inside the app).
+      /* Ghostline: how to play. 4:5, 34 s, silent (it plays muted inside the app).
          One map stays on screen the whole time and grows a part per step:
-         zone -> hiders scatter -> pings -> tag. Captions swap underneath. */
+         zone -> hiders scatter -> pings -> tag -> shop -> power-ups -> chat.
+         The last three use a mock of the play bar and a tap finger. Captions swap underneath. */
       :root {
         --ground: #0b0b0f;
         --red: #ff3b30;
@@ -41,6 +42,46 @@
       #tag-btn { position: absolute; left: 50%; bottom: 48px; width: 520px; margin-left: -260px; height: 120px; border-radius: 36px; background: var(--red); color: #fff;
         display: flex; align-items: center; justify-content: center; font-size: 52px; font-weight: 900; letter-spacing: .06em; box-shadow: 0 18px 40px -10px rgba(255,59,48,.7); opacity: 0; }
 
+      /* play bar mock (steps 5-7) */
+      #sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 230px; border-radius: 44px 44px 0 0; background: rgba(28,28,30,.97);
+        box-shadow: 0 -10px 40px rgba(0,0,0,.45); opacity: 0; }
+      #seg { position: absolute; left: 220px; top: 20px; width: 520px; height: 72px; border-radius: 36px; background: rgba(118,118,128,.28); }
+      #seg-pill { position: absolute; left: 6px; top: 6px; width: 254px; height: 60px; border-radius: 30px; background: #636366; }
+      .seg-t { position: absolute; top: 0; width: 260px; height: 72px; display: flex; align-items: center; justify-content: center; gap: 12px; font-size: 30px; font-weight: 600; }
+      #seg-map { left: 0; } #seg-chat { left: 260px; }
+      .badge { min-width: 40px; height: 40px; padding: 0 10px; border-radius: 20px; background: var(--red); color: #fff; font-size: 24px; font-weight: 700;
+        display: inline-flex; align-items: center; justify-content: center; }
+      #chat-n { opacity: 0; }
+      .pbtn { position: absolute; top: 110px; height: 84px; border-radius: 26px; background: rgba(118,118,128,.28); display: flex; align-items: center; justify-content: center;
+        gap: 12px; font-size: 30px; font-weight: 600; }
+      .pbtn svg, .seg-t svg, .item svg { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+      #b-shop { left: 40px; width: 290px; } #b-shop span { color: var(--muted); font-weight: 400; }
+      #b-more { left: 350px; width: 260px; color: var(--muted); }
+      #b-pu { left: 630px; width: 290px; color: #fff; background: var(--red); }
+      #b-pu .badge { background: #fff; color: var(--red); }
+      .panel { position: absolute; left: 40px; top: 210px; width: 880px; height: 360px; border-radius: 36px; background: #2c2c2e; padding: 28px 20px;
+        box-shadow: 0 30px 60px rgba(0,0,0,.55); opacity: 0; }
+      .panel h3 { font-size: 34px; font-weight: 700; padding: 0 8px; display: flex; justify-content: space-between; align-items: baseline; }
+      .panel h3 span { font-size: 30px; color: var(--muted); font-weight: 500; }
+      .items { margin-top: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px 20px; }
+      .item { height: 112px; border-radius: 24px; background: rgba(118,118,128,.24); padding: 16px 20px; display: grid; grid-template-columns: 40px 1fr auto; gap: 4px 14px; align-items: center; }
+      .item b { font-size: 30px; font-weight: 600; } .item small { grid-column: 2 / 4; font-size: 26px; color: var(--muted); margin-top: -6px; }
+      .item .cost { font-size: 28px; font-weight: 700; color: var(--red); }
+      .item.off { opacity: .45; }
+      #bought { position: absolute; left: 50%; top: 150px; width: 300px; margin-left: -150px; height: 80px; border-radius: 40px; background: #fff; color: #000;
+        display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 700; opacity: 0; }
+      #decoy-tag { position: absolute; left: 0; top: 0; padding: 8px 20px; border-radius: 22px; background: var(--red); color: #fff; font-size: 26px; font-weight: 700; opacity: 0; white-space: nowrap; }
+      #chat { position: absolute; left: 0; right: 0; top: 0; height: 600px; background: #1c1c1e; padding: 40px 44px; opacity: 0; }
+      #chat h3 { font-size: 40px; font-weight: 700; margin-bottom: 26px; }
+      .ln { display: flex; align-items: center; gap: 16px; font-size: 28px; color: var(--muted); margin-bottom: 20px; opacity: 0; }
+      .ln i { width: 22px; height: 22px; border-radius: 50%; background: var(--red); flex: none; }
+      .ln b { color: #fff; }
+      .bub { max-width: 620px; padding: 18px 26px; border-radius: 30px; font-size: 30px; margin-bottom: 18px; opacity: 0; background: #3a3a3c; }
+      .bub em { display: block; font-style: normal; font-size: 26px; color: var(--muted); margin-bottom: 4px; }
+      .bub.me { margin-left: auto; background: var(--red); }
+      #finger { position: absolute; left: -45px; top: -45px; width: 90px; height: 90px; border-radius: 50%; background: rgba(255,255,255,.38); border: 5px solid rgba(255,255,255,.9);
+        box-shadow: 0 10px 30px rgba(0,0,0,.4); opacity: 0; }
+
       /* captions */
       .cap { position: absolute; left: 90px; right: 90px; top: 950px; }
       .cap .n { display: inline-block; font-size: 28px; font-weight: 700; color: var(--red); letter-spacing: .02em; margin-bottom: 18px; }
@@ -56,9 +97,9 @@
     </style>
   </head>
   <body>
-    <div id="root" data-composition-id="main" data-start="0" data-duration="21" data-width="1080" data-height="1350">
+    <div id="root" data-composition-id="main" data-start="0" data-duration="34" data-width="1080" data-height="1350">
 
-      <div id="plate-clip" class="clip" data-start="0" data-duration="18.4" data-track-index="0">
+      <div id="plate-clip" class="clip" data-start="0" data-duration="31.6" data-track-index="0">
         <div id="plate">
           <div id="world">
             <svg id="streets" viewBox="0 0 960 820" aria-hidden="true">
@@ -89,6 +130,43 @@
           <div id="code-chip">Game code <b>AYUA</b></div>
           <div id="timer-chip"><span>Next ping</span> <b id="ping-t">0:03</b></div>
           <div id="tag-btn">TAG</div>
+          <div id="decoy-fz" class="fuzz" style="left: 250px; top: 430px"></div>
+          <div id="decoy-tag">Decoy</div>
+          <div id="chat">
+            <h3>Chat</h3>
+            <div class="ln"><i></i><span><b>Pings</b> went out to the seekers</span></div>
+            <div class="ln"><i></i><span><b>Sam</b> was caught by <b>Alex</b></span></div>
+            <div class="bub"><em>Jo</em>Seeker is by the park</div>
+            <div class="bub me">Heading for the bridge</div>
+          </div>
+          <div id="sheet">
+            <div id="seg"><div id="seg-pill"></div>
+              <div id="seg-map" class="seg-t"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Map</div>
+              <div id="seg-chat" class="seg-t"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>Chat <b id="chat-n" class="badge">2</b></div>
+            </div>
+            <div id="b-shop" class="pbtn"><svg viewBox="0 0 24 24"><path d="M4 7h16l-1.5 12h-13z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg>Shop <span id="b-bal">120</span></div>
+            <div id="b-more" class="pbtn">More</div>
+            <div id="b-pu" class="pbtn"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Power-ups <b id="pu-n" class="badge">1</b></div>
+          </div>
+          <div id="shop-panel" class="panel">
+            <h3>Points shop <span id="p-bal">120 pts</span></h3>
+            <div class="items">
+              <div class="item"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><b>Peek</b><span class="cost">65</span><small>See the nearest seeker</small></div>
+              <div class="item" id="it-cloak"><svg viewBox="0 0 24 24"><path d="M5 20V10a7 7 0 0 1 14 0v10l-2.3-2-2.3 2-2.4-2-2.4 2-2.3-2z"/></svg><b>Cloak</b><span class="cost">75</span><small>Hide your next ping</small></div>
+              <div class="item"><svg viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8 6.6 19.7l1.1-6.1L3.2 9.4l6.1-.8z"/></svg><b>Power-up</b><span class="cost">50</span><small>A random trick</small></div>
+              <div class="item off"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M8 6v12"/></svg><b>Escape pass</b><span class="cost">150</span><small>Get away from one catch</small></div>
+            </div>
+          </div>
+          <div id="pu-panel" class="panel">
+            <h3>Power-ups</h3>
+            <div class="items">
+              <div class="item" id="it-decoy"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><b>Decoy</b><span class="cost">×1</span><small>Drop a fake ping</small></div>
+              <div class="item"><svg viewBox="0 0 24 24"><path d="M2 12h4l3-7 4 14 3-7h6"/></svg><b>Jammer</b><span class="cost">×1</span><small>Scramble your next ping</small></div>
+              <div class="item"><svg viewBox="0 0 24 24"><path d="M5 20V10a7 7 0 0 1 14 0v10l-2.3-2-2.3 2-2.4-2-2.4 2-2.3-2z"/></svg><b>Cloak</b><span class="cost">×1</span><small>Hide your next ping</small></div>
+            </div>
+          </div>
+          <div id="bought">Cloak bought!</div>
+          <div id="finger"></div>
         </div>
       </div>
 
@@ -105,7 +183,17 @@
         <div id="cap4" class="cap"><span class="n">Step 4</span><h2><span class="w">Tag</span> <span class="w">or</span> <span class="w">escape</span></h2><p>Get close to tag. The last hiders standing win.</p></div>
       </div>
 
-      <div id="end-clip" class="clip" data-start="18.2" data-duration="2.8" data-track-index="2">
+      <div id="cap5-clip" class="clip" data-start="18.5" data-duration="4.4" data-track-index="1">
+        <div id="cap5" class="cap"><span class="n">Step 5</span><h2><span class="w">Hit</span> <span class="w">the</span> <span class="w">shop</span></h2><p>Tap Shop to spend the points you earn on tricks, looks and colors.</p></div>
+      </div>
+      <div id="cap6-clip" class="clip" data-start="22.9" data-duration="4.3" data-track-index="1">
+        <div id="cap6" class="cap"><span class="n">Step 6</span><h2><span class="w">Use</span> <span class="w">power-ups</span></h2><p>Tap Power-ups, then tap one to use it. A decoy fakes your ping.</p></div>
+      </div>
+      <div id="cap7-clip" class="clip" data-start="27.2" data-duration="4.2" data-track-index="1">
+        <div id="cap7" class="cap"><span class="n">Step 7</span><h2><span class="w">Open</span> <span class="w">the</span> <span class="w">chat</span></h2><p>Tap Chat to message players and see every catch. Tap Map to go back.</p></div>
+      </div>
+
+      <div id="end-clip" class="clip" data-start="31.3" data-duration="2.7" data-track-index="2">
         <div id="end">
           <div id="end-icon">
             <svg width="150" height="150" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="22" fill="none" stroke="#fff" stroke-width="3.5"/><circle cx="32" cy="32" r="12" fill="none" stroke="#fff" stroke-width="3.5" opacity=".55"/><path d="M32 32 L32 10 A22 22 0 0 1 51 21 Z" fill="#fff" opacity=".3"/><circle cx="42" cy="22" r="4.5" fill="#fff"/><circle cx="32" cy="32" r="3.5" fill="#fff"/></svg>
@@ -173,12 +261,74 @@
       tl.fromTo("#caught", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.8)", immediateRender: false }, 15.8);
       tl.to("#tag-btn", { opacity: 0, y: 30, duration: 0.3, ease: "power2.in" }, 17.0);
 
+      // tap finger helpers: (x, y) are plate coordinates of the target's center
+      const fingerTo = (x, y, at, d = 0.5) => tl.to("#finger", { x, y, duration: d, ease: "power3.inOut" }, at);
+      const tap = (target, at) => {
+        tl.to("#finger", { scale: 0.75, duration: 0.1, ease: "power2.in" }, at);
+        tl.to("#finger", { scale: 1, duration: 0.3, ease: "back.out(2)" }, at + 0.1);
+        if (target) {
+          tl.to(target, { scale: 0.94, duration: 0.1, ease: "power2.in" }, at);
+          tl.to(target, { scale: 1, duration: 0.35, ease: "back.out(2)" }, at + 0.1);
+        }
+      };
+      const pop = (sel, at) => tl.fromTo(sel, { opacity: 0, y: 30, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.45, ease: "expo.out" }, at);
+      const drop = (sel, at) => tl.to(sel, { opacity: 0, y: 24, scale: 0.97, duration: 0.25, ease: "power2.in" }, at);
+
+      // 5. the play bar slides up, tap Shop, buy a Cloak
+      cap(5, 18.5, 22.9);
+      tl.to(["#caught", "#h3 i"], { opacity: 0, duration: 0.3, ease: "power2.in" }, 18.2);
+      tl.fromTo("#sheet", { opacity: 0, y: 240 }, { opacity: 1, y: 0, duration: 0.6, ease: "expo.out" }, 18.4);
+      tl.set("#finger", { x: 480, y: 470 }, 18.4);
+      tl.fromTo("#finger", { opacity: 0, scale: 1.4 }, { opacity: 1, scale: 1, duration: 0.4, ease: "expo.out", immediateRender: false }, 18.9);
+      fingerTo(185, 742, 19.0);
+      tap("#b-shop", 19.6);
+      pop("#shop-panel", 19.75);
+      fingerTo(680, 375, 20.4);
+      tap("#it-cloak", 21.0);
+      tl.to("#it-cloak", { backgroundColor: "rgba(255,59,48,.35)", duration: 0.2 }, 21.05);
+      tl.set("#p-bal", { textContent: "45 pts" }, 21.1);
+      tl.set("#b-bal", { textContent: "45" }, 21.1);
+      tl.fromTo("#bought", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(1.8)" }, 21.1);
+      drop("#shop-panel", 22.2);
+      tl.to("#bought", { opacity: 0, duration: 0.25 }, 22.2);
+
+      // 6. tap Power-ups, use the decoy, the seeker chases the fake ping
+      cap(6, 22.9, 27.2);
+      fingerTo(775, 742, 22.6);
+      tap("#b-pu", 23.3);
+      pop("#pu-panel", 23.45);
+      fingerTo(260, 375, 24.1);
+      tap("#it-decoy", 24.7);
+      tl.to("#it-decoy", { backgroundColor: "rgba(255,59,48,.35)", duration: 0.2 }, 24.75);
+      drop("#pu-panel", 25.1);
+      tl.to("#pu-n", { opacity: 0, scale: 0.4, duration: 0.25 }, 25.1);
+      tl.to("#finger", { x: 560, y: 520, duration: 0.5, ease: "power3.inOut" }, 25.2);
+      tl.fromTo("#decoy-fz", { opacity: 0, scale: 0.3 }, { opacity: 1, scale: 1, duration: 0.7, ease: "expo.out" }, 25.4);
+      tl.set("#decoy-tag", { x: 196, y: 330 }, 25.5);
+      tl.fromTo("#decoy-tag", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(1.8)", immediateRender: false }, 25.6);
+      tl.to("#seeker", { x: -200, y: 30, duration: 1.3, ease: "power2.inOut" }, 25.8);
+
+      // 7. a chat badge appears, tap Chat, messages roll in, tap Map to go back
+      cap(7, 27.2, 31.4);
+      tl.fromTo("#chat-n", { opacity: 0, scale: 0.4 }, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(2)" }, 26.9);
+      fingerTo(610, 646, 27.5);
+      tap("#seg-chat", 28.0);
+      tl.to("#seg-pill", { x: 254, duration: 0.35, ease: "power3.out" }, 28.0);
+      tl.to("#chat-n", { opacity: 0, scale: 0.4, duration: 0.2 }, 28.0);
+      tl.fromTo("#chat", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.45, ease: "expo.out" }, 28.05);
+      tl.fromTo("#chat .ln, #chat .bub", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4, ease: "expo.out", stagger: 0.28 }, 28.35);
+      fingerTo(350, 646, 29.9);
+      tap("#seg-map", 30.45);
+      tl.to("#seg-pill", { x: 0, duration: 0.35, ease: "power3.out" }, 30.55);
+      tl.to("#chat", { opacity: 0, y: 40, duration: 0.3, ease: "power2.in" }, 30.55);
+      tl.to("#finger", { opacity: 0, duration: 0.25 }, 30.8);
+
       // the map steps back and the end card lands
-      tl.to("#plate", { opacity: 0, scale: 0.92, filter: "blur(14px)", duration: 0.55, ease: "power3.in" }, 17.85);
-      tl.fromTo("#end-icon", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.8, ease: "back.out(1.4)" }, 18.3);
-      tl.fromTo("#end h1", { opacity: 0, filter: "blur(10px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.35, ease: "power3.out" }, 18.55);
-      tl.fromTo("#end p", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: "expo.out" }, 18.8);
-      tl.set({}, {}, 21);
+      tl.to("#plate", { opacity: 0, scale: 0.92, filter: "blur(14px)", duration: 0.55, ease: "power3.in" }, 31.0);
+      tl.fromTo("#end-icon", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.8, ease: "back.out(1.4)" }, 31.45);
+      tl.fromTo("#end h1", { opacity: 0, filter: "blur(10px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.35, ease: "power3.out" }, 31.7);
+      tl.fromTo("#end p", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: "expo.out" }, 31.95);
+      tl.set({}, {}, 34);
       window.__timelines["main"] = tl;
       tl.seek(0);
     </script>
