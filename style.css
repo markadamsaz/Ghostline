@@ -1314,3 +1314,10 @@ body.lobby #hud-time { background: var(--blue-grad); -webkit-background-clip: te
 .msg.mine { background: var(--blue-grad); }
 .im-send { background: var(--blue-grad); }
 .film-card b { color: var(--ink); }
+
+/* lobby: the cards scroll up under the glass bar, so the bar frosts them instead of the map */
+body.lobby-full #sheet[data-view=lobby] { top: 0; padding-top: calc(var(--bar-h) + 12px); scroll-padding-top: calc(var(--bar-h) + 12px);
+  -webkit-backdrop-filter: none; backdrop-filter: none; }
+body.lobby-full #hud { z-index: 40; background: color-mix(in srgb, var(--glass) 70%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(24px); backdrop-filter: saturate(180%) blur(24px); box-shadow: 0 .5px 0 var(--line); }
+@media (prefers-color-scheme: dark) { body.lobby-full #hud { background: rgba(18,18,22,.55); } }
