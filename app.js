@@ -1034,6 +1034,10 @@ function handle(m, self) {
     }
     case 'chat': {
       if (!S) return;
+      if (d.aid !== undefined) { // one part of a longer audio message: wait for the rest
+        const audio = joinAudio(m.from, d); if (!audio) return;
+        return handle({ ...m, d: { ...d, aid: undefined, chunk: undefined, audio } }, self);
+      }
       // to: 'all', 'hider' / 'seeker' (that team only) or a player id (a private message)
       const to = String(d.to || (d.team && d.team !== 'all' ? d.team : 'all'));
       let conv;
@@ -2360,7 +2364,23 @@ function renderReplay() {
 // Conversations: 'all' (everyone), 'hider' / 'seeker' (your own team only), 'game' (round updates, read only)
 // and 'dm:<player id>' (a private chat). Messages go out over the game's broadcast like everything else and
 // each phone keeps only the ones meant for it.
-const AUDIO_MAX_S = 30, AUDIO_MAX_BYTES = 170000, AUDIO_MAX_B64 = 240000;
+// The live server caps one message at 256 KB, so longer clips go out in parts and are put back together on arrival
+const AUDIO_MAX_S = 30, AUDIO_MAX_BYTES = 900000, AUDIO_MAX_B64 = 1300000, AUDIO_PART = 150000;
+const audioParts = new Map(); // `${from}:${aid}` -> { parts: [], got, n, t }
+function joinAudio(from, d) {
+  const n = d.parts | 0, i = d.part | 0;
+  if (typeof d.chunk !== 'string' || n < 1 || n > 12 || i < 0 || i >= n || d.chunk.length > AUDIO_PART + 1000) return null;
+  const now = Date.now();
+  for (const [k, v] of audioParts) if (now - v.t > 120e3) audioParts.delete(k); // drop clips whose parts never all came
+  const key = from + ':' + String(d.aid).slice(0, 40);
+  let a = audioParts.get(key);
+  if (!a) { a = { parts: new Array(n), got: 0, n, t: now }; audioParts.set(key, a); }
+  if (a.n !== n || a.parts[i] !== undefined) return null;
+  a.parts[i] = d.chunk; a.got++;
+  if (a.got < n) return null;
+  audioParts.delete(key);
+  return a.parts.join('');
+}
 const myTeam = () => (S && S.phase !== 'lobby' ? mine()?.role || null : null);
 function convTitle(k) {
   if (k === 'all') return 'Everyone';
@@ -2401,7 +2421,11 @@ function sendChat(conv, body) {
   if (!conv || conv === 'game') return;
   const to = conv.startsWith('dm:') ? conv.slice(3) : conv;
   // 'team' keeps older copies of the app from showing these in the wrong place
-  send('chat', { ...body, to, team: to === 'all' ? 'all' : conv.startsWith('dm:') ? 'dm' : to });
+  const head = { to, team: to === 'all' ? 'all' : conv.startsWith('dm:') ? 'dm' : to };
+  if (body.audio && body.audio.length > AUDIO_PART) {
+    const { audio, ...rest } = body, n = Math.ceil(audio.length / AUDIO_PART), aid = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    for (let i = 0; i < n; i++) setTimeout(() => send('chat', { ...rest, ...head, aid, part: i, parts: n, chunk: audio.slice(i * AUDIO_PART, (i + 1) * AUDIO_PART) }), i * 150);
+  } else send('chat', { ...body, ...head });
   playSend(); buzz(15);
 }
 function openConv(k) {
@@ -2515,7 +2539,7 @@ async function recStart(conv) {
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
   catch { rec.on = false; rec.held = false; setAudioSession('playback'); chatHint('Allow the microphone to send audio messages.'); return; }
-  if (!rec.held) { stream.getTracks().forEach((t) => t.stop()); rec.on = false; setAudioSession('playback'); return; } // let go while the permission prompt was up
+  if (!rec.held) { stream.getTracks().forEach((t) => t.stop()); rec.on = false; setAudioSession('playback'); chatHint('Microphone is on. Hold the mic to record, let go to send.'); return; } // let go while the permission prompt was up
   rec.stream = stream;
   const type = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/aac', 'audio/webm;codecs=opus', 'audio/webm'].find((t) => MediaRecorder.isTypeSupported?.(t)) || '';
   try { rec.mr = new MediaRecorder(stream, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 32000 }); }
@@ -2554,7 +2578,8 @@ function waveBars(levels, n = 26) {
 function recDone() {
   if (!rec.on) return;
   const dur = Math.min(AUDIO_MAX_S, (Date.now() - rec.t0) / 1000), { cancel, conv, levels } = rec;
-  const blob = new Blob(rec.chunks, { type: (rec.mr && rec.mr.mimeType) || 'audio/mp4' });
+  const mime = ((rec.mr && rec.mr.mimeType) || rec.chunks[0]?.type || 'audio/mp4').split(';')[0].trim().replace(/^video\//, 'audio/') || 'audio/mp4';
+  const blob = new Blob(rec.chunks, { type: mime });
   rec.stream?.getTracks().forEach((t) => t.stop());
   try { rec.src?.disconnect(); } catch {}
   Object.assign(rec, { on: false, held: false, mr: null, stream: null, src: null, an: null, chunks: [] });
@@ -2667,7 +2692,7 @@ sheet.addEventListener('pointermove', (e) => {
   if (away !== rec.away) { rec.away = away; $('#im-bar')?.classList.toggle('cancel', away); }
 });
 window.addEventListener('pointerup', () => { if (rec.held) recStop(rec.away); });
-window.addEventListener('pointercancel', () => { if (rec.held) recStop(true); });
+window.addEventListener('pointercancel', () => { if (rec.held) recStop(rec.away); }); // iPhones can cancel a long hold: still send unless they slid away
 sheet.addEventListener('contextmenu', (e) => { if (e.target.closest('#im-mic')) e.preventDefault(); });
 
 function act(a, el) {
