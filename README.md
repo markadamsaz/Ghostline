@@ -39,7 +39,7 @@ Points you earn (survival minutes, catches, missions, flags, extraction) can be 
 
 ## Settings
 
-The gear (on the home screen, and in the top bar during a game) opens Settings. Signed-in players see their account there: name, points, username and a Change password option (passwords are stored hashed, so they can't be shown), plus Sign out. Everything else is saved on the phone:
+The gear (on the home screen, and in the top bar during a game) opens Settings. Signed-in players see their account there: name, points, username, their password (the account server only stores it hashed, so the phone keeps its own copy from signing in or changing it there; it's deleted on sign out), Change password and Sign out. Everything else is saved on the phone:
 Appearance (Automatic, Light or Dark), Map (Satellite or Streets), Vibration, Chat sounds and Animations (off reduces motion), plus location, the how-to-play film and the map key. Game sounds and the seeker alarm always play.
 
 ## GPS accuracy
