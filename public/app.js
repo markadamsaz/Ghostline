@@ -1598,14 +1598,15 @@ function clientTick() {
   if (S.phase === 'hunting' && p) reachThings(p, now);
   // seeker alarm: seekers quietly share their spot, hiders' phones play the alarm when one is close
   const range = +S.settings.alarmM || 0;
-  if (range && S.phase === 'hunting' && p && p.role === 'seeker' && alive(p) && myPos && now - L_.lastNearSend >= ALARM_SEND_MS) {
+  // every seeker counts, including hiders who got caught in Infection and joined them (they keep caughtAt)
+  if (range && S.phase === 'hunting' && p && p.role === 'seeker' && !p.extracted && myPos && now - L_.lastNearSend >= ALARM_SEND_MS) {
     L_.lastNearSend = now; send('seekerNear', { p: myPos.p });
   }
   let nearM = Infinity;
   if (range && S.phase === 'hunting' && p && p.role === 'hider' && alive(p) && myPos) {
     for (const [id, x] of Object.entries(L_.nearLocs)) {
       const q = P(id);
-      if (id === me.id || !q || q.role !== 'seeker' || !alive(q) || now - x.t > ALARM_STALE_MS) continue;
+      if (id === me.id || !q || q.role !== 'seeker' || q.extracted || now - x.t > ALARM_STALE_MS) continue;
       nearM = Math.min(nearM, G.dist(myPos.p, x.p));
     }
   }

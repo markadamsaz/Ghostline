@@ -231,10 +231,19 @@ await hiders[1].page.click('[data-act="toggleShop"]');
 ok(await until(() => hiders[1].page.evaluate(() => !!document.querySelector('#sheet .pu-panel [data-act="buy"]')), 4000, 'shop'), 'the Shop button on the map opens the points shop');
 await hiders[1].page.click('[data-act="toggleShop"]');
 await hiders[1].page.click('[data-act="modeChat"]');
-ok(await until(() => hiders[1].page.evaluate(() => document.querySelectorAll('#chat-log .sys').length >= 2), 4000, 'feed'), 'Chat mode shows the game updates as one-line messages');
+ok(await until(() => hiders[1].page.evaluate(() => ['Everyone', 'Hiders', 'Game updates'].every((t) => [...document.querySelectorAll('.im-conv b')].some((b) => b.textContent === t))), 4000, 'inbox'), 'Chat opens an inbox with Everyone, your team and Game updates');
+ok(await hiders[1].page.evaluate(() => !document.querySelector('.im-conv[data-conv="seeker"]')), 'hiders don\'t see the seekers\' group');
+await hiders[1].page.click('.im-conv[data-conv="game"]');
+ok(await until(() => hiders[1].page.evaluate(() => document.querySelectorAll('#chat-log .im-sys').length >= 2 && !document.querySelector('#im-bar')), 4000, 'feed'), 'Game updates shows the round as one-line updates, read only');
+await hiders[1].page.click('[data-act="chatBack"]');
+await hiders[1].page.click('.im-conv[data-conv="hider"]');
 await hiders[1].page.fill('#chat-in', 'by the slide');
-await hiders[1].page.click('.chat-form .btn.primary');
-ok(await until(() => hiders[2].page.evaluate(() => window.__gl.feed().includes('by the slide')), 4000, 'msg'), 'players can message each other in the chat');
+await hiders[1].page.click('.im-send');
+ok(await until(() => hiders[2].page.evaluate(() => window.__gl.feed().includes('by the slide')), 4000, 'msg'), 'hiders can message their team');
+ok(await G(hiders[1], () => !!document.querySelector('.im-row.me .im-b') && !!document.querySelector('.im-dlv')), 'your message shows as a blue bubble marked Delivered');
+await G(hiders[1], (to) => window.__gl.send('chat', { text: 'meet at the gate', to }), hiders[2].pid);
+await sleep(600);
+ok(await G(hiders[2], () => window.__gl.feed().includes('meet at the gate')) && !(await G(hiders[0], () => window.__gl.feed().includes('meet at the gate'))), 'a private message reaches only that player');
 if (SHOTS) await hiders[1].page.screenshot({ path: SHOTS + '/4c-hider-chat.png' });
 await hiders[1].page.click('[data-act="modeMap"]');
 ok(await until(() => hiders[1].page.evaluate(() => !!document.querySelector('#sheet .play-compact')), 4000, 'mapmode'), 'and Map mode brings the map back');
@@ -249,8 +258,17 @@ ok(!st.players[hiders[1].pid].caughtAt, 'hiders out of range are safe');
 await G(hiders[1], (sp) => window.__gl.send('caught', { who: window.__gl.me.id, by: sp, how: 'self', p: null }), seekerPid);
 ok(await until(async () => !!(await state(host)).players[hiders[1].pid].caughtAt, 5000, 'self'), '"I got caught" button works');
 
+// seeker alarm from an infected seeker: hiders[0] was caught and joined the seekers, the original seeker is far away
+await setPos(seeker, off(0, -600));
+await setPos(hiders[0], off(60, -230)); // 20 m from hiders[2]
+ok(await until(async () => (await G(hiders[2], (id) => !!window.__gl.local.nearLocs[id], hiders[0].pid)), 8000, 'infected near'), 'a hider who joined the seekers shares their spot for the alarm');
+ok(await until(async () => G(hiders[2], () => window.__gl.alarmOn), 8000, 'infected alarm'), 'the alarm plays when a seeker who started as a hider gets close');
+await setPos(hiders[0], off(60, 100));
+ok(await until(async () => !(await G(hiders[2], () => window.__gl.alarmOn)), 8000, 'infected alarm off'), 'and stops when they walk away');
+await setPos(seeker, off(0, 0));
+
 // chat (team only)
-await G(seeker, () => window.__gl.send('chat', { text: 'north side', team: 'seeker' }));
+await G(seeker, () => window.__gl.send('chat', { text: 'north side', to: 'seeker' }));
 await sleep(600);
 ok((await hiders[2].page.evaluate(() => document.body.innerText)).includes('north side') === false, 'seeker team chat is hidden from hiders');
 
