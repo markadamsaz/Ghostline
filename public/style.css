@@ -68,11 +68,9 @@ input, select { font: inherit; color: var(--ink); }
 /* ---------- map ---------- */
 #map { position: fixed; inset: 0; background: #ecebe8; z-index: 0; }
 .leaflet-container { background: #ecebe8; font-family: inherit; }
-/* Make Esri's satellite photo look like Apple Maps: brighter, less orange, cooler white balance.
-   The filter does brightness/contrast/saturation; the .map-tint layer above it cools the colors. */
-.map-tiles { filter: brightness(1.2) contrast(.92) saturate(.75); }
-.map-tint { position: absolute; left: -100000px; top: -100000px; width: 200000px; height: 200000px;
-  background: rgb(230,245,255); mix-blend-mode: multiply; pointer-events: none; }
+/* Make Esri's satellite photo look like Apple Maps: brighter and less orange.
+   Only a CSS filter on the photo itself: iPhone Safari draws blend-mode overlays here as a solid sheet. */
+.map-tiles { filter: brightness(1.2) contrast(.92) saturate(.72); }
 .leaflet-control-attribution { background: rgba(255,255,255,.85) !important; color: var(--muted) !important; font-size: 10px; }
 .leaflet-control-attribution a { color: var(--muted) !important; }
 .leaflet-bottom { bottom: calc(var(--sheet-h, 0px) + 4px); transition: bottom .2s; }
