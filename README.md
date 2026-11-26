@@ -37,6 +37,11 @@ Points you earn (survival minutes, catches, missions, flags, extraction) can be 
 - Characters (art from the Mafia game, shown as your avatar and your own map dot): Common 100 (Toad, Toadette, Crewmate), Rare 200 (Yoshi, Luigi, Peach, Mike, Rumi, Sparky, Clawd, Gooigi and the Phantom, Wraith, Ember and Crimson ghosts), Epic 350 (Pikachu, Shrek, Gru, Kirby, Specter), Legendary 600 (Mewtwo, Godzilla, Mega Clawd, Rolling Hero). Once bought, a character is yours forever: it's saved on the phone, and on the account when signed in (so it follows you to other phones). Switching back to one you own is free.
 - Shapes 10, colors 5
 
+## Settings
+
+The gear (on the home screen, and in the top bar during a game) opens Settings. Everything is saved on the phone:
+Appearance (Automatic, Light or Dark), Map (Satellite or Streets), Vibration, Chat sounds and Animations (off reduces motion), plus location, the how-to-play film and the map key. Game sounds and the seeker alarm always play.
+
 ## GPS accuracy
 
 Phones ask for their most accurate fresh fix. A weak fix (worse than 30 m) is skipped while a recent good one exists, and the last few fixes are averaged to smooth out jitter. Each player sees their accuracy (GPS ±N m) in the top bar. A tag counts inside the tag range plus a few meters for normal GPS error. If either phone's GPS is weak, only a tag inside half the range counts, and the seeker is told to get closer. Phone GPS is about 5 to 10 m outdoors at best and worse indoors, so for small areas use a 20 to 30 m tag range and Exact or 10 m ping fuzz.
