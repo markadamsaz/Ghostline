@@ -37,6 +37,13 @@ const ICONS = {
   back: '<path d="M15 5l-7 7 7 7"/>',
   chevR: '<path d="M9 5l7 7-7 7"/>',
   chevD: '<path d="M5 9l7 7 7-7"/>',
+  chevL: '<path d="M15 5l-7 7 7 7"/>',
+  people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.8"/><path d="M16 14.2A5.5 5.5 0 0 1 21.5 20"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>',
+  arrowUp: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  play: '<path d="M8 5v14l11-7z" fill="currentColor"/>',
+  pause: '<path d="M8 5v14M16 5v14" stroke-width="3.5"/>',
+  compose: '<path d="M20 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/><path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/>',
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14a6.5 6.5 0 0 1 3.5 6"/>',
   gamepad: '<path d="M6 7h12a4 4 0 0 1 4 4l-1 6a2.5 2.5 0 0 1-4.4 1.3L15 16H9l-1.6 2.3A2.5 2.5 0 0 1 3 17l-1-6a4 4 0 0 1 4-4z"/><path d="M7 11v3M5.5 12.5h3M15.5 12h.01M18 13.5h.01"/>',
   box: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>',
@@ -227,7 +234,9 @@ let L_ = {};             // local per-round state
 let prevPhase = null, prevRound = 0;
 const processed = new Set();
 const chat = [];
-let chatTab = 'all', chatOpen = false, unread = false;
+let chatOpen = false;
+let chatConv = null, chatCompose = false; // chat screen: null = the inbox, else a conversation key (see convTitle)
+const unreadBy = {};
 let sheetCollapsed = false;
 let zoneDraft = null;    // host editing
 let mapView = false;     // lobby: sheet shrinks to just the zone tools so the map is usable
@@ -271,14 +280,28 @@ function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.fl
 
 // ---------------- feedback: toasts, sound, vibration ----------------
 const inGame = () => !!S && (S.phase === 'hiding' || S.phase === 'hunting');
-let unreadN = 0, chatSeq = 0;
-function pushChat(c) { c.cid = ++chatSeq; chat.push(c); if (chat.length > 300) chat.shift(); }
-// during a round every update goes into the chat feed (one line each) instead of popping up
-function feed(html, cls = '', icon = null, who = null) {
-  pushChat(who ? { ...who, t: Date.now() } : { sys: true, html, cls, icon, t: Date.now() });
-  if (!chatOpen) { unreadN++; const n = $('#chat-n'); if (n) { n.textContent = unreadN; n.hidden = false; } }
-  const line = who ? `<b>${esc(who.name)}</b>: ${esc(who.text)}` : html;
-  L_.lastUp = { html: line, icon: who ? 'chat' : icon, t: Date.now() };
+let chatSeq = 0;
+function pushChat(c) {
+  c.cid = ++chatSeq; chat.push(c);
+  if (chat.length > 400) { const old = chat.shift(); if (old.audio) URL.revokeObjectURL(old.audio); }
+}
+// unread counts per conversation. Game updates get a dot in the inbox but don't count on the Chat badge
+function bumpUnread(conv) {
+  if (chatOpen && chatConv === conv && !chatCompose) return;
+  unreadBy[conv] = (unreadBy[conv] || 0) + 1;
+  updateChatBadges();
+}
+const unreadTotal = (skip) => Object.entries(unreadBy).reduce((a, [k, n]) => a + (k === 'game' || k === skip ? 0 : n), 0);
+function updateChatBadges() {
+  const n = unreadTotal();
+  const b = $('#chat-n'); if (b) { b.textContent = n; b.hidden = !n || chatOpen; }
+  const d = $('#chat-dot'); if (d) d.hidden = !n || chatOpen;
+}
+// during a round every update goes into the Game updates conversation (one line each) instead of popping up
+function feed(html, cls = '', icon = null) {
+  pushChat({ sys: true, conv: 'game', html, cls, icon, t: Date.now() });
+  bumpUnread('game');
+  L_.lastUp = { html, icon, t: Date.now(), conv: 'game' };
   showLastUp();
   if (chatOpen) renderChat();
 }
@@ -307,7 +330,7 @@ function showLastUp() {
   const el = $('#last-up'); if (!el) return;
   const u = L_.lastUp, on = !!u && !chatOpen && Date.now() - u.t < 9000;
   el.hidden = !on;
-  if (on) el.innerHTML = (u.icon && ICONS[u.icon] ? ic(u.icon) : '') + `<span>${u.html}</span>`;
+  if (on) { el.innerHTML = (u.icon && ICONS[u.icon] ? ic(u.icon) : '') + `<span>${u.html}</span>`; el.dataset.conv = u.conv || 'game'; }
 }
 function toast(text, cls = '', icon = null) {
   if (inGame()) { feed(text, cls, icon); return; }
@@ -329,6 +352,7 @@ function unlockAudio() {
     if (!L_unlocked) { L_unlocked = true; const b = actx.createBuffer(1, 1, 22050), src = actx.createBufferSource(); src.buffer = b; src.connect(actx.destination); src.start(0); } // iOS needs a sound played inside a tap
   } catch {}
   if (typeof loadAlarm === 'function' && S) loadAlarm();
+  if (typeof loadSfx === 'function') loadSfx();
 }
 let L_unlocked = false;
 function beep(kind) {
@@ -342,6 +366,37 @@ function beep(kind) {
       o.type = 'square'; o.frequency.value = f;
       g.gain.setValueAtTime(0.08, t); g.gain.exponentialRampToValueAtTime(0.001, t + d);
       o.connect(g).connect(actx.destination); o.start(t); o.stop(t + d + .02); t += d + .04;
+    }
+  } catch {}
+}
+// chat sounds: the iPhone send swoosh when you send, a soft two-note chime when a message comes in
+const sfx = { send: null, loading: false };
+function loadSfx() {
+  if (sfx.send || sfx.loading || !actx) return;
+  sfx.loading = true;
+  fetch('audio/send.m4a').then((r) => r.arrayBuffer())
+    .then((b) => new Promise((ok, no) => actx.decodeAudioData(b, ok, no)))
+    .then((buf) => { sfx.send = buf; })
+    .catch(() => {})
+    .finally(() => { sfx.loading = false; });
+}
+function playSend() {
+  try {
+    if (!actx) unlockAudio();
+    if (actx.state !== 'running') actx.resume().catch(() => {});
+    if (!sfx.send) { loadSfx(); return; }
+    const src = actx.createBufferSource(); src.buffer = sfx.send; src.connect(actx.destination); src.start();
+  } catch {}
+}
+function playRecv() {
+  try {
+    if (!actx) unlockAudio();
+    let t = actx.currentTime;
+    for (const [f, d] of [[1175, .09], [1568, .16]]) {
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.12, t + .01); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(g).connect(actx.destination); o.start(t); o.stop(t + d + .02); t += d * .7;
     }
   } catch {}
 }
@@ -979,14 +1034,25 @@ function handle(m, self) {
     }
     case 'chat': {
       if (!S) return;
-      const text = String(d.text || '').slice(0, 200);
-      if (!text) return;
+      // to: 'all', 'hider' / 'seeker' (that team only) or a player id (a private message)
+      const to = String(d.to || (d.team && d.team !== 'all' ? d.team : 'all'));
+      let conv;
+      if (to === 'all') conv = 'all';
+      else if (to === 'hider' || to === 'seeker') { if (!self && to !== myTeam()) return; conv = to; }
+      else { if (!self && to !== me.id) return; conv = 'dm:' + (self ? to : m.from); }
+      const text = String(d.text || '').slice(0, 500);
+      const audio = typeof d.audio === 'string' && d.audio.length < AUDIO_MAX_B64 && /^data:audio\/[\w.+-]+(;[\w.+=-]+)*;base64,[A-Za-z0-9+/=]+$/.test(d.audio) ? dataToUrl(d.audio) : null;
+      if (!text && !audio) return;
       const sender = P(m.from);
-      if (d.team !== 'all' && mine() && d.team !== mine().role && !self) return;
-      const entry = { from: m.from, name: sender?.name || 'Someone', role: S.phase === 'lobby' ? '' : sender?.role || '', text, team: d.team };
-      if (inGame()) { if (self) { pushChat({ ...entry, t: Date.now() }); if (chatOpen) renderChat(); } else feed('', '', null, entry); break; }
-      pushChat({ ...entry, t: Date.now() });
-      if (!chatOpen && !self) { unread = true; $('#chat-dot').hidden = false; toast(`<b>${esc(sender?.name)}</b>: ${esc(text)}`, sender?.role === 'seeker' ? 'seeker' : 'hider'); }
+      const c = { conv, from: m.from, name: sender?.name || 'Someone', text, t: Date.now() };
+      if (audio) { c.audio = audio; c.dur = Math.max(0, Math.min(AUDIO_MAX_S, +d.dur || 0)); c.bars = Array.isArray(d.bars) ? d.bars.slice(0, 40).map((v) => Math.max(1, Math.min(9, v | 0))) : []; }
+      pushChat(c);
+      if (!self) {
+        bumpUnread(conv); playRecv(); buzz(30);
+        const pre = `<b>${esc(c.name)}</b>${conv.startsWith('dm:') ? '' : ' to ' + esc(convTitle(conv))}: ${esc(msgPreview(c))}`;
+        if (inGame()) { L_.lastUp = { html: pre, icon: 'chat', t: Date.now(), conv }; showLastUp(); }
+        else if (!chatOpen) toast(pre, sender?.role === 'seeker' && S.phase !== 'lobby' ? 'seeker' : 'hider');
+      }
       if (chatOpen) renderChat();
       break;
     }
@@ -2142,7 +2208,7 @@ function goalCard(p) {
 }
 
 function modeSeg() {
-  return `<div class="seg mode-seg"><button class="${chatOpen ? '' : 'on'}" data-act="modeMap">${ic('pin')}Map</button><button class="${chatOpen ? 'on' : ''}" data-act="modeChat">${ic('chat')}Chat<b id="chat-n" class="pu-n" ${unreadN && !chatOpen ? '' : 'hidden'}>${unreadN}</b></button></div>`;
+  return `<div class="seg mode-seg"><button class="${chatOpen ? '' : 'on'}" data-act="modeMap">${ic('pin')}Map</button><button class="${chatOpen ? 'on' : ''}" data-act="modeChat">${ic('chat')}Chat<b id="chat-n" class="pu-n" ${unreadTotal() && !chatOpen ? '' : 'hidden'}>${unreadTotal()}</b></button></div>`;
 }
 function renderPlaying() {
   const p = mine();
@@ -2289,37 +2355,253 @@ function renderReplay() {
 }
 
 // ---------------- chat ----------------
+// ---------------- chat: an iMessage-style inbox, threads, contacts and audio messages ----------------
+// Conversations: 'all' (everyone), 'hider' / 'seeker' (your own team only), 'game' (round updates, read only)
+// and 'dm:<player id>' (a private chat). Messages go out over the game's broadcast like everything else and
+// each phone keeps only the ones meant for it.
+const AUDIO_MAX_S = 30, AUDIO_MAX_BYTES = 170000, AUDIO_MAX_B64 = 240000;
+const myTeam = () => (S && S.phase !== 'lobby' ? mine()?.role || null : null);
+function convTitle(k) {
+  if (k === 'all') return 'Everyone';
+  if (k === 'hider') return 'Hiders';
+  if (k === 'seeker') return 'Seekers';
+  if (k === 'game') return 'Game updates';
+  return P(k.slice(3))?.name || 'Someone';
+}
+function convKeys() {
+  if (!S) return [];
+  const team = myTeam();
+  return ['all', ...(team ? [team] : []), ...(inGame() || chat.some((c) => c.conv === 'game') ? ['game'] : []),
+    ...Object.keys(S.players).filter((id) => id !== me.id).map((id) => 'dm:' + id)];
+}
+function convAvatar(k) {
+  if (k.startsWith('dm:')) return avatar(P(k.slice(3)));
+  const icon = { all: 'people', hider: 'hide', seeker: 'eye', game: 'bolt' }[k];
+  return `<span class="av im-gav ${k}">${ic(icon)}</span>`;
+}
+function convSub(k) {
+  if (k.startsWith('dm:')) { const p = P(k.slice(3)); return p && S.phase !== 'lobby' && p.role ? (p.role === 'seeker' ? 'Seeker' : 'Hider') : 'Player'; }
+  if (k === 'game') return 'Catches, pings and drops';
+  const n = Object.values(S.players).filter((p) => k === 'all' || p.role === k).length;
+  return `${n} ${n === 1 ? 'person' : 'people'}`;
+}
+const stripTags = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.textContent || ''; };
+const msgPreview = (c) => (c.sys ? stripTags(c.html) : c.audio ? 'Audio Message' : c.text);
+const imTime = (t) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+const secs = (x) => { x = Math.max(0, Math.round(x)); return `${Math.floor(x / 60)}:${String(x % 60).padStart(2, '0')}`; };
+function dataToUrl(d) {
+  try {
+    const i = d.indexOf(','), mime = d.slice(5, i).split(';')[0], bin = atob(d.slice(i + 1)), u = new Uint8Array(bin.length);
+    for (let k = 0; k < bin.length; k++) u[k] = bin.charCodeAt(k);
+    return URL.createObjectURL(new Blob([u], { type: mime }));
+  } catch { return null; }
+}
+function sendChat(conv, body) {
+  if (!conv || conv === 'game') return;
+  const to = conv.startsWith('dm:') ? conv.slice(3) : conv;
+  // 'team' keeps older copies of the app from showing these in the wrong place
+  send('chat', { ...body, to, team: to === 'all' ? 'all' : conv.startsWith('dm:') ? 'dm' : to });
+  playSend(); buzz(15);
+}
+function openConv(k) {
+  stopPlaying();
+  chatOpen = true; chatCompose = false; chatConv = k; unreadBy[k] = 0;
+  renderChat(); updateChatBadges(); setMapBtn();
+}
+
+function inboxRows() {
+  const keys = convKeys(), order = new Map(keys.map((k, i) => [k, i]));
+  const last = {};
+  for (const c of chat) last[c.conv] = c;
+  return keys.sort((a, b) => ((last[b]?.t || 0) - (last[a]?.t || 0)) || order.get(a) - order.get(b)).map((k) => {
+    const c = last[k], un = (unreadBy[k] || 0) > 0;
+    const who = c && !c.sys && c.from !== me.id && !k.startsWith('dm:') ? esc(c.name) + ': ' : '';
+    return `<button class="im-conv" data-act="openConv" data-conv="${k}"><span class="im-dot ${un ? 'on' : ''}"></span>${convAvatar(k)}
+      <span class="im-mid"><span class="im-top"><b>${esc(convTitle(k))}</b><span class="im-tm">${c ? imTime(c.t) : ''}${ic('chevR')}</span></span>
+      <span class="im-prev">${c ? who + esc(msgPreview(c)) : esc(convSub(k))}</span></span></button>`;
+  }).join('');
+}
+function audioBubble(c) {
+  const bars = c.bars && c.bars.length ? c.bars : Array.from({ length: 26 }, (_, i) => 2 + ((i * 7 + c.cid * 3) % 6));
+  return `<button class="im-aud" data-act="playAud" data-cid="${c.cid}" aria-label="Play audio message, ${Math.round(c.dur || 0)} seconds">
+    <span class="pp">${ic('play', 'pl')}${ic('pause', 'pa')}</span><span class="wave">${bars.map((b) => `<i style="height:${4 + b * 2.4}px"></i>`).join('')}</span><span class="dur mono">${secs(c.dur || 0)}</span></button>`;
+}
+const JUMBO = /^(\p{Extended_Pictographic}(️|‍\p{Extended_Pictographic})*\s*){1,3}$/u;
+function threadLog(k) {
+  const msgs = chat.filter((c) => c.conv === k);
+  if (!msgs.length) return `<div class="im-empty">${k === 'game' ? 'Catches, pings and drops show up here during a round.' : 'No messages yet. Say hi.'}</div>`;
+  const group = !k.startsWith('dm:');
+  let out = '', prev = null;
+  msgs.forEach((c, i) => {
+    const next = msgs[i + 1];
+    if (!prev || c.t - prev.t > 15 * 60e3) out += `<div class="im-time"><b>Today</b> ${imTime(c.t)}</div>`;
+    if (c.sys) { out += `<div class="im-sys ${c.cls || ''}">${c.icon && ICONS[c.icon] ? ic(c.icon) : ''}<span>${c.html}</span><small>${imTime(c.t)}</small></div>`; prev = c; return; }
+    const mineM = c.from === me.id;
+    const first = !prev || prev.sys || prev.from !== c.from || c.t - prev.t > 15 * 60e3;
+    const lastR = !next || next.sys || next.from !== c.from || next.t - c.t > 15 * 60e3;
+    if (group && !mineM && first) out += `<div class="im-name">${esc(c.name)}</div>`;
+    const jumbo = !c.audio && JUMBO.test(c.text);
+    out += `<div class="im-row ${mineM ? 'me' : 'them'} ${lastR ? 'tail' : ''} ${first ? 'first' : ''}">${group && !mineM ? `<span class="im-av">${lastR ? avatar(P(c.from)) : ''}</span>` : ''}<div class="im-b ${c.audio ? 'aud' : ''} ${jumbo ? 'jumbo' : ''}">${c.audio ? audioBubble(c) : esc(c.text)}</div></div>`;
+    prev = c;
+  });
+  if (prev && !prev.sys && prev.from === me.id) out += `<div class="im-dlv">Delivered</div>`;
+  return out;
+}
+function composeRows(q = '') {
+  q = q.trim().toLowerCase();
+  return convKeys().filter((k) => k !== 'game' && (!q || convTitle(k).toLowerCase().includes(q))).map((k) =>
+    `<button class="im-contact" data-act="openConv" data-conv="${k}">${convAvatar(k)}<span><b>${esc(convTitle(k))}</b><small>${esc(convSub(k))}</small></span></button>`).join('')
+    || '<div class="im-empty">Nobody by that name in this game.</div>';
+}
+function filterContacts(q) { const el = $('#im-contacts'); if (el) el.innerHTML = composeRows(q); }
+
 function renderChat() {
-  const role = mine()?.role, game = inGame();
-  unreadN = 0;
-  const tm = (t) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  const line = (c) => c.sys ? `<div class="sys ${c.cls || ''}">${c.icon && ICONS[c.icon] ? ic(c.icon) : ''}<span>${c.html}</span><span class="tm">${tm(c.t)}</span></div>`
-    : `<div class="msg ${c.team !== 'all' ? 'team' : ''} ${c.from === me.id ? 'mine' : ''}"><b class="${c.role === 'seeker' ? 'seeker' : ''}">${esc(c.name)}${c.team !== 'all' ? ' · team' : ''}</b><span class="tm">${tm(c.t)}</span><div>${esc(c.text)}</div></div>`;
-  // already showing: just add the new lines, so typing isn't interrupted
-  const key = `${game}|${chatTab}|${role}`, view = game ? 'chatmode' : 'chat', log0 = $('#chat-log');
-  if (log0 && sheetView === view && sheet.dataset.ck === key) {
-    const add = chat.filter((c) => c.cid > (+log0.dataset.last || 0));
-    if (add.length) {
-      const near = log0.scrollHeight - log0.scrollTop - log0.clientHeight < 80;
-      log0.querySelector(':scope > .note')?.remove();
-      log0.insertAdjacentHTML('beforeend', add.map(line).join(''));
-      [...log0.children].slice(-add.length).forEach((x) => x.classList.add('new'));
-      log0.dataset.last = add[add.length - 1].cid;
-      if (near) log0.scrollTop = log0.scrollHeight;
+  if (!S) return;
+  const game = inGame();
+  if (chatConv && !convKeys().includes(chatConv)) chatConv = null; // e.g. you switched teams
+  const screen = chatCompose ? 'compose' : chatConv || 'inbox';
+  const key = `${game}|${screen}|${myTeam()}`;
+  // already showing: refresh just the list or the messages, so typing and recording aren't interrupted
+  if (sheetView === 'chatmode' && sheet.dataset.ck === key && $('.im')) {
+    if (screen === 'inbox') { const l = $('#im-list'); if (l) l.innerHTML = inboxRows(); }
+    else if (chatConv) {
+      unreadBy[chatConv] = 0;
+      const log = $('#chat-log');
+      if (log) { const near = log.scrollHeight - log.scrollTop - log.clientHeight < 120; log.innerHTML = threadLog(chatConv); if (near) log.scrollTop = log.scrollHeight; }
+      const bc = $('#im-back-n'); if (bc) { const n = unreadTotal(chatConv); bc.textContent = n || ''; }
     }
+    updateChatBadges();
     return;
   }
   sheet.dataset.ck = key;
-  const draft = $('#chat-in')?.value || '';
-  setSheet(`
-    ${game ? modeSeg() : `<div class="sheet-h"><h2>Chat</h2><button class="btn small" data-act="closeChat">Close</button></div>`}
-    <div class="chat-log ${game ? 'full' : ''}" id="chat-log">${chat.length ? chat.map(line).join('') : `<p class="note">${game ? 'Game updates and messages show up here.' : 'No messages yet.'}</p>`}</div>
-    <form class="chat-form" data-act="chatSend"><input id="chat-in" maxlength="200" placeholder="${chatTab === 'team' && role && S.phase !== 'lobby' ? `Message ${role === 'seeker' ? 'seekers' : 'hiders'} only` : 'Message everyone'}" autocomplete="off" aria-label="Message">
-    ${S && S.phase !== 'lobby' && role ? `<button type="button" class="btn small ghost to-btn" data-act="chatTab" data-tab="${chatTab === 'team' ? 'all' : 'team'}">To ${chatTab === 'team' ? 'team' : 'all'}</button>` : ''}<button class="btn primary">Send</button></form>
-  `, game ? 'chatmode' : 'chat');
-  sheet.classList.toggle('chatmode', game);
-  const inp = $('#chat-in'); if (inp && draft) inp.value = draft;
-  const log = $('#chat-log'); if (log) { log.dataset.last = chat.length ? chat[chat.length - 1].cid : 0; log.scrollTop = log.scrollHeight; }
+  const top = game ? modeSeg() : '';
+  let body;
+  if (chatCompose) {
+    body = `<div class="im-nav"><span></span><b class="im-ttl">New Message</b><button class="im-link right" data-act="composeCancel">Cancel</button></div>
+      <label class="im-to"><span>To:</span><input id="to-in" autocomplete="off" autocapitalize="words" spellcheck="false" aria-label="Who to message"></label>
+      <div class="im-contacts" id="im-contacts">${composeRows()}</div>`;
+  } else if (!chatConv) {
+    body = `<div class="im-nav">${game ? '<span></span>' : '<button class="im-link" data-act="closeChat">Done</button>'}<span></span><button class="im-icon right" data-act="compose" aria-label="New message">${ic('compose')}</button></div>
+      <h2 class="im-big">Messages</h2>
+      <div class="im-list" id="im-list">${inboxRows()}</div>`;
+  } else {
+    unreadBy[chatConv] = 0;
+    const n = unreadTotal(chatConv), ro = chatConv === 'game';
+    body = `<div class="im-nav thread"><button class="im-link im-back" data-act="chatBack" aria-label="Back to messages">${ic('chevL')}<span id="im-back-n" class="im-back-n">${n || ''}</span></button>
+      <div class="im-who">${convAvatar(chatConv)}<b>${esc(convTitle(chatConv))}</b><small>${esc(convSub(chatConv))}</small></div><span></span></div>
+      <div class="im-log" id="chat-log">${threadLog(chatConv)}</div>
+      ${ro ? '' : `<form class="im-bar" id="im-bar" data-act="chatSend">
+        <div class="im-field"><input id="chat-in" maxlength="500" placeholder="Message" autocomplete="off" enterkeyhint="send" aria-label="Message ${esc(convTitle(chatConv))}">
+          <button type="submit" class="im-send" aria-label="Send">${ic('arrowUp')}</button>
+          <div class="im-rec" aria-live="polite"><i class="rdot"></i><span class="mono" id="rec-t">0:00</span><span class="slide">${ic('chevL')} Slide to cancel</span><span class="cx">Release to cancel</span></div></div>
+        <button type="button" class="im-mic" id="im-mic" aria-label="Hold to record an audio message">${ic('mic')}</button>
+      </form>`}`;
+  }
+  setSheet(`${top}<div class="im ${chatCompose ? 'compose' : chatConv ? 'in-thread' : 'inbox'}">${body}</div>`, 'chatmode');
+  sheet.classList.add('chatmode');
+  const log = $('#chat-log'); if (log) log.scrollTop = log.scrollHeight;
+  updateChatBadges();
+}
+
+// audio messages: hold the mic, up to 30 s. Recorded as AAC where the phone can (plays everywhere), else Opus
+const rec = { on: false, held: false, away: false, mr: null, stream: null, src: null, an: null, chunks: [], levels: [], t0: 0, timer: 0, conv: null, x0: 0, y0: 0 };
+function setAudioSession(t) { try { if (navigator.audioSession) navigator.audioSession.type = t; } catch {} }
+async function recStart(conv) {
+  if (rec.on) return;
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { rec.held = false; chatHint('This browser can\'t record audio messages.'); return; }
+  Object.assign(rec, { on: true, conv, chunks: [], levels: [], mr: null });
+  setAudioSession('play-and-record');
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+  catch { rec.on = false; rec.held = false; setAudioSession('playback'); chatHint('Allow the microphone to send audio messages.'); return; }
+  if (!rec.held) { stream.getTracks().forEach((t) => t.stop()); rec.on = false; setAudioSession('playback'); return; } // let go while the permission prompt was up
+  rec.stream = stream;
+  const type = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/aac', 'audio/webm;codecs=opus', 'audio/webm'].find((t) => MediaRecorder.isTypeSupported?.(t)) || '';
+  try { rec.mr = new MediaRecorder(stream, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 32000 }); }
+  catch { rec.mr = new MediaRecorder(stream); }
+  rec.mr.ondataavailable = (ev) => { if (ev.data && ev.data.size) rec.chunks.push(ev.data); };
+  rec.mr.onstop = recDone;
+  try { if (actx) { rec.src = actx.createMediaStreamSource(stream); rec.an = actx.createAnalyser(); rec.an.fftSize = 512; rec.src.connect(rec.an); } } catch {}
+  rec.mr.start(250); rec.t0 = Date.now();
+  rec.timer = setInterval(recTick, 100);
+  $('#im-bar')?.classList.add('recording'); buzz(20);
+}
+function recTick() {
+  const s = (Date.now() - rec.t0) / 1000;
+  if (rec.an) {
+    const a = new Uint8Array(rec.an.fftSize); rec.an.getByteTimeDomainData(a);
+    let sum = 0; for (const v of a) { const x = (v - 128) / 128; sum += x * x; }
+    rec.levels.push(Math.sqrt(sum / a.length));
+  }
+  const el = $('#rec-t'); if (el) el.textContent = secs(Math.floor(s));
+  if (s >= AUDIO_MAX_S) recStop(false);
+}
+function recStop(cancel) {
+  rec.held = false;
+  if (!rec.on || !rec.mr) return; // still waiting on the permission prompt: recStart cleans up
+  rec.cancel = cancel;
+  clearInterval(rec.timer);
+  try { if (rec.mr.state !== 'inactive') rec.mr.stop(); } catch { recDone(); }
+}
+function waveBars(levels, n = 26) {
+  if (!levels.length) return [];
+  const out = [];
+  for (let i = 0; i < n; i++) { const a = Math.floor(i * levels.length / n), b = Math.max(a + 1, Math.floor((i + 1) * levels.length / n)); out.push(Math.max(...levels.slice(a, b))); }
+  const top = Math.max(...out, 0.02);
+  return out.map((v) => Math.max(1, Math.min(9, Math.round(v / top * 9))));
+}
+function recDone() {
+  if (!rec.on) return;
+  const dur = Math.min(AUDIO_MAX_S, (Date.now() - rec.t0) / 1000), { cancel, conv, levels } = rec;
+  const blob = new Blob(rec.chunks, { type: (rec.mr && rec.mr.mimeType) || 'audio/mp4' });
+  rec.stream?.getTracks().forEach((t) => t.stop());
+  try { rec.src?.disconnect(); } catch {}
+  Object.assign(rec, { on: false, held: false, mr: null, stream: null, src: null, an: null, chunks: [] });
+  setAudioSession('playback');
+  const bar = $('#im-bar'); if (bar) { bar.classList.remove('recording', 'cancel'); const t = $('#rec-t'); if (t) t.textContent = '0:00'; }
+  if (cancel) { buzz(10); return; }
+  if (dur < 0.7 || !blob.size) { chatHint('Hold the mic to record, let go to send.'); return; }
+  if (blob.size > AUDIO_MAX_BYTES) { chatHint('That audio message is too big to send. Try a shorter one.'); return; }
+  const fr = new FileReader();
+  fr.onload = () => { if (typeof fr.result === 'string') sendChat(conv, { audio: fr.result, dur: Math.round(dur * 10) / 10, bars: waveBars(levels) }); };
+  fr.readAsDataURL(blob);
+}
+// a short note above the message bar (toasts go into Game updates during a round)
+function chatHint(t) {
+  const box = $('.im'); if (!box) { toast(t); return; }
+  let h = $('#im-hint');
+  if (!h) { h = document.createElement('div'); h.id = 'im-hint'; h.className = 'im-hint'; h.setAttribute('role', 'status'); box.appendChild(h); }
+  h.textContent = t; h.classList.add('on');
+  clearTimeout(h._t); h._t = setTimeout(() => h.classList.remove('on'), 2800);
+}
+let playing = null; // { cid, a }
+function setAud(cid, p, on) {
+  const el = document.querySelector(`.im-aud[data-cid="${cid}"]`); if (!el) return;
+  el.classList.toggle('on', on);
+  const bars = el.querySelectorAll('.wave i'), hit = Math.round(p * bars.length);
+  bars.forEach((b, i) => b.classList.toggle('hit', i < hit));
+}
+function stopPlaying() {
+  if (!playing) return;
+  const { cid, a } = playing; playing = null;
+  try { a.pause(); } catch {}
+  setAud(cid, 0, false);
+}
+function playAudioMsg(cid) {
+  const c = chat.find((x) => x.cid === cid); if (!c || !c.audio) return;
+  if (playing && playing.cid === cid) { stopPlaying(); return; }
+  stopPlaying();
+  const a = new Audio(c.audio);
+  playing = { cid, a };
+  const tick = () => {
+    if (!playing || playing.a !== a) return;
+    const d = isFinite(a.duration) && a.duration > 0 ? a.duration : c.dur || 1;
+    setAud(cid, Math.min(1, a.currentTime / d), true);
+    if (!a.paused && !a.ended) requestAnimationFrame(tick);
+  };
+  a.onplay = tick; a.onended = () => { if (playing && playing.a === a) stopPlaying(); };
+  a.play().catch(() => { if (playing && playing.a === a) stopPlaying(); chatHint('Couldn\'t play that audio message on this phone.'); });
+  setAud(cid, 0, true);
 }
 
 // ---------------- modal ----------------
@@ -2358,12 +2640,34 @@ sheet.addEventListener('change', (e) => {
 sheet.addEventListener('submit', (e) => {
   e.preventDefault();
   const inp = $('#chat-in');
+  if (!inp || !chatConv) return;
   const text = inp.value.trim();
   if (!text) return;
-  const team = chatTab === 'team' && mine() ? mine().role : 'all';
-  send('chat', { text, team });
-  inp.value = '';
+  sendChat(chatConv, { text });
+  inp.value = ''; $('#im-bar')?.classList.remove('typing');
+  inp.focus();
 });
+sheet.addEventListener('input', (e) => {
+  if (e.target.id === 'chat-in') $('#im-bar')?.classList.toggle('typing', !!e.target.value.trim());
+  if (e.target.id === 'to-in') filterContacts(e.target.value);
+});
+// hold the mic to record, let go to send, slide away to cancel
+sheet.addEventListener('pointerdown', (e) => {
+  const b = e.target.closest('#im-mic'); if (!b || !chatConv) return;
+  e.preventDefault();
+  try { b.setPointerCapture(e.pointerId); } catch {}
+  rec.x0 = e.clientX; rec.y0 = e.clientY; rec.away = false; rec.held = true;
+  unlockAudio();
+  recStart(chatConv);
+});
+sheet.addEventListener('pointermove', (e) => {
+  if (!rec.held) return;
+  const away = rec.x0 - e.clientX > 90 || rec.y0 - e.clientY > 90;
+  if (away !== rec.away) { rec.away = away; $('#im-bar')?.classList.toggle('cancel', away); }
+});
+window.addEventListener('pointerup', () => { if (rec.held) recStop(rec.away); });
+window.addEventListener('pointercancel', () => { if (rec.held) recStop(true); });
+sheet.addEventListener('contextmenu', (e) => { if (e.target.closest('#im-mic')) e.preventDefault(); });
 
 function act(a, el) {
   const p = mine();
@@ -2379,8 +2683,13 @@ function act(a, el) {
     case 'togglePU': L_.showPU = !L_.showPU; if (L_.showPU) L_.showMore = L_.showShop = false; renderSheet(); break;
     case 'toggleMore': L_.showMore = !L_.showMore; if (L_.showMore) L_.showPU = L_.showShop = false; renderSheet(); break;
     case 'endMore': endMore = !endMore; renderSheet(); break;
-    case 'modeMap': chatOpen = false; renderSheet(); break;
-    case 'modeChat': chatOpen = true; unreadN = 0; renderSheet(); break;
+    case 'modeMap': stopPlaying(); chatOpen = false; chatCompose = false; renderSheet(); updateChatBadges(); break;
+    case 'modeChat': chatOpen = true; chatCompose = false; if (el.dataset.conv) openConv(el.dataset.conv); else renderSheet(); break;
+    case 'openConv': openConv(el.dataset.conv); break;
+    case 'chatBack': stopPlaying(); chatConv = null; chatCompose = false; renderChat(); break;
+    case 'compose': chatCompose = true; renderChat(); setTimeout(() => $('#to-in')?.focus(), 50); break;
+    case 'composeCancel': chatCompose = false; renderChat(); break;
+    case 'playAud': playAudioMsg(+el.dataset.cid); break;
     case 'leave': if (!S || S.phase === 'lobby' || S.phase === 'ended' || confirm('Leave this game?')) leave(); break;
     case 'share': {
       const url = inviteUrl();
@@ -2459,8 +2768,7 @@ function act(a, el) {
     case 'replay': startReplay(); break;
     case 'replayClose': if (replay) { replay.playing = false; replay = null; layers.replay.clearLayers(); renderEnded(); } break;
     case 'replayPlay': if (replay) { if (replay.playing) { replay.playing = false; renderEnded(); } else { if (replay.pos >= 1) replay.pos = 0; startReplayLoop(); } } break;
-    case 'closeChat': chatOpen = false; renderSheet(); setMapBtn(); break;
-    case 'chatTab': chatTab = el.dataset.tab; renderChat(); break;
+    case 'closeChat': stopPlaying(); chatOpen = false; chatCompose = false; renderSheet(); setMapBtn(); updateChatBadges(); break;
   }
 }
 function startReplayLoop() {
@@ -2617,7 +2925,7 @@ function showMapKey() {
     <button class="btn primary" data-act="closeModal" style="width:100%;margin-top:10px">Got it</button>`);
 }
 $('#btn-locate').addEventListener('click', () => { if (myPos) map.setView(myPos.p, Math.max(map.getZoom(), 17)); else toast('No location yet'); });
-$('#btn-chat').addEventListener('click', () => { chatOpen = !chatOpen; unread = false; $('#chat-dot').hidden = true; if (chatOpen) renderChat(); else renderSheet(); setMapBtn(); });
+$('#btn-chat').addEventListener('click', () => { chatOpen = !chatOpen; chatCompose = false; if (chatOpen) renderChat(); else { stopPlaying(); renderSheet(); } setMapBtn(); updateChatBadges(); });
 $('#btn-map').addEventListener('click', () => setMapView(!(mapView && !chatOpen)));
 
 // ---------------- home screen ----------------

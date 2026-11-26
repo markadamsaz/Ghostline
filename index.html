@@ -13,7 +13,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="stylesheet" href="vendor/leaflet.css">
-<link rel="stylesheet" href="style.css?v=28">
+<link rel="stylesheet" href="style.css?v=29">
 </head>
 <body>
 <div id="map"></div>
@@ -73,13 +73,16 @@
       <h2>How to play</h2>
       <button id="btn-film" class="film-card" type="button">
         <span class="film-thumb"><img src="media/how-to-play.jpg" alt=""><span class="play"><svg viewBox="0 0 12 14" aria-hidden="true"><path d="M0 0l12 7-12 7z"/></svg></span></span>
-        <span><b>Watch how it works</b><span>A 20-second tour of a round</span></span>
+        <span><b>Watch how it works</b><span>A 30-second tour of a round</span></span>
       </button>
       <ol class="steps">
         <li><div><b>Set the zone</b>The host draws a play area on the map and shares the 4-letter code.</div></li>
         <li><div><b>Hide</b>One player is picked to seek. Everyone else gets a head start to hide inside the zone.</div></li>
         <li><div><b>Survive the pings</b>Every few minutes each hider's phone shows the seekers a rough spot. Keep moving.</div></li>
         <li><div><b>Tag or escape</b>Seekers tag hiders by getting close, an honor tag, or a photo. Last hiders standing win.</div></li>
+        <li><div><b>Spend points in the shop</b>Tap <b class="ui-chip">Shop</b> at the bottom of the screen (or <b class="ui-chip">Points shop</b> in the lobby). Hiding, tagging and missions earn points to buy tricks, characters and colors.</div></li>
+        <li><div><b>Use your power-ups</b>Tap <b class="ui-chip">Power-ups</b> to see what you have, then tap one to use it. A number on the button means you've got some to use.</div></li>
+        <li><div><b>Open the chat</b>Tap <b class="ui-chip">Chat</b> above the map during a round (the speech bubble in the lobby). Every catch, ping and drop shows up there too. Tap <b class="ui-chip">Map</b> to go back.</div></li>
       </ol>
       <div class="roles-key">
         <div class="role-card hider"><b>Hiders</b><span>Shown in black. Stay hidden, stay in the zone.</span></div>
@@ -118,6 +121,6 @@
 <script src="vendor/qrcode.js"></script>
 <script src="vendor/supabase.js"></script>
 <script src="config.js"></script>
-<script type="module" src="app.js?v=30"></script>
+<script type="module" src="app.js?v=31"></script>
 </body>
 </html>
