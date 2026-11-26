@@ -2646,7 +2646,7 @@ sheet.addEventListener('submit', (e) => {
   if (!text) return;
   sendChat(chatConv, { text });
   inp.value = ''; $('#im-bar')?.classList.remove('typing');
-  inp.focus();
+  inp.blur(); // sending closes the keyboard; tap the field to type again
 });
 sheet.addEventListener('input', (e) => {
   if (e.target.id === 'chat-in') $('#im-bar')?.classList.toggle('typing', !!e.target.value.trim());
