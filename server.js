@@ -10,7 +10,7 @@ import { WebSocketServer } from 'ws';
 
 const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');
 const PORT = +(process.env.PORT || 8080);
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.png': 'image/png' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.mp4': 'video/mp4', '.m4a': 'audio/mp4' };
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
@@ -20,7 +20,17 @@ const server = http.createServer((req, res) => {
   if (!file.startsWith(dir)) { res.writeHead(403); return res.end(); }
   fs.readFile(file, (err, buf) => {
     if (err) { res.writeHead(404); return res.end('Not found'); }
-    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
+    const head = { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache', 'Accept-Ranges': 'bytes' };
+    // iOS Safari only plays video served with byte ranges
+    const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+    if (m && (m[1] || m[2])) {
+      let a = m[1] ? +m[1] : buf.length - +m[2], b = m[1] && m[2] ? Math.min(+m[2], buf.length - 1) : buf.length - 1;
+      if (a < 0) a = 0;
+      if (a >= buf.length || a > b) { res.writeHead(416, { 'Content-Range': `bytes */${buf.length}` }); return res.end(); }
+      res.writeHead(206, { ...head, 'Content-Range': `bytes ${a}-${b}/${buf.length}`, 'Content-Length': b - a + 1 });
+      return res.end(buf.subarray(a, b + 1));
+    }
+    res.writeHead(200, head);
     res.end(buf);
   });
 });

@@ -4,7 +4,7 @@
   "description": "Real-world hide and seek with timed location pings.",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#e10600",
+  "background_color": "#f2f2f7",
+  "theme_color": "#f2f2f7",
   "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
 }

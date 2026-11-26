@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en" data-resolution="custom">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1350" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+    <style>
+      /* Ghostline: how to play. 4:5, 21 s, silent (it plays muted inside the app).
+         One map stays on screen the whole time and grows a part per step:
+         zone -> hiders scatter -> pings -> tag. Captions swap underneath. */
+      :root {
+        --ground: #0b0b0f;
+        --red: #ff3b30;
+        --ink: #ffffff;
+        --muted: rgba(235, 235, 245, 0.6);
+        --hider: #2c2c2e;
+        --font: "Inter", sans-serif;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { margin: 0; width: 1080px; height: 1350px; overflow: hidden; background: var(--ground); }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--ground); font-family: var(--font); color: var(--ink); }
+
+      /* the map plate */
+      #plate { position: absolute; left: 60px; top: 70px; width: 960px; height: 820px; border-radius: 56px; overflow: hidden;
+        background: radial-gradient(circle at 50% 45%, #1c1c24 0%, #111117 75%); box-shadow: 0 0 0 2px rgba(255,255,255,.06), 0 40px 80px rgba(0,0,0,.5); }
+      #world { position: absolute; inset: 0; }
+      #streets { position: absolute; inset: 0; opacity: .6; }
+      #zone-svg { position: absolute; inset: 0; }
+      .dot { position: absolute; left: 480px; top: 410px; width: 0; height: 0; }
+      .dot i { position: absolute; left: -26px; top: -26px; width: 52px; height: 52px; border-radius: 50%; background: var(--hider); border: 9px solid #fff; box-shadow: 0 8px 20px rgba(0,0,0,.5); }
+      #seeker i { border-radius: 14px; background: var(--red); }
+      #seeker i { box-shadow: 0 8px 24px rgba(255,59,48,.55); }
+      .fuzz { position: absolute; width: 190px; height: 190px; margin: -95px 0 0 -95px; border-radius: 50%; background: rgba(255,59,48,.22); border: 5px solid var(--red); opacity: 0; }
+      #code-chip { position: absolute; left: 50%; top: 44px; width: 340px; margin-left: -170px; height: 92px; border-radius: 46px; background: rgba(255,255,255,.12);
+        display: flex; align-items: center; justify-content: center; gap: 18px; font-size: 30px; font-weight: 400; color: var(--muted); opacity: 0; }
+      #code-chip b { font-size: 44px; font-weight: 700; letter-spacing: .16em; color: #fff; }
+      #timer-chip { position: absolute; left: 50%; top: 44px; width: 380px; margin-left: -190px; height: 92px; border-radius: 46px; background: rgba(255,255,255,.12);
+        display: flex; align-items: center; justify-content: center; gap: 14px; font-size: 34px; font-weight: 700; opacity: 0; }
+      #timer-chip span { color: var(--muted); font-weight: 400; }
+      #caught { position: absolute; left: 0; top: 0; padding: 10px 22px; border-radius: 24px; background: #fff; color: #000; font-size: 30px; font-weight: 700; opacity: 0; white-space: nowrap; }
+      #tag-btn { position: absolute; left: 50%; bottom: 48px; width: 520px; margin-left: -260px; height: 120px; border-radius: 36px; background: var(--red); color: #fff;
+        display: flex; align-items: center; justify-content: center; font-size: 52px; font-weight: 900; letter-spacing: .06em; box-shadow: 0 18px 40px -10px rgba(255,59,48,.7); opacity: 0; }
+
+      /* captions */
+      .cap { position: absolute; left: 90px; right: 90px; top: 950px; }
+      .cap .n { display: inline-block; font-size: 28px; font-weight: 700; color: var(--red); letter-spacing: .02em; margin-bottom: 18px; }
+      .cap h2 { font-size: 84px; font-weight: 700; letter-spacing: -.035em; line-height: 1.02; }
+      .cap p { margin-top: 18px; font-size: 38px; line-height: 1.3; color: var(--muted); font-weight: 400; max-width: 860px; }
+      .cap .w { display: inline-block; }
+
+      /* end card */
+      #end { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+      #end-icon { width: 220px; height: 220px; border-radius: 52px; background: var(--red); display: grid; place-items: center; box-shadow: 0 30px 70px -10px rgba(255,59,48,.6); opacity: 0; }
+      #end h1 { margin-top: 56px; font-size: 120px; font-weight: 700; letter-spacing: -.04em; opacity: 0; }
+      #end p { margin-top: 20px; font-size: 44px; color: var(--muted); opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="21" data-width="1080" data-height="1350">
+
+      <div id="plate-clip" class="clip" data-start="0" data-duration="18.4" data-track-index="0">
+        <div id="plate">
+          <div id="world">
+            <svg id="streets" viewBox="0 0 960 820" aria-hidden="true">
+              <g transform="rotate(-12 480 410)" stroke="#34343e" fill="none" stroke-linecap="round">
+                <g stroke-width="6">
+                  <path d="M-200 110H1200M-200 300H1200M-200 490H1200M-200 680H1200M-200 870H1200" />
+                  <path d="M90 -200V1100M300 -200V1100M520 -200V1100M740 -200V1100M950 -200V1100" />
+                </g>
+                <path d="M-200 520 C 260 470, 640 610, 1200 400" stroke="#474753" stroke-width="18" />
+                <rect x="540" y="130" width="180" height="150" rx="20" fill="#1a2a1e" stroke="none" />
+                <rect x="110" y="610" width="170" height="150" rx="20" fill="#1a2a1e" stroke="none" />
+              </g>
+            </svg>
+            <svg id="zone-svg" viewBox="0 0 960 820" aria-hidden="true">
+              <circle id="zone-fill" cx="480" cy="410" r="330" fill="rgba(255,59,48,.08)" opacity="0" />
+              <circle id="zone-line" cx="480" cy="410" r="330" fill="none" stroke="#ff3b30" stroke-width="10" stroke-linecap="round"
+                stroke-dasharray="2074" stroke-dashoffset="2074" transform="rotate(-90 480 410)" />
+            </svg>
+            <div id="fz1" class="fuzz" style="left: 345px; top: 290px"></div>
+            <div id="fz2" class="fuzz" style="left: 640px; top: 300px"></div>
+            <div id="fz3" class="fuzz" style="left: 585px; top: 600px"></div>
+            <div id="h1" class="dot"><i></i></div>
+            <div id="h2" class="dot"><i></i></div>
+            <div id="h3" class="dot"><i></i></div>
+            <div id="seeker" class="dot"><i></i></div>
+            <div id="caught">Caught</div>
+          </div>
+          <div id="code-chip">Game code <b>AYUA</b></div>
+          <div id="timer-chip"><span>Next ping</span> <b id="ping-t">0:03</b></div>
+          <div id="tag-btn">TAG</div>
+        </div>
+      </div>
+
+      <div id="cap1-clip" class="clip" data-start="0.2" data-duration="4.3" data-track-index="1">
+        <div id="cap1" class="cap"><span class="n">Step 1</span><h2><span class="w">Draw</span> <span class="w">the</span> <span class="w">zone</span></h2><p>The host picks a play area and shares a 4-letter code.</p></div>
+      </div>
+      <div id="cap2-clip" class="clip" data-start="4.6" data-duration="4.4" data-track-index="1">
+        <div id="cap2" class="cap"><span class="n">Step 2</span><h2><span class="w">Hiders</span> <span class="w">scatter</span></h2><p>One player seeks. Everyone else gets a head start to hide.</p></div>
+      </div>
+      <div id="cap3-clip" class="clip" data-start="9.1" data-duration="4.4" data-track-index="1">
+        <div id="cap3" class="cap"><span class="n">Step 3</span><h2><span class="w">Your</span> <span class="w">phone</span> <span class="w">pings</span></h2><p>Every few minutes, seekers see a rough spot for each hider.</p></div>
+      </div>
+      <div id="cap4-clip" class="clip" data-start="13.6" data-duration="4.8" data-track-index="1">
+        <div id="cap4" class="cap"><span class="n">Step 4</span><h2><span class="w">Tag</span> <span class="w">or</span> <span class="w">escape</span></h2><p>Get close to tag. The last hiders standing win.</p></div>
+      </div>
+
+      <div id="end-clip" class="clip" data-start="18.2" data-duration="2.8" data-track-index="2">
+        <div id="end">
+          <div id="end-icon">
+            <svg width="150" height="150" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="22" fill="none" stroke="#fff" stroke-width="3.5"/><circle cx="32" cy="32" r="12" fill="none" stroke="#fff" stroke-width="3.5" opacity=".55"/><path d="M32 32 L32 10 A22 22 0 0 1 51 21 Z" fill="#fff" opacity=".3"/><circle cx="42" cy="22" r="4.5" fill="#fff"/><circle cx="32" cy="32" r="3.5" fill="#fff"/></svg>
+          </div>
+          <h1>Ghostline</h1>
+          <p>Your phone gives you away.</p>
+        </div>
+      </div>
+    </div>
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const blurIn = (sel, at) => tl.fromTo(sel, { opacity: 0, filter: "blur(8px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.3, ease: "power3.out", stagger: 0.08 }, at);
+      const blurOut = (sel, at) => tl.to(sel, { opacity: 0, filter: "blur(8px)", duration: 0.2, ease: "power2.in" }, at);
+      const cap = (n, start, end) => {
+        blurIn(`#cap${n} .n`, start);
+        blurIn(`#cap${n} .w`, start + 0.08);
+        tl.fromTo(`#cap${n} p`, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.5, ease: "expo.out" }, start + 0.35);
+        blurOut(`#cap${n}`, end - 0.22);
+      };
+
+      // plate arrives
+      tl.fromTo("#plate", { opacity: 0, scale: 0.94 }, { opacity: 1, scale: 1, duration: 0.9, ease: "expo.out" }, 0);
+
+      // 1. draw the zone, the code chip lands
+      cap(1, 0.2, 4.5);
+      tl.fromTo("#zone-line", { attr: { "stroke-dashoffset": 2074 } }, { attr: { "stroke-dashoffset": 0 }, duration: 1.6, ease: "power2.inOut" }, 0.6);
+      tl.fromTo("#zone-fill", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" }, 1.9);
+      tl.fromTo("#code-chip", { opacity: 0, y: -20, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: "back.out(1.5)" }, 2.3);
+      tl.to("#code-chip", { opacity: 0, y: -16, duration: 0.25, ease: "power2.in" }, 4.4);
+
+      // 2. four players gather, one turns into the seeker, the rest run
+      cap(2, 4.6, 9.0);
+      ["#h1", "#h2", "#h3", "#seeker"].forEach((s, i) => {
+        const a = (i / 4) * Math.PI * 2;
+        tl.fromTo(`${s} i`, { opacity: 0, scale: 0.4 }, { opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.8)" }, 4.7 + i * 0.07);
+        tl.fromTo(s, { x: 0, y: 0 }, { x: Math.cos(a) * 46, y: Math.sin(a) * 46, duration: 0.45, ease: "expo.out" }, 4.7 + i * 0.07);
+      });
+      tl.fromTo("#seeker i", { rotation: 0, scale: 1 }, { rotation: 45, scale: 1.15, duration: 0.5, ease: "back.out(2)", immediateRender: false }, 5.6);
+      tl.to("#seeker", { x: 0, y: 0, duration: 0.5, ease: "power3.inOut" }, 5.7);
+      tl.to("#h1", { x: -135, y: -120, duration: 1.4, ease: "power3.inOut" }, 6.0);
+      tl.to("#h2", { x: 165, y: -110, duration: 1.4, ease: "power3.inOut" }, 6.1);
+      tl.to("#h3", { x: 105, y: 190, duration: 1.4, ease: "power3.inOut" }, 6.2);
+
+      // 3. hiders dim (seekers can't see them), the timer counts down, pings bloom
+      cap(3, 9.1, 13.5);
+      tl.to(["#h1 i", "#h2 i", "#h3 i"], { opacity: 0.18, duration: 0.5, ease: "power2.out" }, 9.2);
+      tl.fromTo("#timer-chip", { opacity: 0, y: -20, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: "back.out(1.5)" }, 9.4);
+      [["0:02", 10.2], ["0:01", 11.0], ["0:00", 11.8]].forEach(([txt, at]) => tl.set("#ping-t", { textContent: txt }, at));
+      ["#fz1", "#fz2", "#fz3"].forEach((s, i) => {
+        tl.fromTo(s, { opacity: 0, scale: 0.3 }, { opacity: 1, scale: 1, duration: 0.7, ease: "expo.out" }, 11.85 + i * 0.12);
+      });
+      tl.to("#timer-chip", { opacity: 0, y: -16, duration: 0.25, ease: "power2.in" }, 13.3);
+
+      // 4. the seeker closes in on the nearest ping, TAG, caught
+      cap(4, 13.6, 18.4);
+      tl.to(["#fz1", "#fz2"], { opacity: 0.35, duration: 0.4 }, 13.7);
+      tl.to("#seeker", { x: 70, y: 150, duration: 1.6, ease: "power2.inOut" }, 13.8);
+      tl.to("#h3 i", { opacity: 1, duration: 0.3 }, 15.0);
+      tl.fromTo("#tag-btn", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.55, ease: "expo.out" }, 14.6);
+      tl.to("#tag-btn", { scale: 0.92, duration: 0.12, ease: "power2.in" }, 15.6);
+      tl.to("#tag-btn", { scale: 1, duration: 0.4, ease: "back.out(2)" }, 15.72);
+      tl.to("#fz3", { opacity: 0, scale: 1.4, duration: 0.5, ease: "power2.out" }, 15.7);
+      tl.to("#h3 i", { backgroundColor: "#8e8e93", borderColor: "#d1d1d6", scale: 0.85, duration: 0.3, ease: "power2.out" }, 15.75);
+      tl.set("#caught", { x: 625, y: 560 }, 15.8);
+      tl.fromTo("#caught", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.8)", immediateRender: false }, 15.8);
+      tl.to("#tag-btn", { opacity: 0, y: 30, duration: 0.3, ease: "power2.in" }, 17.0);
+
+      // the map steps back and the end card lands
+      tl.to("#plate", { opacity: 0, scale: 0.92, filter: "blur(14px)", duration: 0.55, ease: "power3.in" }, 17.85);
+      tl.fromTo("#end-icon", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.8, ease: "back.out(1.4)" }, 18.3);
+      tl.fromTo("#end h1", { opacity: 0, filter: "blur(10px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.35, ease: "power3.out" }, 18.55);
+      tl.fromTo("#end p", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: "expo.out" }, 18.8);
+      tl.set({}, {}, 21);
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

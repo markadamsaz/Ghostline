@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en" data-resolution="square">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+    <style>
+      /* Ghostline hero loop: a radar sweep over a night map. 6 s, loops seamlessly
+         (every tween is linear or finishes before 6 s, so frame 180 == frame 0). */
+      :root {
+        --ground: #0b0b0f;
+        --red: #ff3b30;
+        --ink: #ffffff;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { margin: 0; width: 1080px; height: 1080px; overflow: hidden; background: var(--ground); }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: radial-gradient(circle at 50% 50%, #1a1a22 0%, #0b0b0f 70%); }
+      .full { position: absolute; inset: 0; }
+      #streets { opacity: 0.55; }
+      #zone { position: absolute; left: 540px; top: 540px; width: 840px; height: 840px; margin: -420px 0 0 -420px; border-radius: 50%;
+        border: 10px solid var(--red); background: rgba(255, 59, 48, 0.07); box-shadow: 0 0 80px rgba(255, 59, 48, 0.35), inset 0 0 60px rgba(255, 59, 48, 0.18); }
+      .ring { position: absolute; left: 540px; top: 540px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.16); }
+      #ring1 { width: 280px; height: 280px; margin: -140px 0 0 -140px; }
+      #ring2 { width: 560px; height: 560px; margin: -280px 0 0 -280px; }
+      #sweep { position: absolute; left: 540px; top: 540px; width: 840px; height: 840px; margin: -420px 0 0 -420px; border-radius: 50%;
+        background: conic-gradient(from 0deg, rgba(255, 255, 255, 0) 0deg, rgba(255, 255, 255, 0) 290deg, rgba(255, 255, 255, 0.05) 320deg, rgba(255, 255, 255, 0.38) 359deg, rgba(255, 255, 255, 0) 360deg); }
+      #sweep-edge { position: absolute; left: 418px; top: 0; width: 4px; height: 420px; background: linear-gradient(to top, rgba(255,255,255,.9), rgba(255,255,255,0)); border-radius: 2px; }
+      .hider { position: absolute; width: 0; height: 0; }
+      .hider .dot { opacity: 0; position: absolute; left: -22px; top: -22px; width: 44px; height: 44px; border-radius: 50%; background: #2c2c2e; border: 8px solid #fff; box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+      .hider .ping { opacity: 0; position: absolute; left: -70px; top: -70px; width: 140px; height: 140px; border-radius: 50%; background: rgba(255, 59, 48, 0.28); border: 5px solid var(--red); }
+      #seeker-orbit { position: absolute; left: 540px; top: 540px; width: 0; height: 0; }
+      #seeker { position: absolute; left: 230px; top: -30px; width: 60px; height: 60px; }
+      #seeker i { position: absolute; inset: 6px; border-radius: 12px; background: var(--red); border: 7px solid #fff; transform: rotate(45deg); box-shadow: 0 8px 22px rgba(255,59,48,.55); }
+      #me { position: absolute; left: 540px; top: 540px; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 10px rgba(255,255,255,.12); }
+      #vignette { background: radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.55) 100%); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="6" data-width="1080" data-height="1080">
+      <!-- night streets: a tilted grid with a couple of avenues and a park block -->
+      <svg id="streets" class="full" viewBox="0 0 1080 1080" aria-hidden="true">
+        <g transform="rotate(-14 540 540)" stroke="#3a3a44" fill="none" stroke-linecap="round">
+          <g stroke-width="5">
+            <path d="M-200 140H1300M-200 330H1300M-200 520H1300M-200 710H1300M-200 900H1300" />
+            <path d="M120 -200V1300M330 -200V1300M560 -200V1300M780 -200V1300M990 -200V1300" />
+          </g>
+          <path d="M-200 610 C 300 560, 700 700, 1300 470" stroke="#4a4a56" stroke-width="16" />
+          <rect x="580" y="160" width="190" height="150" rx="18" fill="#1b2a1f" stroke="none" />
+          <rect x="140" y="730" width="170" height="150" rx="18" fill="#1b2a1f" stroke="none" />
+        </g>
+      </svg>
+      <div id="zone"></div>
+      <div id="ring1" class="ring"></div>
+      <div id="ring2" class="ring"></div>
+      <div id="sweep"><div id="sweep-edge"></div></div>
+
+      <!-- hiders sit at 40, 150 and 250 degrees, so the sweep pings each once and every ping fades before 6 s -->
+      <div id="h1" class="hider" style="left: 674px; top: 381px"><div id="h1-ping" class="ping"></div><div id="h1-dot" class="dot"></div></div>
+      <div id="h2" class="hider" style="left: 690px; top: 800px"><div id="h2-ping" class="ping"></div><div id="h2-dot" class="dot"></div></div>
+      <div id="h3" class="hider" style="left: 282px; top: 634px"><div id="h3-ping" class="ping"></div><div id="h3-dot" class="dot"></div></div>
+
+      <div id="seeker-orbit"><div id="seeker"><i></i></div></div>
+      <div id="me"></div>
+      <div id="vignette" class="full"></div>
+    </div>
+    <script>
+      const LOOP = 6;
+      const tl = gsap.timeline({ paused: true });
+      // the sweep turns once per loop at constant speed
+      tl.fromTo("#sweep", { rotation: 0 }, { rotation: 360, duration: LOOP, ease: "none" }, 0);
+      // the seeker circles the other way, also once per loop
+      tl.fromTo("#seeker-orbit", { rotation: 0 }, { rotation: -360, duration: LOOP, ease: "none" }, 0);
+      // each hider: hidden until the sweep crosses it, then a ping blooms and the dot fades back out
+      [["h1", 40], ["h2", 150], ["h3", 250]].forEach(([id, deg]) => {
+        const t = (deg / 360) * LOOP;
+        tl.fromTo(`#${id}-dot`, { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(1.6)", immediateRender: false }, t - 0.05);
+        tl.fromTo(`#${id}-ping`, { opacity: 0.95, scale: 0.2 }, { opacity: 0, scale: 1.8, duration: 1.3, ease: "expo.out", immediateRender: false }, t);
+        tl.to(`#${id}-dot`, { opacity: 0, scale: 0.8, duration: 0.6, ease: "power2.in" }, t + 1.1);
+      });
+      tl.set({}, {}, LOOP);
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

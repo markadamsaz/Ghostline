@@ -78,7 +78,7 @@ const ICONS = {
   moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
 };
 const ic = (name, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`;
-const ROLE_INK = { hider: '#111111', seeker: '#e10600' };
+const ROLE_INK = { hider: '#1c1c1e', seeker: '#ff3b30' };
 const COLORS = ['#35c8ff', '#ffd23d', '#b98cff', '#3dffb5', '#ff8a3d', '#ff6bd6', '#7dff5a', '#5a8cff', '#ff5a5a', '#5affea', '#d9ff3d', '#ffffff'];
 const ITEM_INFO = {
   decoy: { ic: 'decoy', name: 'Decoy', desc: 'Your next ping shows a spot you pick', role: 'hider' },
@@ -235,7 +235,7 @@ let replay = null;
 let lastStateSent = 0;
 let hostMissingSince = 0;
 
-let shopOpen = false, endMore = false, playersOpen = false, rulesOpen = true;
+let shopOpen = false, endMore = false, playersOpen = false, rulesOpen = false, moreOpen = false;
 function resetLocal() {
   L_ = {
     pings: [],             // {id, p, blur, kind, n, t}
@@ -1814,7 +1814,7 @@ function renderZone() {
   const nz = nextZone();
   const full = S.phase === 'hunting' && S.settings.shrink ? S.zone : null;
   if (full) zoneLayer(full, { color: '#111111', weight: 1.5, opacity: .35, fill: false, dashArray: '2 6', interactive: false }).addTo(layers.zone);
-  zoneLayer(z, { color: '#e10600', weight: 4, opacity: .95, fillColor: '#e10600', fillOpacity: .05, interactive: false }).addTo(layers.zone);
+  zoneLayer(z, { color: '#ff3b30', weight: 4, opacity: .95, fillColor: '#ff3b30', fillOpacity: .05, interactive: false }).addTo(layers.zone);
   if (nz) zoneLayer(nz, { color: '#111111', weight: 2, opacity: .7, fill: false, dashArray: '8 8', interactive: false }).addTo(layers.zone);
 }
 let lastZoneKey = '';
@@ -2031,12 +2031,19 @@ function renderLobby() {
   const chips = (keys) => { const on = keys.filter((k) => s[k]); return on.length ? `<div class="mchips">${on.map(chip).join('')}</div>` : '<p class="card-note" style="margin:0">None</p>'; };
   const core = coreOf(s);
   const coreHtml = (host ? CORE : CORE.filter(([k]) => k === core)).map(([k, icn, t, d]) => `<button class="core ${k === core ? 'on' : ''}" ${host ? `data-act="core" data-k="${k}"` : 'disabled'} aria-pressed="${k === core}"><span class="mi">${ic(icn)}</span><span class="mt"><b>${t}</b><small>${d}</small></span>${k === core ? `<span class="ck">${ic('check')}</span>` : ''}</button>`).join('');
-  const modes = `<div class="card"><div class="card-h">${ic('gamepad')}<span class="ct">Game modes</span><button class="ib" data-act="modeInfo" aria-label="What the modes do">${ic('info')}</button></div>
-    <div class="sub-t">Core mode</div><div class="cores ${host ? '' : 'one'}">${coreHtml}</div>
-    <div class="sub-t">Other modes</div>${host ? `<div class="tg3">${OTHER_MODES.map((k) => tog(k, 'sm')).join('')}</div>` : chips(OTHER_MODES)}
+  const modes = `<div class="card"><div class="card-h">${ic('gamepad')}<span class="ct">Game mode</span><button class="ib" data-act="modeInfo" aria-label="What the modes do">${ic('info')}</button></div>
+    <div class="cores ${host ? '' : 'one'}">${coreHtml}</div>
   </div>`;
-  const pu = `<div class="card"><div class="card-h">${ic('box')}<span class="ct">Power-ups &amp; events</span></div>${host ? `<div class="tg2">${tog('starter', 'lg')}${tog('drops', 'lg')}</div>` : chips(['starter', 'drops'])}</div>`;
-  const zr = `<div class="card"><div class="card-h">${ic('layers')}<span class="ct">Zone rules</span></div>${host ? `<div class="tg2">${tog('shrink', 'lg')}${tog('strictZone', 'lg')}</div>` : chips(['shrink', 'strictZone'])}</div>`;
+  // everything optional lives in one card, closed by default, with a one-line summary of what's on
+  const EXTRA = [...OTHER_MODES, 'starter', 'drops', 'shrink', 'strictZone'];
+  const extrasOn = EXTRA.filter((k) => s[k]);
+  const moreSum = extrasOn.length ? extrasOn.map((k) => SHORT[k]).join(', ') : 'None. Tap to add twists like Missions or a Shrinking zone.';
+  const moreBody = host ? `<div class="more-body">
+      <div><div class="sub-t">Twists</div><div class="tg3">${OTHER_MODES.map((k) => tog(k, 'sm')).join('')}</div></div>
+      <div><div class="sub-t">Power-ups &amp; events</div><div class="tg2">${tog('starter', 'lg')}${tog('drops', 'lg')}</div></div>
+      <div><div class="sub-t">Zone rules</div><div class="tg2">${tog('shrink', 'lg')}${tog('strictZone', 'lg')}</div></div>
+    </div>` : chips(EXTRA);
+  const more = `<div class="card"><button class="card-tap" data-act="toggleExtras" aria-expanded="${moreOpen}">${ic('layers')}<span class="ct">More modes${extrasOn.length ? ` <small>· ${extrasOn.length} on</small>` : ''}</span>${ic('chevD', 'chev' + (moreOpen ? ' up' : ''))}</button>${moreOpen ? moreBody : `<p class="more-sum">${esc(moreSum)}</p>`}</div>`;
 
   // 5. rules
   const set = (lbl, key, val, cls = '') => `<label class="st ${cls}"><span>${lbl}</span>${selectHtml(key, val, false)}</label>`;
@@ -2058,12 +2065,13 @@ function renderLobby() {
     <div>${ic('eye')}<span class="txt">${s.fugitive ? 'One runner, everyone else seeks' : `<b>${s.seekers}</b> seeker${s.seekers > 1 ? 's' : ''} to start`}</span></div>
     ${+s.alarmM ? `<div>${ic('sonar')}<span class="txt">Hiders' phones play an alarm when a seeker is within <b>${s.alarmM} m</b>. It gets louder the closer they get</span></div>` : ''}
   </div>`;
-  const rules = `<div class="card"><button class="card-tap" data-act="toggleRules">${ic('sliders')}<span class="ct">Rules &amp; settings${host ? '' : ' <small>· set by the host</small>'}</span>${ic('chevD', 'chev' + (rulesOpen ? ' up' : ''))}</button>${rulesOpen ? rulesBody : ''}</div>`;
+  const rulesSum = `${optLabel('hideSec', s.hideSec)} to hide · ${optLabel('huntSec', s.huntSec)} hunt · ping every ${optLabel('pingSec', s.pingSec)}`;
+  const rules = `<div class="card"><button class="card-tap" data-act="toggleRules" aria-expanded="${rulesOpen || !host}">${ic('sliders')}<span class="ct">Rules &amp; settings${host ? '' : ' <small>· set by the host</small>'}</span>${host ? ic('chevD', 'chev' + (rulesOpen ? ' up' : '')) : ''}</button>${rulesOpen || !host ? rulesBody : `<p class="more-sum">${esc(rulesSum)}</p>`}</div>`;
 
   const noLocIds = online.filter(noLoc);
   setSheet(`<div class="lob">
     ${geoNote()}
-    ${summary}${duo}${zone}${modes}${pu}${zr}${rules}
+    ${summary}${duo}${zone}${modes}${more}${rules}
     ${noLocIds.length ? `<p class="note warn">${ic('pin')}<span>${noLocIds.map((id) => esc(S.players[id].name)).join(', ')} ${noLocIds.length > 1 ? "haven't" : "hasn't"} shared location. They can tap the settings button at the top.</span></p>` : ''}
     <div class="lob-foot">
       ${host && !canStart ? `<p class="hint">${!S.zone ? 'Set a play zone to start.' : 'Need at least 2 players.'}</p>` : ''}
@@ -2351,7 +2359,8 @@ function act(a, el) {
     case 'toggleSheet': sheetCollapsed = !sheetCollapsed; sheet.classList.toggle('collapsed', sheetCollapsed); { const g = $('.grab-t', sheet); if (g) g.textContent = sheetCollapsed ? 'Show panel ▴' : 'See more map ▾'; } document.documentElement.style.setProperty('--sheet-h', (window.innerWidth < 720 ? sheet.offsetHeight : 0) + 'px'); break;
     case 'allowGeo': retryGeo(true); break;
     case 'togglePlayers': playersOpen = !playersOpen; renderSheet(); break;
-    case 'toggleRules': rulesOpen = !rulesOpen; renderSheet(); break;
+    case 'toggleRules': if (isHost()) { rulesOpen = !rulesOpen; renderSheet(); } break;
+    case 'toggleExtras': moreOpen = !moreOpen; sheetEnter(); renderSheet(); break;
     case 'modeInfo': modeInfoModal(); break;
     case 'core': { const k = el.dataset.k; if (isHost()) hostApply((st) => { st.settings.infection = k === 'infection'; st.settings.jail = k === 'jail'; st.settings.fugitive = k === 'fugitive'; }); break; }
     case 'togglePU': L_.showPU = !L_.showPU; if (L_.showPU) L_.showMore = L_.showShop = false; renderSheet(); break;
@@ -2564,7 +2573,7 @@ function drawDraft() {
   if (!zoneDraft) return;
   if (zoneDraft.type === 'circle' && zoneDraft.c) L.circle(zoneDraft.c, { radius: zoneDraft.r, color: '#111111', weight: 2, dashArray: '6 6', fillOpacity: .06 }).addTo(layers.draft);
   if (zoneDraft.type === 'poly') {
-    zoneDraft.pts.forEach((p) => L.circleMarker(p, { radius: 5, color: '#111111', fillColor: '#e10600', fillOpacity: 1 }).addTo(layers.draft));
+    zoneDraft.pts.forEach((p) => L.circleMarker(p, { radius: 5, color: '#111111', fillColor: '#ff3b30', fillOpacity: 1 }).addTo(layers.draft));
     if (zoneDraft.pts.length > 1) L.polygon(zoneDraft.pts, { color: '#111111', weight: 2, dashArray: '6 6', fillOpacity: .06 }).addTo(layers.draft);
   }
 }
@@ -2603,6 +2612,17 @@ const inName = $('#in-name'), inCode = $('#in-code');
 inName.value = me.name || '';
 if (params.get('room')) inCode.value = params.get('room').toUpperCase().slice(0, 4);
 inCode.addEventListener('input', () => { inCode.value = inCode.value.toUpperCase().replace(/[^A-Z]/g, ''); });
+// how-to-play film (made with HyperFrames, see motion/)
+const film = $('#film'), filmVid = $('#film-video'), heroVid = $('#hero-video');
+function closeFilm() { film.hidden = true; try { filmVid.pause(); } catch {} }
+$('#btn-film').addEventListener('click', () => { film.hidden = false; try { filmVid.currentTime = 0; filmVid.play().catch(() => {}); } catch {} });
+$('#film-x').addEventListener('click', closeFilm);
+film.addEventListener('click', (e) => { if (e.target === film) closeFilm(); });
+filmVid.addEventListener('ended', closeFilm);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !film.hidden) closeFilm(); });
+// the hero loop only plays while the home screen is showing
+new MutationObserver(() => { try { if ($('#home').hidden) heroVid.pause(); else heroVid.play().catch(() => {}); } catch {} }).observe($('#home'), { attributes: true, attributeFilter: ['hidden'] });
+if (matchMedia('(prefers-reduced-motion: reduce)').matches) { heroVid.removeAttribute('autoplay'); heroVid.pause(); }
 function showHomeErr(t) { const e = $('#home-err'); e.textContent = t; e.hidden = !t; }
 function setHomeBusy(b) { $('#btn-create').disabled = b; $('#btn-join').disabled = b; }
 function takeName() {

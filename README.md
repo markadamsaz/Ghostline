@@ -45,3 +45,14 @@ Phones ask for their most accurate fresh fix. A weak fix (worse than 30 m) is sk
 - `public/` is a static web app (no build step). Phones sync over Supabase Realtime (broadcast + presence, no tables), set in `public/config.js`.
 - `server.js` serves `public/` and a WebSocket relay for play-testing on your own Wi-Fi: `npm install && npm start`.
 - `test/sim.mjs` plays full rounds with 4 simulated phones.
+
+## Look and motion
+
+The UI follows iOS conventions: system font (SF on Apple devices), grouped cards, frosted bars, iOS switches and segmented controls, light and dark mode, and one tint (system red). Seekers are red, hiders are graphite.
+
+The home screen's radar loop and the "Watch how it works" film are made with [HyperFrames](https://hyperframes.heygen.com) in `motion/hero` and `motion/how-to-play` (HTML + GSAP rendered to MP4). To change one, edit its `index.html`, then render and re-encode into `public/media/` (needs Node 22+ and ffmpeg):
+
+```
+cd motion/how-to-play && npx hyperframes render -o renders/how-to-play.mp4
+ffmpeg -i renders/how-to-play.mp4 -vf scale=720:900,format=yuv420p -c:v libx264 -crf 27 -an -movflags +faststart ../../public/media/how-to-play.mp4
+```

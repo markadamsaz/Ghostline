@@ -1,1 +1,4 @@
 node_modules/
+motion/*/renders/
+motion/*/.hyperframes/
+motion/*/node_modules/
