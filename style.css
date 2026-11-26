@@ -1154,3 +1154,6 @@ body.lobby-full #hud { background: color-mix(in srgb, var(--bg) 88%, transparent
 .im.in-thread, .im.compose { animation: im-push .32s var(--ease) both; }
 @keyframes im-push { from { transform: translateX(24px); opacity: .4; } }
 @media (prefers-reduced-motion: reduce) { .im.in-thread, .im.compose, .im-rec .rdot, .im-rec .slide { animation: none; } }
+
+/* "See more map": a collapsed sheet shrinks to its handle on every screen (chat and in-game views set their own heights above) */
+#sheet.collapsed:not([data-view=lobby]) { height: auto !important; max-height: 96px !important; overflow: hidden !important; }
