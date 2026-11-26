@@ -1609,10 +1609,11 @@ function settingsModal() {
     <div class="set-list set-acct">
       <div class="set-item set-me">${acctBadge()}<span class="set-tx"><b>${esc(acct.profile.name || acctUser())}</b><small>${acct.profile.points || 0} pts saved</small></span></div>
       <div class="set-item"><span class="set-k">Username</span><span class="set-v">${esc(acctUser())}</span></div>
-      <div class="set-item"><span class="set-k">Password</span><span class="set-v set-dots">••••••••</span><button type="button" class="set-btn" data-act="setPass">Change</button></div>
+      <div class="set-item"><span class="set-k">Password</span>${pwSaved() != null ? `<span class="set-v set-pw">${esc(pwSaved())}</span>` : `<span class="set-v">Not saved yet</span><button type="button" class="set-btn" data-act="setPwAdd">Show</button>`}</div>
+      <button type="button" class="set-item set-link" data-act="setPass"><span class="set-tx"><b>Change password</b></span><span class="set-chev">›</span></button>
       <button type="button" class="set-item set-link set-out" data-acct="out"><span class="set-tx"><b>Sign out</b></span></button>
     </div>
-    <p class="set-foot">Passwords are stored scrambled, so nobody (not even Ghostline) can read yours back. Forgot it? Change it here while you're signed in.</p>`
+    <p class="set-foot">Your password is kept on this phone so you can see it here, and it's removed when you sign out. Anyone using this phone can see it too.</p>`
     : `<div class="set-l">Account</div>
     <div class="set-list set-acct">
       <div class="set-item"><span class="set-tx"><b>Playing as a guest</b><small>Make an account to keep your points and characters.</small></span><button type="button" class="set-btn" data-acct="open">Sign in</button></div>
@@ -2724,24 +2725,47 @@ $('#modal').addEventListener('click', (e) => {
   if (e.target.closest('[data-act="setFilm"]')) { closeModal(); $('#btn-film').click(); return; }
   if (e.target.closest('[data-act="setKey"]')) { closeModal(); showMapKey(); return; }
   if (e.target.closest('[data-act="setPass"]')) { passModal(); return; }
+  if (e.target.closest('[data-act="setPwAdd"]')) { pwAddModal(); return; }
   if (e.target.closest('[data-act="setBack"]')) { settingsModal(); return; }
   if (e.target.id === 'modal' || e.target.closest('[data-act="closeModal"]')) closeModal(); else if (e.target.closest('[data-act="allowGeo"]')) retryGeo(true);
 });
+function pwAddModal() {
+  if (!acct || !authClient) return;
+  modal(`<h3>Show your password</h3>
+    <p>This phone signed in before it could keep a copy. Type your password once and it will show in Settings from now on.</p>
+    <form id="pwa-form" class="acct-form">
+      <input type="text" autocomplete="username" value="${esc(acctUser())}" hidden>
+      <input id="pwa-pw" type="text" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Your password" required>
+      <p id="pwa-err" class="err" hidden></p>
+      <button class="btn primary big" type="submit" style="width:100%">Save on this phone</button>
+    </form>
+    <button class="btn ghost" data-act="setBack" style="width:100%">Back to settings</button>`);
+  $('#pwa-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const err = $('#pwa-err'), btn = $('#pwa-form button[type=submit]'), pw = $('#pwa-pw').value;
+    const show = (t) => { err.textContent = t; err.hidden = !t; };
+    btn.disabled = true; show('');
+    try {
+      const chk = await authClient.auth.signInWithPassword({ email: acct.user.email || acctEmail(acctUser()), password: pw });
+      if (chk.error) { btn.disabled = false; show("That isn't your password. If you forgot it, use Change password."); return; }
+    } catch { btn.disabled = false; show('No connection. Try again.'); return; }
+    pwKeep(acctUser(), pw); settingsModal();
+  };
+  $('#pwa-pw').focus();
+}
 function passModal() {
   if (!acct || !authClient) return;
   modal(`<h3>Change password</h3>
     <p>Signed in as <b>${esc(acctUser())}</b>.</p>
     <form id="pw-form" class="acct-form">
       <input type="text" autocomplete="username" value="${esc(acctUser())}" hidden>
-      <input id="pw-old" type="password" autocomplete="current-password" placeholder="Current password" required>
-      <input id="pw-new" type="password" autocomplete="new-password" placeholder="New password (6+ characters)" minlength="6" required>
-      <input id="pw-new2" type="password" autocomplete="new-password" placeholder="New password again" minlength="6" required>
-      <label class="pw-show"><input type="checkbox" id="pw-eye"> Show passwords</label>
+      <input id="pw-old" type="text" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Current password" value="${esc(pwSaved() || '')}" required>
+      <input id="pw-new" type="text" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="New password (6+ characters)" minlength="6" required>
+      <input id="pw-new2" type="text" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="New password again" minlength="6" required>
       <p id="pw-err" class="err" hidden></p>
       <button class="btn primary big" type="submit" style="width:100%">Save new password</button>
     </form>
     <button class="btn ghost" data-act="setBack" style="width:100%">Back to settings</button>`);
-  $('#pw-eye').onchange = (e) => { for (const id of ['pw-old', 'pw-new', 'pw-new2']) $('#' + id).type = e.target.checked ? 'text' : 'password'; };
   $('#pw-form').onsubmit = async (e) => {
     e.preventDefault();
     const err = $('#pw-err'), btn = $('#pw-form button[type=submit]');
@@ -2755,10 +2779,11 @@ function passModal() {
       if (chk.error) { btn.disabled = false; show('Your current password is wrong.'); return; }
       const r = await authClient.auth.updateUser({ password: nw });
       if (r.error) { btn.disabled = false; show(r.error.message || 'Could not change it. Try again.'); return; }
+      pwKeep(acctUser(), nw);
     } catch { btn.disabled = false; show('No connection. Try again.'); return; }
     settingsModal(); toast('Password changed', 'good', 'check');
   };
-  $('#pw-old').focus();
+  $(pwSaved() ? '#pw-new' : '#pw-old').focus();
 }
 $('#modal').addEventListener('change', (e) => { const t = e.target; if (t.matches('input[type=checkbox][data-pref]')) setPref(t.dataset.pref, t.checked); });
 
@@ -3203,6 +3228,11 @@ setInterval(() => {
 const ACCT_DOMAIN = 'players.ghostline.invalid';
 const acctUser = () => { const u = acct && acct.user; return (u && u.user_metadata && u.user_metadata.username) || ((u && u.email) || '').replace('@' + ACCT_DOMAIN, ''); };
 const acctEmail = (u) => u.includes('@') ? u : `${u.toLowerCase()}@${ACCT_DOMAIN}`;
+// The account server can't give a password back, so this phone keeps its own copy (from signing in or
+// changing it here) to show in Settings. It's removed on sign out.
+const pwKeep = (user, pw) => { try { localStorage.setItem('gl:pw', JSON.stringify({ u: String(user).toLowerCase(), p: pw })); } catch {} };
+const pwForget = () => { try { localStorage.removeItem('gl:pw'); } catch {} };
+const pwSaved = () => { const v = loadLocal('gl:pw', null); return v && acct && v.u === acctUser().toLowerCase() ? v.p : null; };
 function acctBadge() {
   const pr = acct.profile;
   return `<span class="av acct-av ${charOf(pr.icon) ? 'has-ch' : ''}">${lookHtml(pr.icon) || esc(Array.from(pr.name || acctUser() || '?')[0] || '?')}</span>`;
@@ -3219,7 +3249,7 @@ function renderAcct() {
 }
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-acct]'); if (!b || !authClient) return;
-  if (b.dataset.acct === 'out') { authClient.auth.signOut().then(() => { acct = null; renderAcct(); if ($('.modal-card .set-acct')) settingsModal(); toast('Signed out. You are playing as a guest.'); }); }
+  if (b.dataset.acct === 'out') { authClient.auth.signOut().then(() => { pwForget(); acct = null; renderAcct(); if ($('.modal-card .set-acct')) settingsModal(); toast('Signed out. You are playing as a guest.'); }); }
   if (b.dataset.acct === 'open') acctModal('in');
 });
 function acctModal(mode) {
@@ -3256,6 +3286,7 @@ function acctModal(mode) {
     const r = await authClient.auth.signInWithPassword({ email: acctEmail(user), password });
     btn.disabled = false;
     if (r.error) { show(/invalid login/i.test(r.error.message) ? 'Wrong username or password.' : r.error.message); return; }
+    pwKeep(user, password);
     closeModal(); toast(up ? 'Account created. Your points will be saved.' : 'Signed in', 'good', 'check');
   };
 }

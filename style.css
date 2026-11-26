@@ -1366,3 +1366,4 @@ body.lobby-full #hud { z-index: 40; background: color-mix(in srgb, var(--glass) 
 .pw-show { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--muted); padding-left: 4px; }
 .pw-show input { width: 18px; height: 18px; accent-color: var(--blue); }
 .acct-form .pw-show input { min-height: 0; height: 18px; width: 18px; padding: 0; margin: 0; border: 0; box-shadow: none; flex: none; }
+.set-pw { color: var(--ink); font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 15px; letter-spacing: 0; }
