@@ -387,10 +387,17 @@ function alarmUpdate(d, range) {
 }
 
 // ---------------- map ----------------
-const map = L.map('map', { zoomControl: false, attributionControl: true, worldCopyJump: true }).setView([39.5, -98.35], 4);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19, className: 'map-tiles',
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+const map = L.map('map', { zoomControl: false, attributionControl: true, worldCopyJump: true, maxZoom: 20 }).setView([39.5, -98.35], 4);
+// satellite photo with street names and place labels on top, so players can see buildings, roads and trees
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 20, maxNativeZoom: 19, className: 'map-tiles',
+  attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics',
+}).addTo(map);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 20, maxNativeZoom: 19, opacity: .8,
+}).addTo(map);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 20, maxNativeZoom: 19,
 }).addTo(map);
 const layers = {
   zone: L.layerGroup().addTo(map),
@@ -485,13 +492,46 @@ function updateMeMarker() {
   const role = mine()?.role;
   const col = role === 'hider' ? 'var(--hider)' : 'var(--seeker)';
   const ch = charOf(mine()?.icon);
-  const icon = ch ? L.divIcon({ className: '', iconSize: [40, 40], iconAnchor: [20, 20], html: `<div class="me-ch ${role === 'seeker' ? 'seeker' : ''}" style="border-color:${col}"><img src="chars/${ch}.png" alt=""></div>` })
-    : L.divIcon({ className: '', iconSize: [22, 22], iconAnchor: [11, 11], html: `<div class="me-dot ${role === 'seeker' ? 'seeker' : ''}" style="background:${col}"></div>` });
+  // the beam sits inside the map, so it turns along with the map when the map is rotated
+  const cone = (sz) => heading === null ? '' : `<div class="me-cone" style="left:${sz / 2 - 40}px;top:${sz / 2 - 40}px;transform:rotate(${Math.round(heading)}deg)"></div>`;
+  const icon = ch ? L.divIcon({ className: '', iconSize: [40, 40], iconAnchor: [20, 20], html: `<div class="me-wrap">${cone(40)}<div class="me-ch ${role === 'seeker' ? 'seeker' : ''}" style="border-color:${col}"><img src="chars/${ch}.png" alt=""></div></div>` })
+    : L.divIcon({ className: '', iconSize: [22, 22], iconAnchor: [11, 11], html: `<div class="me-wrap">${cone(22)}<div class="me-dot ${role === 'seeker' ? 'seeker' : ''}" style="background:${col}"></div></div>` });
+  if (meMarker && replay) { map.removeLayer(meMarker); map.removeLayer(meAcc); meMarker = null; meAcc = null; }
+  if (replay) return;
   if (!meMarker) {
     meMarker = L.marker(myPos.p, { icon, zIndexOffset: 1000, interactive: false }).addTo(map);
     meAcc = L.circle(myPos.p, { radius: myPos.acc, color: '#111', weight: 1, opacity: .25, fillOpacity: .04, interactive: false }).addTo(map);
   } else { meMarker.setLatLng(myPos.p); meMarker.setIcon(icon); meAcc.setLatLng(myPos.p); meAcc.setRadius(myPos.acc); }
 }
+
+// ---------------- compass: which way my phone is facing ----------------
+let heading = null, headingOn = false, headingAsked = false, headingDrawn = null;
+function onOrient(e) {
+  let h = null;
+  if (typeof e.webkitCompassHeading === 'number') h = e.webkitCompassHeading; // iPhone: degrees from north
+  else if (e.absolute && typeof e.alpha === 'number') h = 360 - e.alpha; // Android: alpha counts the other way
+  if (h === null || Number.isNaN(h)) return;
+  const ang = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+  heading = (h + ang + 360) % 360;
+  // only redraw when it turns a few degrees, to save battery
+  if (headingDrawn === null || Math.abs(((heading - headingDrawn + 540) % 360) - 180) > 4) { headingDrawn = heading; updateMeMarker(); }
+}
+function startHeading() {
+  if (headingOn) return;
+  const go = () => {
+    headingOn = true;
+    if ('ondeviceorientationabsolute' in window) window.addEventListener('deviceorientationabsolute', onOrient);
+    else window.addEventListener('deviceorientation', onOrient);
+  };
+  const D = window.DeviceOrientationEvent;
+  if (!D) return;
+  if (typeof D.requestPermission === 'function') { // iPhone asks once, and only from a tap
+    if (headingAsked) return;
+    headingAsked = true;
+    D.requestPermission().then((r) => { if (r === 'granted') go(); }).catch(() => { headingAsked = false; });
+  } else go();
+}
+document.addEventListener('click', () => { if (S) startHeading(); }, { passive: true });
 
 // ---------------- zone over time ----------------
 function huntMs() { return S.settings.huntSec * 1000; }
@@ -1789,7 +1829,7 @@ function renderMarks() {
   const zk = S.phase + ':' + scaleAt(hostNow()).toFixed(3) + ':' + JSON.stringify(S.zone);
   if (zk !== lastZoneKey) { lastZoneKey = zk; renderZone(); }
   layers.marks.clearLayers();
-  if (S.phase === 'lobby') return;
+  if (S.phase === 'lobby' || replay) return; // the replay draws its own dots; old last-known spots would just clutter it
   const now = hostNow();
   const p = mine();
   const iSeek = p && p.role === 'seeker';
@@ -1852,7 +1892,7 @@ function sheetEnter() { sheet.classList.add('enter'); clearTimeout(enterT); ente
 function setSheet(html, view = '') {
   if (view !== sheetView) { sheetView = view; sheet.scrollTop = 0; sheetEnter(); } // a new screen starts at the top
   sheet.dataset.view = view;
-  sheet.innerHTML = `<div class="grab" data-act="toggleSheet" role="button" aria-label="Expand or collapse"></div>` + html;
+  sheet.innerHTML = `<button class="grab" data-act="toggleSheet" aria-label="${sheetCollapsed ? 'Show panel' : 'Shrink panel to see the map'}"><span class="grab-t">${sheetCollapsed ? 'Show panel ▴' : 'See more map ▾'}</span></button>` + html;
   sheet.hidden = false;
   sheet.classList.toggle('collapsed', sheetCollapsed);
   sheet.classList.toggle('play', view === 'play');
@@ -2207,12 +2247,20 @@ function renderReplay() {
     const pl = P(id); if (!pl || !pts.length) continue;
     const rr = (S.results && S.results[id] && S.results[id].startRole) || pl.startRole || pl.role;
     const col = ROLE_INK[rr] || ROLE_INK.hider;
-    L.polyline(pts.map((x) => [x[0], x[1]]), { color: col, weight: 2, opacity: .3, interactive: false }).addTo(layers.replay);
-    const past = pts.filter((x) => x[2] <= t);
-    if (past.length > 1) L.polyline(past.map((x) => [x[0], x[1]]), { color: col, weight: 4, opacity: .95, interactive: false }).addTo(layers.replay);
-    const cur = past[past.length - 1] || pts[0];
-    L.marker([cur[0], cur[1]], { icon: blipIcon(col, esc(pl.name), '', rr === 'seeker' ? 'seeker' : ''), interactive: false }).addTo(layers.replay);
     pts.forEach((x) => bounds.push([x[0], x[1]]));
+    const past = pts.filter((x) => x[2] <= t);
+    if (!past.length) continue; // not on the map yet at this point in the replay
+    // only the last ~2 minutes of path, so the map shows where people are now, not every place they've been
+    const recent = past.filter((x) => x[2] >= t - 120000);
+    if (recent.length > 1) {
+      const ll = recent.map((x) => [x[0], x[1]]);
+      L.polyline(ll, { color: '#fff', weight: 7, opacity: .85, interactive: false }).addTo(layers.replay);
+      L.polyline(ll, { color: col, weight: 4, opacity: .95, interactive: false }).addTo(layers.replay);
+    }
+    const cur = past[past.length - 1];
+    // a caught player's dot goes away once they're caught (unless they keep moving, e.g. infected into a seeker)
+    if (pl.caughtAt && cur[2] < t - 30000 && S.events.some((e) => e.k === 'catch' && e.who === id && e.t <= t)) continue;
+    L.marker([cur[0], cur[1]], { icon: blipIcon(col, esc(pl.name), '', rr === 'seeker' ? 'seeker' : ''), interactive: false }).addTo(layers.replay);
   }
   for (const e of S.events) if (e.k === 'catch' && e.p && e.t <= t) L.marker(e.p, { icon: L.divIcon({ className: '', html: `<div class="map-pin small dark">${ic('caught')}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] }), interactive: false }).addTo(layers.replay);
   if (!replay.fitted && bounds.length) { fitTo(bounds); replay.fitted = true; }
@@ -2300,7 +2348,7 @@ function act(a, el) {
   const p = mine();
   if (/^(togglePU|toggleMore|toggleShop|endMore)$/.test(a)) sheetEnter();
   switch (a) {
-    case 'toggleSheet': sheetCollapsed = !sheetCollapsed; sheet.classList.toggle('collapsed', sheetCollapsed); document.documentElement.style.setProperty('--sheet-h', (window.innerWidth < 720 ? sheet.offsetHeight : 0) + 'px'); break;
+    case 'toggleSheet': sheetCollapsed = !sheetCollapsed; sheet.classList.toggle('collapsed', sheetCollapsed); { const g = $('.grab-t', sheet); if (g) g.textContent = sheetCollapsed ? 'Show panel ▴' : 'See more map ▾'; } document.documentElement.style.setProperty('--sheet-h', (window.innerWidth < 720 ? sheet.offsetHeight : 0) + 'px'); break;
     case 'allowGeo': retryGeo(true); break;
     case 'togglePlayers': playersOpen = !playersOpen; renderSheet(); break;
     case 'toggleRules': rulesOpen = !rulesOpen; renderSheet(); break;
@@ -2529,6 +2577,23 @@ $('#btn-fit').addEventListener('click', () => {
 $('#btn-back').addEventListener('click', () => act('leave'));
 $('#btn-gear').addEventListener('click', () => { unlockAudio(); settingsModal(); });
 $('#btn-north').addEventListener('click', () => setBearing(mapBear % 90 === 0 ? mapBear + 90 : 0));
+$('#btn-key').addEventListener('click', showMapKey);
+function showMapKey() {
+  const row = (sym, t, d) => `<div class="key-row"><span class="key-sym">${sym}</span><span><b>${t}</b>${d ? `<small>${d}</small>` : ''}</span></div>`;
+  const dot = (c, sq) => `<span class="key-dot ${sq ? 'sq' : ''}" style="background:${c}"></span>`;
+  modal(`<div class="sheet-h"><h2>Map key</h2><button class="icon-btn" data-act="closeModal" aria-label="Close">${ic('close')}</button></div>
+    <div class="key">
+      ${row(`<span class="key-me"><span class="me-cone"></span>${dot('#111')}</span>`, 'You', 'The blue beam shows which way your phone is facing. Round dot = hider, diamond = seeker.')}
+      ${row(dot(ROLE_INK.hider), 'Hider ping', "A hider's rough spot. The time says how old it is. The circle is how far off it could be.")}
+      ${row(dot(ROLE_INK.seeker, true), 'Seeker', 'Where a seeker is (only shown to teammates, or with Sonar/Peek).')}
+      ${row(`<span class="key-tag">LIVE</span>`, 'Red label', 'Exact spot: out of zone, screen off, X-ray or Live Wire.')}
+      ${row(`<span class="key-line"></span>`, 'Red line', 'The play zone. Stay inside it.')}
+      ${row(`<span class="key-pin">${ic('caught')}</span>`, 'Caught', 'Where someone got tagged.')}
+      ${row(`<span class="key-pin">${ic('treasure')}</span>`, 'Pins with a dashed ring', 'Treasure, supply drops, flags, jail and missions. Walk into the ring to use them.')}
+    </div>
+    <p class="note" style="margin-top:12px">Buttons on the right: see the whole zone, turn the map (or twist with two fingers), and jump to you.</p>
+    <button class="btn primary" data-act="closeModal" style="width:100%;margin-top:10px">Got it</button>`);
+}
 $('#btn-locate').addEventListener('click', () => { if (myPos) map.setView(myPos.p, Math.max(map.getZoom(), 17)); else toast('No location yet'); });
 $('#btn-chat').addEventListener('click', () => { chatOpen = !chatOpen; unread = false; $('#chat-dot').hidden = true; if (chatOpen) renderChat(); else renderSheet(); setMapBtn(); });
 $('#btn-map').addEventListener('click', () => setMapView(!(mapView && !chatOpen)));
