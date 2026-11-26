@@ -10,6 +10,8 @@ const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug');
 // Line icons (24x24, stroked with currentColor). No emoji anywhere in the UI.
 const ICONS = {
+  vibrate: '<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M3 9v6M21 9v6"/>',
+  sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/>',
   decoy: '<path d="M6 20V10a6 6 0 0 1 12 0v10l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5z"/><path d="M10 10h.01M14 10h.01"/>',
   jammer: '<path d="M3 3l18 18"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M5 12.6a10 10 0 0 1 5-2.5"/><path d="M19 12.6a10 10 0 0 0-2.2-1.6"/><path d="M2 8.8a15 15 0 0 1 4.2-2.6"/><path d="M22 8.8A15 15 0 0 0 11 5"/><path d="M12 20h.01"/>',
   sonar: '<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/>',
@@ -210,6 +212,27 @@ const me = loadMe();
 // characters you bought are yours forever: kept on this phone, and on your account when signed in
 const cleanOwned = (a) => [...new Set((Array.isArray(a) ? a : []).filter((c) => typeof c === 'string' && CHARS[c]))].slice(0, 64);
 const loadLocal = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch { return d; } };
+// personal settings, saved on this phone only
+const prefs = Object.assign({ theme: 'auto', map: 'sat', haptics: true, chatSounds: true, motion: true }, loadLocal('gl:prefs', {}));
+function savePrefs() { try { localStorage.setItem('gl:prefs', JSON.stringify(prefs)); } catch {} }
+// Light/dark and reduce motion: the stylesheet's own @media blocks are switched on or off, so every rule follows the choice.
+const mediaRules = [];
+for (const sh of document.styleSheets) { let rs; try { rs = sh.cssRules; } catch { continue; } for (const r of rs) if (r.media && /prefers-(color-scheme|reduced-motion)/.test(r.media.mediaText)) mediaRules.push([r, r.media.mediaText]); }
+function applyLook() {
+  for (const [r, orig] of mediaRules) {
+    let t = orig;
+    if (/prefers-color-scheme:\s*dark/.test(orig) && prefs.theme !== 'auto') t = prefs.theme === 'dark' ? 'all' : 'not all';
+    if (/prefers-reduced-motion:\s*reduce/.test(orig) && !prefs.motion) t = 'all';
+    if (r.media.mediaText !== t) r.media.mediaText = t;
+  }
+  const dark = prefs.theme === 'dark' || (prefs.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  for (const m of document.querySelectorAll('meta[name="theme-color"]')) {
+    if (!m.dataset.orig) m.dataset.orig = m.content;
+    m.content = prefs.theme === 'auto' ? m.dataset.orig : dark ? '#000000' : '#f2f2f7';
+  }
+}
+applyLook();
 let myOwned = cleanOwned(loadLocal('gl:owned', []));
 let myLook = isLook(loadLocal('gl:look', null)) ? loadLocal('gl:look', null) : null;
 function keepOwned(list) {
@@ -381,6 +404,7 @@ function loadSfx() {
     .finally(() => { sfx.loading = false; });
 }
 function playSend() {
+  if (!prefs.chatSounds) return;
   try {
     if (!actx) unlockAudio();
     if (actx.state !== 'running') actx.resume().catch(() => {});
@@ -389,6 +413,7 @@ function playSend() {
   } catch {}
 }
 function playRecv() {
+  if (!prefs.chatSounds) return;
   try {
     if (!actx) unlockAudio();
     let t = actx.currentTime;
@@ -400,7 +425,7 @@ function playRecv() {
     }
   } catch {}
 }
-const buzz = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch {} };
+const buzz = (p) => { if (!prefs.haptics) return; try { navigator.vibrate && navigator.vibrate(p); } catch {} };
 
 // Seeker alarm: "wanna sprite cranberry?" loops on a hider's phone while a seeker is in range.
 // The closer the seeker, the louder it plays and the shorter the gap between plays.
@@ -444,16 +469,29 @@ function alarmUpdate(d, range) {
 // ---------------- map ----------------
 const map = L.map('map', { zoomControl: false, attributionControl: true, worldCopyJump: true, maxZoom: 20 }).setView([39.5, -98.35], 4);
 // satellite photo with street names and place labels on top, so players can see buildings, roads and trees
-L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-  maxZoom: 20, maxNativeZoom: 19, className: 'map-tiles',
-  attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics',
-}).addTo(map);
-L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {
-  maxZoom: 20, maxNativeZoom: 19, opacity: .8,
-}).addTo(map);
-L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
-  maxZoom: 20, maxNativeZoom: 19,
-}).addTo(map);
+const satLayers = [
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 20, maxNativeZoom: 19, className: 'map-tiles',
+    attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics',
+  }),
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 20, maxNativeZoom: 19, opacity: .8,
+  }),
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 20, maxNativeZoom: 19,
+  }),
+];
+// plain street map, for players who find the satellite photo hard to read
+const streetLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 20, maxNativeZoom: 19, className: 'map-street',
+  attribution: 'Map &copy; Esri, HERE, Garmin, OpenStreetMap contributors',
+});
+function applyMapStyle() {
+  const street = prefs.map === 'street';
+  for (const l of satLayers) if (street) map.removeLayer(l); else if (!map.hasLayer(l)) l.addTo(map);
+  if (street) { if (!map.hasLayer(streetLayer)) streetLayer.addTo(map); } else map.removeLayer(streetLayer);
+}
+applyMapStyle();
 const layers = {
   zone: L.layerGroup().addTo(map),
   draft: L.layerGroup().addTo(map),
@@ -1563,10 +1601,37 @@ function locReport() {
 function noLoc(id) { const x = locOk[id]; return x ? !x.ok : Date.now() - (S.players[id]?.joinedAt || 0) > 15000 && peers.has(id); }
 function settingsModal() {
   const ok = !!myPos && !geoBlocked;
+  const seg = (key, opts) => `<div class="seg set-seg" data-pref="${key}">${opts.map(([v, t]) => `<button type="button" data-v="${v}" class="${prefs[key] === v ? 'on' : ''}">${t}</button>`).join('')}</div>`;
+  const sw = (key, icon, title, sub) => `<label class="set-item">${ic(icon)}<span class="set-tx"><b>${title}</b><small>${sub}</small></span><span class="sw"><input type="checkbox" data-pref="${key}" ${prefs[key] ? 'checked' : ''}><span></span></span></label>`;
+  const link = (act, icon, title) => `<button type="button" class="set-item set-link" data-act="${act}">${ic(icon)}<span class="set-tx"><b>${title}</b></span><span class="set-chev">›</span></button>`;
   modal(`<h3>Settings</h3>
+    <div class="set-l">Appearance</div>
+    ${seg('theme', [['auto', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']])}
+    <div class="set-l">Map</div>
+    ${seg('map', [['sat', 'Satellite'], ['street', 'Streets']])}
+    <div class="set-l">Sound &amp; feel</div>
+    <div class="set-list">
+      ${sw('haptics', 'vibrate', 'Vibration', 'Buzz on pings, tags and alerts')}
+      ${sw('chatSounds', 'chat', 'Chat sounds', 'Swoosh when you send, chime when a message comes in')}
+      ${sw('motion', 'sparkle', 'Animations', 'Turn off to reduce motion')}
+    </div>
+    <p class="set-foot">Game sounds and the seeker alarm always play, so nobody misses a ping.</p>
+    <div class="set-l">Location</div>
     <div class="set-row ${ok ? '' : 'bad'}">${ic('pin')}<div><b>Location</b><span>${ok ? `On (±${myPos.acc} m)` : esc(geoError || 'Not shared yet. You need it to play.')}</span></div></div>
-    <button class="btn primary big" data-act="allowGeo" style="width:100%;margin:12px 0 8px">${ok ? 'Check location again' : 'Allow location'}</button>
-    <button class="btn dark" data-act="closeModal" style="width:100%">Done</button>`);
+    <button class="btn primary" data-act="allowGeo" style="width:100%;margin:10px 0 0">${ok ? 'Check location again' : 'Allow location'}</button>
+    <div class="set-l">Help</div>
+    <div class="set-list">
+      ${link('setFilm', 'eye', 'Watch how it works')}
+      ${link('setKey', 'pin', 'Map key')}
+    </div>
+    <button class="btn dark big" data-act="closeModal" style="width:100%;margin-top:16px">Done</button>
+    <p class="set-foot" style="text-align:center">Saved on this phone.</p>`);
+}
+function setPref(key, v) {
+  prefs[key] = v; savePrefs();
+  if (key === 'theme' || key === 'motion') applyLook();
+  if (key === 'map') applyMapStyle();
+  if (key === 'haptics' && v) buzz(30);
 }
 function clientTick() {
   locReport();
@@ -2637,7 +2702,14 @@ function modal(html) {
   m.hidden = false;
 }
 function closeModal() { $('#modal').hidden = true; }
-$('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal' || e.target.closest('[data-act="closeModal"]')) closeModal(); else if (e.target.closest('[data-act="allowGeo"]')) retryGeo(true); });
+$('#modal').addEventListener('click', (e) => {
+  const pv = e.target.closest('[data-pref] [data-v]');
+  if (pv) { const box = pv.parentElement; setPref(box.dataset.pref, pv.dataset.v); for (const b of box.children) b.classList.toggle('on', b === pv); return; }
+  if (e.target.closest('[data-act="setFilm"]')) { closeModal(); $('#btn-film').click(); return; }
+  if (e.target.closest('[data-act="setKey"]')) { closeModal(); showMapKey(); return; }
+  if (e.target.id === 'modal' || e.target.closest('[data-act="closeModal"]')) closeModal(); else if (e.target.closest('[data-act="allowGeo"]')) retryGeo(true);
+});
+$('#modal').addEventListener('change', (e) => { const t = e.target; if (t.matches('input[type=checkbox][data-pref]')) setPref(t.dataset.pref, t.checked); });
 
 function inviteUrl() { return location.origin + location.pathname + '?room=' + S.code; }
 
@@ -2932,6 +3004,7 @@ $('#btn-fit').addEventListener('click', () => {
 });
 $('#btn-back').addEventListener('click', () => act('leave'));
 $('#btn-gear').addEventListener('click', () => { unlockAudio(); settingsModal(); });
+$('#home-gear').addEventListener('click', () => { unlockAudio(); settingsModal(); });
 $('#btn-north').addEventListener('click', () => setBearing(mapBear % 90 === 0 ? mapBear + 90 : 0));
 $('#btn-key').addEventListener('click', showMapKey);
 function showMapKey() {
@@ -2969,7 +3042,7 @@ filmVid.addEventListener('ended', closeFilm);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !film.hidden) closeFilm(); });
 // the hero loop only plays while the home screen is showing
 new MutationObserver(() => { try { if ($('#home').hidden) heroVid.pause(); else heroVid.play().catch(() => {}); } catch {} }).observe($('#home'), { attributes: true, attributeFilter: ['hidden'] });
-if (matchMedia('(prefers-reduced-motion: reduce)').matches) { heroVid.removeAttribute('autoplay'); heroVid.pause(); }
+if (!prefs.motion || matchMedia('(prefers-reduced-motion: reduce)').matches) { heroVid.removeAttribute('autoplay'); heroVid.pause(); }
 function showHomeErr(t) { const e = $('#home-err'); e.textContent = t; e.hidden = !t; }
 function setHomeBusy(b) { $('#btn-create').disabled = b; $('#btn-join').disabled = b; }
 function takeName() {
