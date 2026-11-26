@@ -1353,3 +1353,16 @@ body.lobby-full #hud { z-index: 40; background: color-mix(in srgb, var(--glass) 
   body.chat-full #hud { z-index: 35; }
   body.chat-full .map-ctl { display: none; }
 }
+
+/* account in settings */
+.set-me .av { width: 36px; height: 36px; flex: none; }
+.set-k { flex: none; width: 92px; font-size: 16px; color: var(--ink); }
+.set-v { flex: 1; min-width: 0; font-size: 16px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; -webkit-user-select: text; user-select: text; }
+.set-dots { letter-spacing: .12em; }
+.set-btn { flex: none; border: 0; background: var(--blue-soft); color: var(--blue); font: inherit; font-size: 15px; font-weight: 600; padding: 6px 14px; border-radius: 999px; }
+.set-btn:active { opacity: .7; }
+.set-acct .set-item + .set-item::before { left: 12px; }
+.set-out .set-tx b { color: var(--blue); text-align: center; }
+.pw-show { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--muted); padding-left: 4px; }
+.pw-show input { width: 18px; height: 18px; accent-color: var(--blue); }
+.acct-form .pw-show input { min-height: 0; height: 18px; width: 18px; padding: 0; margin: 0; border: 0; box-shadow: none; flex: none; }

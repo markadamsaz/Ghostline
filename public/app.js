@@ -1604,7 +1604,21 @@ function settingsModal() {
   const seg = (key, opts) => `<div class="seg set-seg" data-pref="${key}">${opts.map(([v, t]) => `<button type="button" data-v="${v}" class="${prefs[key] === v ? 'on' : ''}">${t}</button>`).join('')}</div>`;
   const sw = (key, icon, title, sub) => `<label class="set-item">${ic(icon)}<span class="set-tx"><b>${title}</b><small>${sub}</small></span><span class="sw"><input type="checkbox" data-pref="${key}" ${prefs[key] ? 'checked' : ''}><span></span></span></label>`;
   const link = (act, icon, title) => `<button type="button" class="set-item set-link" data-act="${act}">${ic(icon)}<span class="set-tx"><b>${title}</b></span><span class="set-chev">›</span></button>`;
+  const acctSec = !authClient ? '' : acct
+    ? `<div class="set-l">Account</div>
+    <div class="set-list set-acct">
+      <div class="set-item set-me">${acctBadge()}<span class="set-tx"><b>${esc(acct.profile.name || acctUser())}</b><small>${acct.profile.points || 0} pts saved</small></span></div>
+      <div class="set-item"><span class="set-k">Username</span><span class="set-v">${esc(acctUser())}</span></div>
+      <div class="set-item"><span class="set-k">Password</span><span class="set-v set-dots">••••••••</span><button type="button" class="set-btn" data-act="setPass">Change</button></div>
+      <button type="button" class="set-item set-link set-out" data-acct="out"><span class="set-tx"><b>Sign out</b></span></button>
+    </div>
+    <p class="set-foot">Passwords are stored scrambled, so nobody (not even Ghostline) can read yours back. Forgot it? Change it here while you're signed in.</p>`
+    : `<div class="set-l">Account</div>
+    <div class="set-list set-acct">
+      <div class="set-item"><span class="set-tx"><b>Playing as a guest</b><small>Make an account to keep your points and characters.</small></span><button type="button" class="set-btn" data-acct="open">Sign in</button></div>
+    </div>`;
   modal(`<h3>Settings</h3>
+    ${acctSec}
     <div class="set-l">Appearance</div>
     ${seg('theme', [['auto', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']])}
     <div class="set-l">Map</div>
@@ -2709,8 +2723,43 @@ $('#modal').addEventListener('click', (e) => {
   if (pv) { const box = pv.parentElement; setPref(box.dataset.pref, pv.dataset.v); for (const b of box.children) b.classList.toggle('on', b === pv); return; }
   if (e.target.closest('[data-act="setFilm"]')) { closeModal(); $('#btn-film').click(); return; }
   if (e.target.closest('[data-act="setKey"]')) { closeModal(); showMapKey(); return; }
+  if (e.target.closest('[data-act="setPass"]')) { passModal(); return; }
+  if (e.target.closest('[data-act="setBack"]')) { settingsModal(); return; }
   if (e.target.id === 'modal' || e.target.closest('[data-act="closeModal"]')) closeModal(); else if (e.target.closest('[data-act="allowGeo"]')) retryGeo(true);
 });
+function passModal() {
+  if (!acct || !authClient) return;
+  modal(`<h3>Change password</h3>
+    <p>Signed in as <b>${esc(acctUser())}</b>.</p>
+    <form id="pw-form" class="acct-form">
+      <input type="text" autocomplete="username" value="${esc(acctUser())}" hidden>
+      <input id="pw-old" type="password" autocomplete="current-password" placeholder="Current password" required>
+      <input id="pw-new" type="password" autocomplete="new-password" placeholder="New password (6+ characters)" minlength="6" required>
+      <input id="pw-new2" type="password" autocomplete="new-password" placeholder="New password again" minlength="6" required>
+      <label class="pw-show"><input type="checkbox" id="pw-eye"> Show passwords</label>
+      <p id="pw-err" class="err" hidden></p>
+      <button class="btn primary big" type="submit" style="width:100%">Save new password</button>
+    </form>
+    <button class="btn ghost" data-act="setBack" style="width:100%">Back to settings</button>`);
+  $('#pw-eye').onchange = (e) => { for (const id of ['pw-old', 'pw-new', 'pw-new2']) $('#' + id).type = e.target.checked ? 'text' : 'password'; };
+  $('#pw-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const err = $('#pw-err'), btn = $('#pw-form button[type=submit]');
+    const show = (t) => { err.textContent = t; err.hidden = !t; };
+    const old = $('#pw-old').value, nw = $('#pw-new').value;
+    if (nw.length < 6) { show('Use at least 6 characters.'); return; }
+    if (nw !== $('#pw-new2').value) { show("The new passwords don't match."); return; }
+    btn.disabled = true; show('');
+    try {
+      const chk = await authClient.auth.signInWithPassword({ email: acct.user.email || acctEmail(acctUser()), password: old });
+      if (chk.error) { btn.disabled = false; show('Your current password is wrong.'); return; }
+      const r = await authClient.auth.updateUser({ password: nw });
+      if (r.error) { btn.disabled = false; show(r.error.message || 'Could not change it. Try again.'); return; }
+    } catch { btn.disabled = false; show('No connection. Try again.'); return; }
+    settingsModal(); toast('Password changed', 'good', 'check');
+  };
+  $('#pw-old').focus();
+}
 $('#modal').addEventListener('change', (e) => { const t = e.target; if (t.matches('input[type=checkbox][data-pref]')) setPref(t.dataset.pref, t.checked); });
 
 function inviteUrl() { return location.origin + location.pathname + '?room=' + S.code; }
@@ -3170,7 +3219,7 @@ function renderAcct() {
 }
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-acct]'); if (!b || !authClient) return;
-  if (b.dataset.acct === 'out') { authClient.auth.signOut().then(() => { acct = null; renderAcct(); toast('Signed out. You are playing as a guest.'); }); }
+  if (b.dataset.acct === 'out') { authClient.auth.signOut().then(() => { acct = null; renderAcct(); if ($('.modal-card .set-acct')) settingsModal(); toast('Signed out. You are playing as a guest.'); }); }
   if (b.dataset.acct === 'open') acctModal('in');
 });
 function acctModal(mode) {
