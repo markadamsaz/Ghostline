@@ -1386,3 +1386,37 @@ body.lobby-full #hud { z-index: 40; background: color-mix(in srgb, var(--glass) 
 .pick .nm small { color: var(--muted); font-weight: 500; }
 .pick.on { background: var(--blue-soft); box-shadow: inset 0 0 0 2px var(--blue); }
 .pick .tagw { flex: none; padding: 3px 9px; border-radius: 99px; background: var(--blue); color: #fff; font-size: 12px; font-weight: 700; }
+
+/* ---------- map pins players drop and send ---------- */
+.upin { position: relative; width: 30px; height: 40px; cursor: pointer; filter: drop-shadow(0 3px 5px rgba(0,0,0,.35)); }
+.upin svg { width: 30px; height: 38px; display: block; }
+.upin svg path { fill: var(--pc, #007aff); stroke: #fff; stroke-width: 1.6; }
+.upin svg circle { fill: #fff; stroke: none; }
+.upin .lbl { left: 30px; top: 2px; }
+.upin.flash { animation: pinflash .9s var(--spring, ease-out) 2; }
+@keyframes pinflash { 0%, 100% { transform: translateY(0) scale(1); } 40% { transform: translateY(-10px) scale(1.15); } }
+#btn-pin.on { background: var(--blue); color: #fff; }
+body.placing-pin #map { cursor: crosshair; }
+.upin-key { color: var(--blue); }
+.pin-in { width: 100%; box-sizing: border-box; font: inherit; font-size: 16px; padding: 11px 13px; border-radius: 12px; border: .5px solid var(--line); background: var(--fill, var(--surface-2)); color: var(--ink); margin-bottom: 12px; }
+.pin-quick { display: flex; gap: 6px; margin-bottom: 10px; }
+.pin-quick button { flex: 1; font: inherit; font-size: 14px; font-weight: 600; padding: 8px 4px; border: 0; border-radius: 10px; background: var(--fill, var(--surface-2)); color: var(--blue); cursor: pointer; }
+.pin-to { display: flex; flex-direction: column; gap: 2px; max-height: 40vh; overflow-y: auto; margin-bottom: 12px; }
+.pin-to-row { display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-radius: 12px; cursor: pointer; }
+.pin-to-row input { position: absolute; opacity: 0; pointer-events: none; }
+.pin-to-row > span:not(.av) { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.pin-to-row small { color: var(--muted); font-size: 13px; }
+.pin-to-row .av { width: 34px; height: 34px; flex: none; }
+.pin-chk { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line); flex: none; display: grid; place-items: center; }
+.pin-to-row input:checked ~ .pin-chk { background: var(--blue); border-color: var(--blue); }
+.pin-to-row input:checked ~ .pin-chk::after { content: ''; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: translate(0, -1px) rotate(45deg); }
+.pin-to-row input:focus-visible ~ .pin-chk { outline: 2px solid var(--blue); outline-offset: 2px; }
+.pin-note { color: var(--ink) !important; font-weight: 600; }
+.modal-card .err[hidden] { display: none; }
+.im-b.pinb { padding: 0; overflow: hidden; }
+.im-pin { display: flex; align-items: center; gap: 10px; padding: 9px 14px 9px 10px; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.im-pin .i { width: 26px; height: 26px; flex: none; }
+.im-pin span { display: flex; flex-direction: column; }
+.im-pin small { font-size: 12px; opacity: .8; text-decoration: underline; }
+.toast.pin-toast { pointer-events: auto; }
+.toast.pin-toast .btn { margin-left: 6px; padding: 4px 12px; }
