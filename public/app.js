@@ -111,7 +111,9 @@ const ITEM_INFO = {
 };
 // points shop: spend the points you earn. Bought in the lobby, an item waits until a round where you have that role
 const SHOP = {
-  powerup: { ic: 'starter', name: 'Power-up', desc: 'A random decoy, jammer or sonar', cost: 50, role: 'hider' },
+  decoy: { cost: 50, role: 'hider' },
+  jammer: { cost: 50, role: 'hider' },
+  sonar: { cost: 50, role: 'hider' },
   peek: { cost: 65, role: 'hider' },
   cloak: { cost: 75, role: 'hider' },
   pass: { cost: 150, role: 'hider' },
