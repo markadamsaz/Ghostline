@@ -423,6 +423,83 @@ await G(host, (id) => window.__gl.give(id, 'swarm'), A.pid);
 await until(async () => (await state(A)).players[A.pid].inv.swarm >= 1, 4000, 'give4');
 await G(A, () => window.__gl.act('item', { dataset: { item: 'swarm' } }));
 ok(await until(async () => (await G(sk2, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'scheduled' && x.alts && x.alts.length === 3), A.pid)), 45000, 'swarm'), 'swarm ping shows 4 spots, only one real');
+ok(await G(sk2, (id) => window.__gl.local.pings.some((x) => x.id === id && x.alts && Number.isInteger(x.ri)), A.pid), 'a swarm ping says which spot is real (for the Truth lens)');
+
+// ---- sabotage powers
+{
+  const give = async (ph, item) => { await G(host, ([id, k]) => window.__gl.give(id, k), [ph.pid, item]); await until(async () => ((await state(ph)).players[ph.pid].inv[item] || 0) >= 1, 4000, 'give ' + item); };
+  const use = (ph, item) => G(ph, (k) => window.__gl.act('item', { dataset: { item: k } }), item);
+  const aim = async (ph, item, target) => { await use(ph, item); await G(ph, (id) => window.__gl.act('spotTarget', { dataset: { id } }), target.pid); };
+  const Wl = async (id) => (((await state(host)).wallet || {})[id] || 0);
+  const evOf = async (k, f = () => true) => (await state(host)).events.find((e) => e.k === k && f(e));
+  // mirror bounces a snitch back onto the snitcher
+  await give(Cc, 'mirror'); await use(Cc, 'mirror');
+  ok(await until(async () => (await state(host)).players[Cc.pid].fx.mirror === 1, 4000, 'mirror'), 'mirror goes up');
+  await give(A, 'snitch');
+  ok(await G(A, () => { window.__gl.act('item', { dataset: { item: 'snitch' } }); return window.__gl.local.aimPick; }) === 'snitch', 'an aimed power asks who to hit first');
+  await G(A, (id) => window.__gl.act('spotTarget', { dataset: { id } }), Cc.pid);
+  ok(await until(async () => !!(await evOf('mirrorHit', (e) => e.who === Cc.pid && e.by === A.pid)), 4000, 'mirrorHit') && !(await state(host)).players[Cc.pid].fx.mirror, 'a mirror bounces the snitch and is used up');
+  ok(await until(async () => G(sk2, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'snitch' && x.blur === 0), A.pid), 6000, 'snitch bounce'), "the bounced snitch pings the snitcher's own exact spot");
+  // snitch gets through a ghost
+  await give(A, 'snitch'); await aim(A, 'snitch', B);
+  ok(await until(async () => G(sk2, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'snitch' && x.p && x.blur === 0), B.pid), 6000, 'snitch'), "a snitch shows another hider's exact spot, even a ghosted one");
+  // frame: the target pings, the framer's next ping is hidden
+  await give(Cc, 'frame'); await aim(Cc, 'frame', A);
+  ok(await until(async () => G(sk2, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'framed' && x.p), A.pid), 6000, 'frame') && (await state(host)).players[Cc.pid].fx.ghostUntil > Date.now(), "frame makes the target ping and hides the framer's next ping");
+  // pickpocket: an item moves from the target to the thief
+  await give(A, 'sonar');
+  const cnt = (s, id) => Object.values(s.players[id].inv || {}).reduce((a, b) => a + b, 0);
+  await give(Cc, 'pickpocket');
+  let s0 = await state(host); const a0 = cnt(s0, A.pid), c0 = cnt(s0, Cc.pid);
+  await aim(Cc, 'pickpocket', A);
+  ok(await until(async () => { const s = await state(host); return cnt(s, A.pid) === a0 - 1 && cnt(s, Cc.pid) === c0; }, 4000, 'pickpocket'), 'pickpocket moves a power-up from the target to the thief');
+  // scramble blurs the seeker's map
+  await give(A, 'scramble'); await use(A, 'scramble');
+  ok(await until(async () => sk2.page.evaluate(() => document.body.classList.contains('scramble')), 5000, 'scramble'), "scramble blurs the seeker's map");
+  // firewall blocks butterfingers once, then the next one lands and stops tagging
+  await give(sk2, 'firewall'); await use(sk2, 'firewall');
+  await until(async () => (await state(host)).players[sk2.pid].fx.firewall === 1, 4000, 'firewall');
+  await give(A, 'butter'); await use(A, 'butter');
+  ok(await until(async () => !!(await evOf('firewallHit', (e) => e.who === sk2.pid && e.item === 'butter')), 4000, 'fwHit') && !((await state(host)).players[sk2.pid].fx.butterUntil), 'a firewall blocks the next hider sabotage');
+  await give(A, 'butter'); await use(A, 'butter');
+  ok(await until(async () => (await state(host)).players[sk2.pid].fx.butterUntil > Date.now(), 4000, 'butter'), 'butterfingers lands once the firewall is gone');
+  await setPos(sk2, home.get(B)); await sleep(600);
+  await G(sk2, () => window.__gl.act('tag', {})); await sleep(1500);
+  ok(!(await state(host)).players[B.pid].caughtAt, "a seeker with butterfingers can't tag");
+  await setPos(sk2, home.get(sk2));
+  // phantoms: 3 fake pings on the seeker's map, and a truth lens hides them
+  await give(A, 'phantoms'); await use(A, 'phantoms');
+  ok(await until(async () => (await G(sk2, () => window.__gl.local.pings.filter((x) => x.fake).length)) === 3, 4000, 'phantoms'), 'phantoms put 3 fake pings on the seeker map');
+  await give(sk2, 'truth'); await use(sk2, 'truth');
+  ok(await until(async () => (await G(sk2, () => window.__gl.local.truthUntil)) > 0, 4000, 'truth'), 'truth lens turns on');
+  // fog, silencer, siren, tax, flashbang, overtime, fast forward
+  await give(sk2, 'fog'); await use(sk2, 'fog');
+  ok(await until(async () => A.page.evaluate(() => document.body.classList.contains('fog')), 5000, 'fog') && !(await sk2.page.evaluate(() => document.body.classList.contains('fog'))), "fog darkens hiders' maps only");
+  await give(sk2, 'silencer'); await use(sk2, 'silencer');
+  ok(await until(async () => (await state(host)).silenceUntil > Date.now(), 4000, 'silencer'), "silencer mutes hiders' alarms");
+  await give(sk2, 'siren'); await use(sk2, 'siren');
+  ok(await until(async () => !!(await evOf('siren')), 4000, 'siren'), 'siren goes off');
+  const wallets0 = { ...((await state(host)).wallet || {}) };
+  await G(host, (ids) => ids.forEach((id) => window.__gl.setWallet(id, 100)), [A.pid, B.pid, Cc.pid, sk2.pid]);
+  await until(async () => (await Wl(sk2.pid)) === 100, 4000, 'fundTax');
+  const inNow = Object.entries((await state(host)).players).filter(([, x]) => x.role === 'hider' && !x.caughtAt && !x.extracted).length;
+  await give(sk2, 'tax'); await use(sk2, 'tax');
+  ok(await until(async () => (await Wl(sk2.pid)) === 100 + 15 * inNow && (await Wl(A.pid)) === 85, 4000, 'tax'), `tax takes 15 from each of the ${inNow} hiders still in`);
+  await G(host, (w) => Object.entries(w).forEach(([id, n]) => window.__gl.setWallet(id, n)), wallets0); // put back so later wallet checks hold
+  await until(async () => (await Wl(sk2.pid)) === (wallets0[sk2.pid] || 0), 4000, 'unfund');
+  await give(sk2, 'flashbang'); await aim(sk2, 'flashbang', A);
+  ok(await until(async () => A.page.evaluate(() => document.body.classList.contains('flashed')), 4000, 'flash'), "flashbang whites out the hider's screen");
+  const end0 = (await state(host)).huntEnd;
+  await give(sk2, 'overtime'); await use(sk2, 'overtime');
+  ok(await until(async () => (await state(host)).huntEnd === end0 + 60000, 4000, 'overtime'), 'overtime adds a minute');
+  await give(A, 'fastfwd'); await use(A, 'fastfwd');
+  ok(await until(async () => (await state(host)).huntEnd === end0, 4000, 'fastfwd'), 'fast forward takes a minute off');
+  // a seeker's aimed power just fizzles on a mirror
+  await give(B, 'mirror'); await use(B, 'mirror');
+  await until(async () => (await state(host)).players[B.pid].fx.mirror === 1, 4000, 'mirror2');
+  await give(sk2, 'spotlight'); await aim(sk2, 'spotlight', B);
+  ok(await until(async () => !!(await evOf('mirrorHit', (e) => e.who === B.pid && e.item === 'spotlight')), 4000, 'fizzle') && !(await evOf('spotlight', (e) => e.target === B.pid)), "a seeker's spotlight is wasted on a mirror");
+}
 
 // final sprint
 await G(host, () => window.__gl.openExtraction());

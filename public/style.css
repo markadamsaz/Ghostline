@@ -356,6 +356,13 @@ input, select { font: inherit; color: var(--ink); }
 
 body.blackout #map { filter: brightness(.08) grayscale(1); transition: filter .4s; }
 body.blackout::after { content: 'BLACKOUT'; position: fixed; z-index: 15; top: 42%; left: 0; right: 0; text-align: center; font: 700 34px var(--display); letter-spacing: .24em; color: #fff; pointer-events: none; }
+body.fog #map { filter: brightness(.35) blur(10px) grayscale(.6); transition: filter .4s; }
+body.fog::after { content: 'FOG'; position: fixed; z-index: 15; top: 42%; left: 0; right: 0; text-align: center; font: 700 34px var(--display); letter-spacing: .3em; color: #fff; pointer-events: none; }
+body.scramble #map { filter: blur(7px) hue-rotate(140deg) saturate(2); animation: scramble-jit .35s steps(2) infinite; }
+@keyframes scramble-jit { 0% { transform: translate(3px, -2px); } 50% { transform: translate(-3px, 2px); } 100% { transform: translate(2px, 3px); } }
+body.flashed::before { content: ''; position: fixed; inset: 0; z-index: 9999; background: #fff; pointer-events: none; animation: flashbang var(--flash-ms, 5s) ease-in forwards; }
+@keyframes flashbang { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { body.scramble #map { animation: none; } }
 
 /* out of zone */
 #outzone { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 24px; text-align: center; color: #fff;
