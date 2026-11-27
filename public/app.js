@@ -589,7 +589,7 @@ function updateMeMarker() {
   // isn't counter-rotated with the character when the map is turned: it stays pointing at the real compass direction.
   const cone = (sz) => { if (heading === null) return ''; const R = sz < 30 ? 56 : 72;
     return `<div class="me-cone" style="width:${2 * R}px;height:${2 * R}px;left:${sz / 2 - R}px;top:${sz / 2 - R}px;transform:rotate(${beamAngle()}deg)"></div>`; };
-  const icon = ch ? L.divIcon({ className: '', iconSize: [40, 40], iconAnchor: [20, 20], html: `${cone(40)}<div class="me-wrap"><div class="me-ch ${role === 'seeker' ? 'seeker' : ''}" style="border-color:${col}"><img src="chars/${ch}.png" alt=""></div></div>` })
+  const icon = ch ? L.divIcon({ className: '', iconSize: [40, 40], iconAnchor: [20, 20], html: `${cone(40)}<div class="me-wrap"><div class="me-ch"><img src="chars/${ch}.png" alt=""></div></div>` })
     : L.divIcon({ className: '', iconSize: [22, 22], iconAnchor: [11, 11], html: `${cone(22)}<div class="me-wrap"><div class="me-dot ${role === 'seeker' ? 'seeker' : ''}" style="background:${col}"></div></div>` });
   if (meMarker && replay) { map.removeLayer(meMarker); map.removeLayer(meAcc); meMarker = null; meAcc = null; }
   if (replay) return;
