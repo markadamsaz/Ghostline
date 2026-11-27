@@ -2,7 +2,7 @@
 // One player's device (the host) keeps the shared game state and broadcasts it.
 // Hiders never stream their live location: their phone only sends a (blurred) spot at each ping.
 import { createNet } from './net.js';
-import * as G from './geo.js';
+import * as G from './geo.js?v=2';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -217,7 +217,7 @@ const MODES = [
   ['potato', 'Hot potato', 'Whoever carries it pings twice as often but scores double'],
   ['sprint', 'Final sprint', 'An extraction point opens near the end. Reach it for +100'],
   ['shrink', 'Shrinking zone', 'The zone closes in over the round'],
-  ['strictZone', 'Strict zone', 'Out of the zone for 15 s and you are out'],
+  ['strictZone', 'Strict zone', 'Out of the zone for 20 s and you are out'],
 ];
 const puOn = (st) => !!(st && (st.starter || st.drops || st.missions));
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -248,7 +248,7 @@ const DEFAULT_SETTINGS = {
   hideSec: 120, huntSec: 1200, pingSec: 300, blurM: 25, tagRadiusM: 20, seekers: 1, seekPick: 'random',
   tagMode: 'gps', infection: true, fugitive: false, jail: false, starter: true, drops: true, dropSec: 180, dropM: 10,
   missions: false, capture: false, potato: false, sprint: false, treasure: false, duel: false, duelSec: 180, wire: false, wireSec: 180,
-  shrink: true, shrinkStyle: 'smooth', shrinkTo: 0.4, strictZone: true, graceSec: 15,
+  shrink: true, shrinkStyle: 'smooth', shrinkTo: 0.4, strictZone: true, graceSec: 20,
   alarmM: 50, // seeker alarm: hiders hear the alarm clip on repeat when a seeker is this close (0 = off)
 };
 // host-picked seekers (or the runner in Fugitive): only counts for the matching mode, only players still online
@@ -2061,11 +2061,11 @@ function checkZone(now) {
   const isHiderAlive = p.role === 'hider' && alive(p);
   if (isHiderAlive && S.phase === 'hunting') {
     const strict = S.settings.strictZone;
-    const grace = (strict ? 15 : S.settings.graceSec) * 1000;
+    const grace = (strict ? 20 : S.settings.graceSec || 20) * 1000;
     const left = grace - (now - L_.outSince);
     setZoneBanner(null);
     if (left > 0) {
-      outAlert(Math.ceil(left / 1000), `${G.fmtDist(-ed)} outside. ${strict ? 'Get back in or you are OUT' : 'Get back in or the seekers see you'}`);
+      outAlert(Math.ceil(left / 1000), `${G.fmtDist(-ed)} outside. ${strict ? 'Get back in or you are OUT' : 'Get back in or the seekers see you'}`, G.nearestEdgePoint ? G.nearestEdgePoint(myPos.p, z) : null);
     } else if (strict) {
       outAlert(0, 'You stayed out too long. You are out of this round.');
       if (!L_.dqSent) { L_.dqSent = true; send('caught', { who: me.id, by: null, how: 'zone', p: myPos.p }); }
@@ -2076,11 +2076,20 @@ function checkZone(now) {
     }
   } else { outAlert(null); setZoneBanner(`Out of the zone by ${G.fmtDist(-ed)}`, isHiderAlive ? 'danger' : 'warn'); }
 }
-function outAlert(sec, msg) {
+const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+function outAlert(sec, msg, back) {
   const el = $('#outzone');
   if (!el) return;
   if (sec === null) { el.hidden = true; L_.ozSec = -1; return; }
   el.hidden = false;
+  // big arrow to the closest way back in: points where to walk when the phone knows which way it faces,
+  // otherwise it's drawn like the map (north up) and the text says the direction
+  const arr = $('#oz-arrow', el), dir = $('#oz-dir', el);
+  if (back && sec > 0 && myPos) {
+    const b = bearing(myPos.p, back), rot = heading !== null ? b - heading : b + mapBear;
+    arr.hidden = false; arr.style.transform = `rotate(${Math.round(rot)}deg)`;
+    dir.hidden = false; dir.textContent = `Head ${COMPASS[Math.round(((b % 360) + 360) % 360 / 45) % 8]} · ${G.fmtDist(G.dist(myPos.p, back))} to get back in`;
+  } else { arr.hidden = true; dir.hidden = true; }
   $('#oz-n', el).textContent = sec > 0 ? sec : 'OUT';
   $('#oz-s', el).textContent = msg;
   if (sec !== L_.ozSec) { L_.ozSec = sec; if (sec > 0) { beep(sec <= 5 ? 'alarm' : 'warn'); buzz(sec <= 5 ? [300] : [120]); } else { beep('caught'); buzz([600]); } }

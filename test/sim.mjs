@@ -602,8 +602,9 @@ ok(await until(async () => A.page.isVisible('#outzone'), 4000, 'outzone'), 'step
 await sleep(1500);
 const cd = await A.page.innerText('#oz-n');
 if (SHOTS) await A.page.screenshot({ path: SHOTS + '/11-out-of-zone.png' });
-ok(+cd >= 10 && +cd <= 15, 'the alert counts down from 15 (' + cd + ' s left after 1.5 s)');
-ok(await until(async () => (await state(host)).events.some((e) => e.k === 'catch' && e.who === A.pid && e.how === 'zone'), 20000, 'dq'), 'out of the zone for 15 s gets you knocked out');
+ok(+cd >= 15 && +cd <= 20, 'the alert counts down from 20 (' + cd + ' s left after 1.5 s)');
+ok(await A.page.isVisible('#oz-arrow') && /Head (north|south|east|west)/.test(await A.page.innerText('#oz-dir')), 'a big arrow and direction point the way back into the zone: ' + (await A.page.innerText('#oz-dir')));
+ok(await until(async () => (await state(host)).events.some((e) => e.k === 'catch' && e.who === A.pid && e.how === 'zone'), 26000, 'dq'), 'out of the zone for 20 s gets you knocked out');
 
 // end the round from the host
 await host.page.click('[data-act="toggleMore"]');
