@@ -209,10 +209,11 @@ ok(await until(async () => (await G(seeker, (id) => window.__gl.local.pings.some
 await setPos(hiders[2], spots[2]);
 
 // ---- mini games
-// treasure: grabbing it pays +30 and pings the hider's exact spot
+// treasure: grabbing it pays +30 and does not give the hider away
 await G(host, ([p]) => window.__gl.spawnTreasure(p), [spots[2]]);
 ok(await until(async () => ((await state(host)).players[hiders[2].pid].bonus || 0) === 30, 6000, 'treasure'), 'grabbing a treasure chest pays +30');
-ok(await until(async () => (await G(seeker, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'treasure' && !x.blur), hiders[2].pid)), 5000, 'tping'), 'and pings the hider\'s exact spot to the seekers');
+await new Promise((r) => setTimeout(r, 1500));
+ok(!(await G(seeker, (id) => window.__gl.local.pings.some((x) => x.id === id && x.kind === 'treasure'), hiders[2].pid)), 'and does not ping the hider to the seekers');
 // showdown: two hiders play a quick game, the winner gets +25
 const duelB = async (h) => (await state(host)).players[h.pid].bonus || 0;
 const b1 = await duelB(hiders[1]), b2 = await duelB(hiders[2]);

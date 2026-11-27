@@ -166,7 +166,7 @@ const SHOP = {
   siren: { cost: 45, role: 'seeker' },
   truth: { cost: 50, role: 'seeker' },
   firewall: { cost: 50, role: 'seeker' },
-  flashbang: { cost: 55, role: 'seeker' },
+  flashbang: { cost: 85, role: 'seeker' },
   tax: { cost: 60, role: 'seeker' },
   fog: { cost: 70, role: 'seeker' },
   silencer: { cost: 80, role: 'seeker' },
@@ -211,7 +211,7 @@ const MODES = [
   ['drops', 'Supply drops', 'Super power-ups land on the map. Everyone can see them'],
   ['missions', 'Missions', 'Each hider gets secret spots to reach for points and power-ups'],
   ['capture', 'Capture points', 'Hold a flag for 1 min for +50. You ping while you hold it'],
-  ['treasure', 'Treasure drops', 'Chests pop up out in the open. Grab one for +30, but it pings your exact spot to the seekers'],
+  ['treasure', 'Treasure drops', 'Chests pop up out in the open. Grab one for +30'],
   ['duel', 'Showdown', 'Two hiders get paired for a quick head-to-head game: rock paper scissors, tap race, reaction or memory. Winner gets +25'],
   ['wire', 'Live Wire', 'One hider holds a live wire and can see the other hiders. Walk near one to pass it. Holding it when the fuse runs out means you go live: seekers see you for the rest of the round'],
   ['potato', 'Hot potato', 'Whoever carries it pings twice as often but scores double'],
@@ -1630,7 +1630,7 @@ function onEvent(e) {
     else if (e.win) toast(`<b>${nm(e.win)}</b> won a showdown vs <b>${nm(e.win === e.a ? e.b : e.a)}</b>`, '', 'duel');
   }
   if (e.k === 'treasure') { beep('warn'); toast(`Treasure dropped. +${TREASURE_PTS} to the first hider there.`, 'good', 'treasure'); }
-  if (e.k === 'treasureGot') { if (self_(e.who)) { beep('alarm'); toast(`+${TREASURE_PTS} treasure! Your spot pinged. Move!`, 'good', 'treasure'); sendPing('treasure'); } else toast(`<b>${nm(e.who)}</b> grabbed the treasure`, tone(e.who), 'treasure'); }
+  if (e.k === 'treasureGot') { if (self_(e.who)) { beep('alarm'); toast(`+${TREASURE_PTS} treasure!`, 'good', 'treasure'); } else toast(`<b>${nm(e.who)}</b> grabbed the treasure`, tone(e.who), 'treasure'); }
   if (e.k === 'wire') { L_.wireLocs = {}; if (self_(e.who)) { beep('alarm'); buzz([200, 80, 200]); toast(`You have the Live Wire (${fmt(S.wire ? S.wire.until - hostNow() : 0)} fuse). Get near a hider to pass it.`, 'seeker', 'wire'); } else toast(`<b>${nm(e.who)}</b> has the Live Wire`, '', 'wire'); }
   if (e.k === 'wirePass') { L_.wireLocs = {}; if (self_(e.to)) { beep('alarm'); buzz([200, 80, 200]); toast(`${e.from ? `<b>${nm(e.from)}</b> passed you` : 'You got'} the Live Wire! Pass it before the fuse runs out.`, 'seeker', 'wire'); } else if (self_(e.from)) toast('Passed the Live Wire.', 'good', 'wire'); else toast(`<b>${nm(e.to)}</b> has the Live Wire`, '', 'wire'); }
   if (e.k === 'wireLive') { if (self_(e.who)) { beep('alarm'); buzz([400, 100, 400]); toast('Fuse ran out. You\'re LIVE: seekers see you all round.', 'seeker', 'wire'); } else toast(`<b>${nm(e.who)}</b> is LIVE. Seekers can see them now.`, 'seeker', 'wire'); }
@@ -2362,7 +2362,7 @@ function renderMarks() {
     for (const x of S.drops || []) if (!x.claimedBy) { ring(x.p, BLUE, dropR()); pin(x.p, `<div class="map-pin solid bob">${ic('drops')}</div>`, 700, 28, obj('drop:' + x.id, x.p, 'drops', 'Supply drop', 'A free power-up. Walk into the ring to grab it. Seekers can grab it too.')); }
     S.flags?.forEach((f, i) => { ring(f.p, f.by ? INK : BLUE); pin(f.p, `<div class="map-pin ${f.by ? 'dark' : 'blue'}">${ic('capture')}</div>`, 700, 34, obj('flag:' + (f.id || i), f.p, 'capture', f.by ? 'Captured point' : 'Capture point', f.by ? `Captured by ${esc(P(f.by)?.name || 'a hider')}.` : 'Hiders: stand in the ring to capture it for points.')); });
     if (S.jail) { ring(S.jail.p, INK); pin(S.jail.p, `<div class="map-pin dark">${ic('jail')}</div>`, 700, 34, obj('jail', S.jail.p, 'jail', 'Jail', 'Caught hiders wait here. A free hider who walks into the ring breaks them out.')); }
-    if (S.treasure) { ring(S.treasure.p, BLUE, dropR()); pin(S.treasure.p, `<div class="map-pin solid bob">${ic('treasure')}</div>`, 700, 28, obj('treasure', S.treasure.p, 'treasure', 'Treasure', 'Hiders: grab it for +30. Your exact spot pings to the seekers when you do.')); }
+    if (S.treasure) { ring(S.treasure.p, BLUE, dropR()); pin(S.treasure.p, `<div class="map-pin solid bob">${ic('treasure')}</div>`, 700, 28, obj('treasure', S.treasure.p, 'treasure', 'Treasure', 'Hiders: grab it for +30.')); }
     if (S.potato && !S.potato.holder) { ring(S.potato.p, BLUE); pin(S.potato.p, `<div class="map-pin blue bob">${ic('potato')}</div>`, 700, 34, obj('potato', S.potato.p, 'potato', 'Hot potato', 'Nobody is holding it. Whoever picks it up has to pass it on before it goes off.')); }
     if (S.sprint && S.sprint.p) { ring(S.sprint.p, BLUE); pin(S.sprint.p, `<div class="map-pin solid bob">${ic('sprint')}</div>`, 800, 34, obj('sprint', S.sprint.p, 'sprint', 'Extraction point', 'Final sprint: hiders who reach the ring before time runs out get a bonus.')); }
     if (iSeek && now < (L_.trailUntil || 0) && myPos) { // hot trail: the nearest hider, live, with a line from you to them
@@ -2703,7 +2703,7 @@ function modeLines(p, now) {
     if (S.jail && Object.values(S.players).some((x) => x.role === 'hider' && x.caughtAt)) L2.push(row('jail', `Friends in jail, ${far(S.jail.p)}${now < (S.jailCooldownUntil || 0) ? ' · locked for ' + fmt(S.jailCooldownUntil - now) : ''}`));
     if (S.potato && S.potato.holder === me.id) L2.push(row('potato', 'You have the hot potato: double points, extra pings', '<button class="btn small" data-act="dropPotato">Drop it</button>'));
   }
-  if (S.treasure) L2.push(row('treasure', p.role === 'hider' && alive(p) ? `Treasure chest, ${far(S.treasure.p)}: +${TREASURE_PTS}, but grabbing it pings your exact spot` : 'Treasure chest on the map. Hiders who grab it ping their exact spot'));
+  if (S.treasure) L2.push(row('treasure', p.role === 'hider' && alive(p) ? `Treasure chest, ${far(S.treasure.p)}: +${TREASURE_PTS}` : 'Treasure chest on the map. Hiders who grab it get +' + TREASURE_PTS));
   if (S.duel && (S.duel.a === me.id || S.duel.b === me.id) && !L_.duelSent[duelKey(S.duel)]) L2.push(row('duel', `Showdown vs ${nm(S.duel.a === me.id ? S.duel.b : S.duel.a)}: ${DUEL_NAMES[S.duel.game]}`, '<button class="btn small" data-act="duelOpen">Play</button>'));
   if (p.live && alive(p)) L2.push(row('wire', 'You are LIVE: seekers see where you are'));
   if (S.potato && !S.potato.holder && (p.role === 'seeker' || alive(p))) L2.push(row('potato', 'The hot potato is up for grabs'));
