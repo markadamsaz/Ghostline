@@ -372,6 +372,10 @@ body.flashed::before { content: ''; position: fixed; inset: 0; z-index: 9999; ba
 #outzone .oz-t .i { width: 30px; height: 30px; stroke-width: 2.5; }
 #outzone .oz-n { font-size: 140px; font-weight: 700; line-height: 1; }
 #outzone .oz-s { font-size: 18px; font-weight: 600; max-width: 320px; }
+#outzone .oz-arrow { width: 150px; height: 150px; transition: transform .3s ease; filter: drop-shadow(0 6px 14px rgba(0,0,0,.35)); }
+#outzone .oz-arrow[hidden], #outzone .oz-dir[hidden] { display: none; }
+#outzone .oz-arrow svg { width: 100%; height: 100%; fill: #fff; stroke: none; }
+#outzone .oz-dir { font-size: 20px; font-weight: 800; background: rgba(0,0,0,.22); padding: 6px 14px; border-radius: 999px; }
 @keyframes ozpulse { 50% { background: var(--blue-dark); } }
 
 @media (prefers-reduced-motion: reduce) {

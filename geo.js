@@ -66,6 +66,28 @@ export function edgeDistance(p, z) {
   return pointInPoly(xy, poly) ? m : -m;
 }
 
+// The closest point on the zone edge to p (the quickest way back in when you're outside).
+export function nearestEdgePoint(p, z) {
+  if (!z) return null;
+  if (z.type === 'circle') {
+    const d = dist(p, z.c);
+    if (!d) return z.c;
+    const [x, y] = toXY(p, z.c), k = z.r / d;
+    return fromXY([x * k, y * k], z.c);
+  }
+  const o = centroid(z.pts);
+  const poly = z.pts.map((q) => toXY(q, o));
+  const [px, py] = toXY(p, o);
+  let best = null, bd = Infinity;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[j], b = poly[i], dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+    const t = l2 ? Math.max(0, Math.min(1, ((px - a[0]) * dx + (py - a[1]) * dy) / l2)) : 0;
+    const q = [a[0] + t * dx, a[1] + t * dy], dd = Math.hypot(px - q[0], py - q[1]);
+    if (dd < bd) { bd = dd; best = q; }
+  }
+  return fromXY(best, o);
+}
+
 export function inZone(p, z) {
   return edgeDistance(p, z) >= 0;
 }
