@@ -121,7 +121,7 @@ const ITEM_INFO = {
   cloak: { ic: 'cloak', name: 'Cloak', desc: 'Your next ping is hidden, plus any surprise pings before it', role: 'hider' },
   pass: { ic: 'pass', name: 'Escape pass', desc: 'Ready: the next time you get caught, you get away', role: 'hider' },
   peek: { ic: 'peek', name: 'Peek', desc: 'See the nearest seeker for 10 s', role: 'hider' },
-  trail: { ic: 'trail', name: 'Hot trail', desc: 'An arrow points to the nearest hider for 20 s', role: 'seeker' },
+  trail: { ic: 'trail', name: 'Hot trail', desc: 'See the nearest hider live on the map for 20 s, with a line to them', role: 'seeker' },
   spotlight: { ic: 'spotlight', name: 'Spotlight', desc: "Pick a hider and see their exact spot for 10 s", role: 'seeker' },
   lockdown: { ic: 'lockdown', name: 'Lockdown', desc: "Hiders can't use power-ups for 30 s", role: 'seeker' },
   // sabotage (points shop). "Aimed" ones pick a hider; a Mirror bounces them back
@@ -688,6 +688,7 @@ function onOrient(e) {
   if (h === null || Number.isNaN(h)) return;
   const ang = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
   heading = (h + ang + 360) % 360;
+  if (L_.ozBack) ozArrow();
   if (headingDrawn !== null && Math.abs(((heading - headingDrawn + 540) % 360) - 180) < 1.5) return; // ignore jitter
   headingDrawn = heading;
   // turn the beam that's already on screen (smooth, cheap); only rebuild the marker the first time
@@ -1199,7 +1200,7 @@ function handle(m, self) {
     }
     case 'hiderLoc': {
       if (d.wire) { if (S && S.wire && S.wire.holder === me.id && Array.isArray(d.p) && d.p.every(Number.isFinite)) L_.wireLocs[m.from] = { p: d.p, t: hostNow() }; break; }
-      if (hostNow() < (L_.trailUntil || 0) && Array.isArray(d.p)) { L_.trailLocs[m.from] = { p: d.p, t: hostNow() }; updateTrail(); }
+      if (hostNow() < (L_.trailUntil || 0) && Array.isArray(d.p)) { L_.trailLocs[m.from] = { p: d.p, t: hostNow() }; updateTrail(); renderMarks(); }
       break;
     }
     case 'seekerLoc': {
@@ -1642,7 +1643,7 @@ function onEvent(e) {
   }
   if (e.k === 'trail') {
     if (p && p.role === 'hider' && alive(p)) { L_.trailSendUntil = hostNow() + 20000; L_.lastTrailSend = 0; }
-    if (self_(e.by)) { L_.trailUntil = hostNow() + 20000; L_.trailLocs = {}; toast('Hot trail: follow the arrow for 20 s', 'seeker', 'trail'); }
+    if (self_(e.by)) { L_.trailUntil = hostNow() + 20000; L_.trailLocs = {}; toast('Hot trail: follow the line on the map for 20 s', 'seeker', 'trail'); }
   }
   if (e.k === 'spotlight') {
     if (self_(e.target) && p && alive(p)) { beep('alarm'); buzz([200, 80, 200]); toast(`<b>${nm(e.by)}</b> spotlighted you: exact spot for 10 s`, 'hider', 'spotlight'); L_.spotUntil = hostNow() + 10000; L_.lastSpot = 0; }
@@ -1657,7 +1658,7 @@ function onEvent(e) {
 // full-screen blue alert for 5 s, like out of zone: everyone sees a catch, and a hider sees any power that shows
 // the seekers where they are (decoys, cloaks and other powers that don't give them away don't trigger it)
 const REVEALS = { radar: ['radar', 'RADAR', 'You pinged to the seekers'], xray: ['xray', 'X-RAY', 'Your exact spot pinged. Move!'],
-  tracker: ['tracker', 'TRACKED', 'You ping every 15 s for 1 min'], trail: ['trail', 'HOT TRAIL', 'A seeker has an arrow to you for 20 s'],
+  tracker: ['tracker', 'TRACKED', 'You ping every 15 s for 1 min'], trail: ['trail', 'HOT TRAIL', 'A seeker sees you live on the map for 20 s'],
   spotlight: ['spotlight', 'SPOTLIGHT', 'Your exact spot shows for 10 s'], snitch: ['snitch', 'SNITCHED', 'Your exact spot pinged. Move!'],
   frame: ['frame', 'FRAMED', 'You just pinged to the seekers'], wireLive: ['wire', "YOU'RE LIVE", 'Seekers see you for the rest of the round'] };
 function bigAlertFor(e, p) {
@@ -1869,13 +1870,13 @@ function updateTrail() {
       const q = P(id);
       if (!q || q.role !== 'hider' || !alive(q) || now - x.t > 15000) continue;
       const dd = G.dist(myPos.p, x.p);
-      if (!best || dd < best.d) best = { d: dd, p: x.p };
+      if (!best || dd < best.d) best = { d: dd, p: x.p, id };
     }
   }
   if (!best) { el.hidden = !(now < (L_.trailUntil || 0)); el.innerHTML = `${ic('trail')}<span class="tr-t">Picking up the trail…</span>`; return; }
   const band = best.d < 100 ? 'very close' : best.d < 300 ? 'close' : best.d < 800 ? 'getting warm' : 'far';
   el.hidden = false;
-  el.innerHTML = `<span class="tr-a" style="transform:rotate(${Math.round(bearing(myPos.p, best.p) + mapBear)}deg)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 17-7-4-7 4z"/></svg></span><span class="tr-t">Nearest hider · ${band} · ${Math.ceil((L_.trailUntil - now) / 1000)} s</span>`;
+  el.innerHTML = `${ic('trail')}<span class="tr-t"><b>${nm(best.id)}</b> · ${G.fmtDist(best.d)} · ${Math.ceil((L_.trailUntil - now) / 1000)}&nbsp;s</span>`;
 }
 function shopHtml(card) {
   const p = mine();
@@ -1970,7 +1971,7 @@ function clientTick() {
     const n = Math.floor((now - S.huntStart) / pingMs());
     if (n > L_.lastPingN) { L_.lastPingN = n; sendPing('scheduled', n); if (n > 0) { beep('ping'); buzz(80); toast('You pinged. Seekers see your area.', 'seeker', 'pin'); } }
     if (now < (S.trackerUntil || 0) && now - (L_.lastTrack || 0) >= 15000) { L_.lastTrack = now; sendPing('tracker'); }
-    if (now < (L_.trailSendUntil || 0) && now - (L_.lastTrailSend || 0) >= 5000 && myPos) { L_.lastTrailSend = now; send('hiderLoc', { p: G.randomInDisk(myPos.p, 20) }); }
+    if (now < (L_.trailSendUntil || 0) && now - (L_.lastTrailSend || 0) >= 3000 && myPos) { L_.lastTrailSend = now; send('hiderLoc', { p: myPos.p }); } // hot trail: the seeker sees you live
     if (now < (L_.spotUntil || 0) && now - (L_.lastSpot || 0) >= 5000) { L_.lastSpot = now; sendPing('xray'); }
     if (p.live && now - (L_.lastLive || 0) >= 5000) { L_.lastLive = now; sendPing('live'); }
     if (S.wire && S.wire.holder !== me.id && myPos && now - (L_.lastWireSend || 0) >= 5000) { L_.lastWireSend = now; send('hiderLoc', { p: myPos.p, wire: true }); }
@@ -2065,7 +2066,7 @@ function checkZone(now) {
     const left = grace - (now - L_.outSince);
     setZoneBanner(null);
     if (left > 0) {
-      outAlert(Math.ceil(left / 1000), `${G.fmtDist(-ed)} outside. ${strict ? 'Get back in or you are OUT' : 'Get back in or the seekers see you'}`, G.nearestEdgePoint ? G.nearestEdgePoint(myPos.p, z) : null);
+      outAlert(Math.ceil(left / 1000), `${G.fmtDist(-ed)} outside. ${strict ? 'Get back in or you are OUT' : 'Get back in or the seekers see you'}`, G.zoneCenter(z), -ed);
     } else if (strict) {
       outAlert(0, 'You stayed out too long. You are out of this round.');
       if (!L_.dqSent) { L_.dqSent = true; send('caught', { who: me.id, by: null, how: 'zone', p: myPos.p }); }
@@ -2076,20 +2077,29 @@ function checkZone(now) {
     }
   } else { outAlert(null); setZoneBanner(`Out of the zone by ${G.fmtDist(-ed)}`, isHiderAlive ? 'danger' : 'warn'); }
 }
+// Big arrow on the out-of-zone screen, aimed at the middle of the zone. With the compass on it turns
+// as the phone turns, so it always points at the real place to walk to; without it, it's drawn north-up like the map.
+let ozDeg = null;
+function ozArrow() {
+  const el = $('#outzone'), arr = el && $('#oz-arrow', el), dir = el && $('#oz-dir', el);
+  if (!arr) return;
+  const back = L_.ozBack;
+  if (!back || !myPos || el.hidden) { arr.hidden = true; dir.hidden = true; return; }
+  const b = bearing(myPos.p, back), want = heading !== null ? b - heading : b + mapBear;
+  ozDeg = ozDeg === null ? want : ozDeg + ((want - ozDeg) % 360 + 540) % 360 - 180; // turn the short way round
+  arr.hidden = false; arr.style.transform = `rotate(${Math.round(ozDeg)}deg)`;
+  dir.hidden = false;
+  dir.innerHTML = `Head ${COMPASS[Math.round(((b % 360) + 360) % 360 / 45) % 8]} · ${G.fmtDist(L_.ozOutM || 0)} to get back in` +
+    (heading === null ? '<small>Tap to turn on the compass so the arrow turns with you</small>' : '');
+}
 const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
-function outAlert(sec, msg, back) {
+function outAlert(sec, msg, back, outM) {
   const el = $('#outzone');
   if (!el) return;
-  if (sec === null) { el.hidden = true; L_.ozSec = -1; return; }
+  if (sec === null) { el.hidden = true; L_.ozSec = -1; L_.ozBack = null; return; }
   el.hidden = false;
-  // big arrow to the closest way back in: points where to walk when the phone knows which way it faces,
-  // otherwise it's drawn like the map (north up) and the text says the direction
-  const arr = $('#oz-arrow', el), dir = $('#oz-dir', el);
-  if (back && sec > 0 && myPos) {
-    const b = bearing(myPos.p, back), rot = heading !== null ? b - heading : b + mapBear;
-    arr.hidden = false; arr.style.transform = `rotate(${Math.round(rot)}deg)`;
-    dir.hidden = false; dir.textContent = `Head ${COMPASS[Math.round(((b % 360) + 360) % 360 / 45) % 8]} · ${G.fmtDist(G.dist(myPos.p, back))} to get back in`;
-  } else { arr.hidden = true; dir.hidden = true; }
+  L_.ozBack = back && sec > 0 ? back : null; L_.ozOutM = outM;
+  ozArrow();
   $('#oz-n', el).textContent = sec > 0 ? sec : 'OUT';
   $('#oz-s', el).textContent = msg;
   if (sec !== L_.ozSec) { L_.ozSec = sec; if (sec > 0) { beep(sec <= 5 ? 'alarm' : 'warn'); buzz(sec <= 5 ? [300] : [120]); } else { beep('caught'); buzz([600]); } }
@@ -2341,6 +2351,18 @@ function renderMarks() {
     if (S.treasure) { ring(S.treasure.p, BLUE, dropR()); pin(S.treasure.p, `<div class="map-pin solid bob">${ic('treasure')}</div>`, 700, 28, obj('treasure', S.treasure.p, 'treasure', 'Treasure', 'Hiders: grab it for +30. Your exact spot pings to the seekers when you do.')); }
     if (S.potato && !S.potato.holder) { ring(S.potato.p, BLUE); pin(S.potato.p, `<div class="map-pin blue bob">${ic('potato')}</div>`, 700, 34, obj('potato', S.potato.p, 'potato', 'Hot potato', 'Nobody is holding it. Whoever picks it up has to pass it on before it goes off.')); }
     if (S.sprint && S.sprint.p) { ring(S.sprint.p, BLUE); pin(S.sprint.p, `<div class="map-pin solid bob">${ic('sprint')}</div>`, 800, 34, obj('sprint', S.sprint.p, 'sprint', 'Extraction point', 'Final sprint: hiders who reach the ring before time runs out get a bonus.')); }
+    if (iSeek && now < (L_.trailUntil || 0) && myPos) { // hot trail: the nearest hider, live, with a line from you to them
+      let tb = null;
+      for (const [id, x] of Object.entries(L_.trailLocs || {})) {
+        const q = P(id); if (!q || q.role !== 'hider' || !alive(q) || now - x.t > 15000) continue;
+        const dd = G.dist(myPos.p, x.p); if (!tb || dd < tb.d) tb = { id, p: x.p, d: dd };
+      }
+      if (tb) {
+        L.polyline([myPos.p, tb.p], { color: '#fff', weight: 9, opacity: .9, interactive: false, className: 'trail-line' }).addTo(layers.marks);
+        L.polyline([myPos.p, tb.p], { color: RED, weight: 5, opacity: 1, dashArray: '10 8', interactive: false, className: 'trail-line' }).addTo(layers.marks);
+        pin(tb.p, `<div class="map-pin red bob">${ic('trail')}</div><div class="lbl"><b>${nm(tb.id)}</b> ${G.fmtDist(tb.d)}</div>`, 900, 34, obj('trail:' + tb.id, tb.p, 'trail', 'Hot trail', `${nm(tb.id)} is here right now. Follow the line.`));
+      }
+    }
     if (p && p.mission && alive(p)) { ring(p.mission.p, INK); pin(p.mission.p, `<div class="map-pin">${ic('missions')}</div>`, 700, 34, obj('mission', p.mission.p, 'missions', 'Your mission', 'Only you can see this. Walk into the ring to finish it for points.')); }
   }
   if (blind || fogged) return;

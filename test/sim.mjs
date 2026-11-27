@@ -24,6 +24,7 @@ const errors = [];
 async function phone(pid, name, pos) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, geolocation: { latitude: pos[0], longitude: pos[1], accuracy: 8 }, permissions: ['geolocation'] });
   await ctx.route(/basemaps\.cartocdn\.com|fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+  await ctx.addInitScript(() => { if (window.DeviceOrientationEvent) DeviceOrientationEvent.requestPermission = () => Promise.resolve('granted'); }); // phones allow the compass
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|ERR_FAILED/.test(m.text())) errors.push(`${name}: ${m.text()}`); });
@@ -603,6 +604,15 @@ await sleep(1500);
 const cd = await A.page.innerText('#oz-n');
 if (SHOTS) await A.page.screenshot({ path: SHOTS + '/11-out-of-zone.png' });
 ok(+cd >= 15 && +cd <= 20, 'the alert counts down from 20 (' + cd + ' s left after 1.5 s)');
+{ // the arrow turns as the phone turns (compass)
+  const turn = await G(A, async () => { document.body.click(); await new Promise((r) => setTimeout(r, 100));
+    const ev = (alpha) => { const t = 'ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation';
+      const e = typeof DeviceOrientationEvent === 'function' ? new DeviceOrientationEvent(t, { alpha, beta: 0, gamma: 0, absolute: true }) : Object.assign(new Event(t), { absolute: true, alpha });
+      window.dispatchEvent(e); return document.querySelector('#oz-arrow').style.transform; };
+    return [ev(0), ev(90)]; });
+  ok(turn[0] !== turn[1], 'the out-of-zone arrow turns as the phone turns: ' + turn.join(' -> '));
+  if (SHOTS) await A.page.screenshot({ path: SHOTS + '/11b-out-of-zone-arrow.png' });
+}
 ok(await A.page.isVisible('#oz-arrow') && /Head (north|south|east|west)/.test(await A.page.innerText('#oz-dir')), 'a big arrow and direction point the way back into the zone: ' + (await A.page.innerText('#oz-dir')));
 ok(await until(async () => (await state(host)).events.some((e) => e.k === 'catch' && e.who === A.pid && e.how === 'zone'), 26000, 'dq'), 'out of the zone for 20 s gets you knocked out');
 
@@ -697,7 +707,8 @@ st = await state(host);
   await G(hn, () => window.__gl.send('buy', { k: 'trail' }));
   await until(async () => (await state(hn)).players[hn.pid].inv.trail === 1, 4000, 'trail bought');
   await G(hn, () => window.__gl.act('item', { dataset: { item: 'trail' } }));
-  ok(await until(async () => (await G(hn, (id) => !!window.__gl.local.trailLocs[id], rn.pid)) && (await hn.page.isVisible('#trail')), 8000, 'trail'), 'hot trail shows the seeker an arrow to the nearest hider');
+  ok(await until(async () => (await G(hn, (id) => !!window.__gl.local.trailLocs[id], rn.pid)) && (await hn.page.isVisible('#trail')), 8000, 'trail'), 'hot trail shows the seeker the nearest hider');
+  ok(await until(() => G(hn, () => document.querySelectorAll('path.trail-line').length === 2 && !!document.querySelector('[data-mk^="trail:"]')), 6000, 'trail line'), 'hot trail puts the hider on the map with a line from the seeker to them');
   if (SHOTS) await hn.page.screenshot({ path: SHOTS + '/15-hot-trail.png' });
   await G(hn, () => window.__gl.send('buy', { k: 'lockdown' }));
   await until(async () => (await state(hn)).players[hn.pid].inv.lockdown === 1, 4000, 'lock bought');
