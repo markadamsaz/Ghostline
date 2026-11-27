@@ -274,6 +274,18 @@ await setPos(seeker, off(152, 104)); // ~5 m from hider 0
 await sleep(300);
 if (SHOTS) await seeker.page.screenshot({ path: SHOTS + '/3-seeker-hunt.png' });
 if (SHOTS) await hiders[1].page.screenshot({ path: SHOTS + '/4-hider-hunt.png' });
+// map marks: solid labels, and tapping one says what it is
+{
+  ok(await until(() => G(seeker, () => !!document.querySelector('.blip[data-mk^="ping:"] .lbl b')), 6000, 'ping label'), 'hider pings carry a name label the seeker can tap');
+  const tap = await G(seeker, () => { const el = document.querySelector('.blip[data-mk^="ping:"]'); const r = el.getBoundingClientRect(); const o = { bubbles: true, clientX: r.x + 8, clientY: r.y + 8, pointerId: 1 };
+    el.dispatchEvent(new PointerEvent('pointerdown', o)); el.dispatchEvent(new PointerEvent('pointerup', o));
+    return { modal: document.querySelector('#modal h3')?.textContent || '', bg: getComputedStyle(el.querySelector('.lbl')).backgroundColor }; });
+  ok(/ping/i.test(tap.modal), 'tapping a ping opens what it is: ' + tap.modal.trim());
+  ok(/rgba?\(20, 20, 22|rgb\(255, 59, 48/.test(tap.bg), 'labels are a solid dark (or red) pill, not white');
+  if (SHOTS) await seeker.page.screenshot({ path: SHOTS + '/4d-mark-info.png' });
+  await G(seeker, () => document.querySelector('#modal [data-act="closeModal"]').click());
+  ok(await G(seeker, () => document.querySelector('#modal').hidden), 'Close shuts the mark info');
+}
 ok(await hiders[1].page.evaluate(() => document.querySelector('#sheet').offsetHeight <= innerHeight * 0.5), 'during the hunt the map gets most of the screen');
 await hiders[1].page.click('[data-act="togglePU"]');
 ok(await until(() => hiders[1].page.evaluate(() => !!document.querySelector('#sheet .pu-panel .items [data-act="item"]')), 4000, 'pu'), 'the Power-ups button opens your power-ups');
@@ -305,6 +317,10 @@ await G(seeker, () => window.__gl.act('tag'));
 ok(await until(async () => !!(await state(host)).players[hiders[0].pid].caughtAt, 5000, 'tag'), `${seeker.name} tags ${hiders[0].name} from 5 m`);
 st = await state(host);
 ok(st.players[hiders[0].pid].caughtBy === seekerPid && st.players[hiders[0].pid].role === 'seeker', 'caught hider is credited and joins the seekers (infection)');
+ok(await until(async () => (await Promise.all(all.map((ph) => G(ph, () => { const el = document.querySelector('#bigalert'); return !!el && !el.hidden; })))).every(Boolean), 4000, 'catch alert'), 'a catch turns every phone\'s screen blue');
+ok((await G(hiders[1], () => document.querySelector('#bigalert').innerText)).includes(hiders[0].name), 'the catch alert names who was caught');
+if (SHOTS) await hiders[1].page.screenshot({ path: SHOTS + '/5-catch-alert.png' });
+await Promise.all(all.map((ph) => G(ph, () => document.querySelector('#bigalert').click())));
 ok(['xray', 'tracker'].some((k) => st.players[seekerPid].inv[k] === 1), 'catching a hider who still had power-ups gives the seeker a super power-up');
 // a far hider is not caught by that tag
 ok(!st.players[hiders[1].pid].caughtAt, 'hiders out of range are safe');

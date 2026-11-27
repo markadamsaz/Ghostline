@@ -1428,7 +1428,7 @@ body.placing-pin #map { cursor: crosshair; }
   border: 2px solid var(--c, rgba(255,255,255,.6)); box-shadow: 0 2px 8px rgba(0,0,0,.5); -webkit-backdrop-filter: none; backdrop-filter: none; }
 .lbl b { color: #fff; font-weight: 700; }
 .lbl small { margin: 0; font-size: 10.5px; font-weight: 600; color: rgba(255,255,255,.8); }
-.blip .core { width: 18px; height: 18px; border: 3px solid #fff; box-shadow: 0 0 0 1.5px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.4); }
+.blip .core { width: 18px; height: 18px; border: 3px solid #fff; background: var(--c, currentColor); box-shadow: 0 0 0 1.5px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.4); }
 .blip:not(.loud) .ring { display: none; }
 .blip.seeker .lbl { background: #007aff; border-color: #fff; }
 .blip.loud .lbl { background: #ff3b30; border-color: #fff; }
@@ -1440,3 +1440,16 @@ body.placing-pin #map { cursor: crosshair; }
 .leaflet-marker-icon [data-mk], .leaflet-marker-icon .upin { pointer-events: auto; cursor: pointer; }
 .mk { width: 100%; height: 100%; }
 .key-tag { background: #ff3b30; }
+
+/* ---------- big blue alert: a catch (everyone), or a power that gives a hider away ---------- */
+#bigalert { position: fixed; inset: 0; z-index: 61; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px;
+  text-align: center; color: #fff; background: var(--blue); cursor: pointer; }
+#bigalert[hidden] { display: none; }
+#bigalert.go { animation: ozpulse 1s ease-in-out infinite, bapop .35s ease-out; }
+#bigalert .ba-ic .i { width: 72px; height: 72px; stroke-width: 2.2; }
+#bigalert .ba-t { font: 700 40px var(--rounded, var(--display)); line-height: 1.05; }
+#bigalert .ba-s { font-size: 19px; font-weight: 600; max-width: 330px; }
+#bigalert .ba-s b { font-weight: 800; }
+#bigalert .ba-x { margin-top: 14px; font-size: 13px; opacity: .75; }
+@keyframes bapop { from { transform: scale(1.08); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { #bigalert.go { animation: none; } }

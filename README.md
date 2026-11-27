@@ -32,6 +32,14 @@ Anyone (hider or seeker, in the lobby or during a round) can drop an exact pin: 
 
 From the moment you join, the game keeps your screen from dimming or locking (Wake Lock, or a tiny silent looping video on phones without it). A web page can't block the power button, so during the hunt a hider who turns off their screen or leaves the app sends their exact spot to the seekers, and everyone is told. A seeker who does it is just called out.
 
+## Reading the map
+
+Every label is a solid dark tag with white text. A hider's ping is drawn in that player's own color, seekers are blue diamonds, and a red label means an exact spot (out of zone, screen off, snitched, X-ray or Live Wire). Tap any mark (a ping, a seeker, a catch, a flag, the jail, treasure, a drop or your mission) to see what it is, how old it is and how far away.
+
+## Big alerts
+
+When anyone is caught, every phone's screen turns blue for 5 s with a sound, saying who was caught and by whom (tap to close early). A hider also gets the blue screen when a power gives them away: Radar, X-ray, Tracker, Hot trail, Spotlight, Snitch, Frame, or the Live Wire going off on them. Powers that don't show where you are, like a Decoy, don't trigger it.
+
 ## Tagging
 
 GPS tag range is set in 10 m steps (10 to 50 m). A tag that reaches nobody costs the seeker 10 points (never below 0). A too-close-to-call tag on weak GPS costs nothing.

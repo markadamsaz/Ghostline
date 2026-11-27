@@ -1576,6 +1576,7 @@ function phaseChanged(from, to) {
 function onEvent(e) {
   const p = mine();
   const IN = (k) => `<b>${ITEM_INFO[k].name}</b>`;
+  bigAlertFor(e, p);
   if (e.k === 'catch') {
     if (e.who === me.id) { beep('caught'); buzz([500]); fx('caught', 'Caught!', 'blue'); toast(S.settings.infection ? 'You got caught. You\'re a seeker now.' : 'You got caught.', 'seeker', 'caught'); }
     else if (e.by === me.id) { beep('tag'); buzz([60, 40, 160]); fx('check', 'Got them! +50', 'blue'); toast(`You caught <b>${nm(e.who)}</b>. +50${e.reward ? ` and ${IN(e.reward)}` : ''}`, 'good', 'check'); }
@@ -1652,6 +1653,34 @@ function onEvent(e) {
     else { L_.sonarUntil = hostNow() + 30000; toast(`Sonar by <b>${nm(e.by)}</b>: seekers visible for 30 s`, 'hider', 'sonar'); }
   }
   sabotageEvent(e, p, self_);
+}
+// full-screen blue alert for 5 s, like out of zone: everyone sees a catch, and a hider sees any power that shows
+// the seekers where they are (decoys, cloaks and other powers that don't give them away don't trigger it)
+const REVEALS = { radar: ['radar', 'RADAR', 'You pinged to the seekers'], xray: ['xray', 'X-RAY', 'Your exact spot pinged. Move!'],
+  tracker: ['tracker', 'TRACKED', 'You ping every 15 s for 1 min'], trail: ['trail', 'HOT TRAIL', 'A seeker has an arrow to you for 20 s'],
+  spotlight: ['spotlight', 'SPOTLIGHT', 'Your exact spot shows for 10 s'], snitch: ['snitch', 'SNITCHED', 'Your exact spot pinged. Move!'],
+  frame: ['frame', 'FRAMED', 'You just pinged to the seekers'], wireLive: ['wire', "YOU'RE LIVE", 'Seekers see you for the rest of the round'] };
+function bigAlertFor(e, p) {
+  if (!S || S.phase !== 'hunting' && e.k !== 'catch' || hostNow() - e.t > 15000) return; // not for old events (late join, reconnect)
+  if (e.k === 'catch') {
+    if (e.who !== me.id) { beep('caught'); buzz([300, 100, 300]); }
+    const by = e.how === 'zone' ? 'left the zone and is out' : e.by ? (e.by === me.id ? 'caught by you' : 'caught by ' + nm(e.by)) : 'is out';
+    return bigAlert('caught', e.who === me.id ? "YOU'RE CAUGHT" : 'CAUGHT', e.who === me.id ? (e.by ? 'by ' + nm(e.by) : 'You are out') : `<b>${nm(e.who)}</b> ${by}`);
+  }
+  const r = REVEALS[e.k];
+  if (!r || !p || p.role !== 'hider' || !alive(p)) return;
+  const hitsMe = e.k === 'radar' || e.k === 'xray' || e.k === 'tracker' || e.k === 'trail' ? true : e.k === 'wireLive' ? e.who === me.id : e.target === me.id;
+  if (!hitsMe) return;
+  buzz([200, 80, 200, 80, 400]);
+  bigAlert(r[0], r[1], (e.by && e.by !== me.id ? `<b>${nm(e.by)}</b>: ` : '') + r[2]);
+}
+let bigAlertT = 0;
+function bigAlert(icon, title, sub, ms = 5000) {
+  let el = $('#bigalert');
+  if (!el) { el = document.createElement('div'); el.id = 'bigalert'; el.setAttribute('role', 'alert'); document.body.appendChild(el); el.onclick = () => { el.hidden = true; }; }
+  el.innerHTML = `<div class="ba-ic">${ic(icon)}</div><div class="ba-t">${title}</div><div class="ba-s">${sub}</div><div class="ba-x">Tap to close</div>`;
+  el.hidden = false; el.classList.remove('go'); void el.offsetWidth; el.classList.add('go');
+  clearTimeout(bigAlertT); bigAlertT = setTimeout(() => { el.hidden = true; }, ms);
 }
 // what each sabotage power does on this phone. The player it hits is always told who did it
 function sabotageEvent(e, p, self_) {
