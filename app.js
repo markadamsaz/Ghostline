@@ -134,7 +134,7 @@ const ITEM_INFO = {
   butter: { ic: 'butter', name: 'Butterfingers', desc: "Seekers can't tag for 20 s", role: 'hider' },
   fastfwd: { ic: 'fastfwd', name: 'Fast forward', desc: 'Cut 1 minute off the round clock', role: 'hider' },
   siren: { ic: 'siren', name: 'Siren', desc: "Every hider's phone blares the seeker alarm out loud for 6 s", role: 'seeker' },
-  flashbang: { ic: 'flashbang', name: 'Flashbang', desc: "Pick a hider: their screen flashes bright white for 5 s", role: 'seeker', aim: true },
+  flashbang: { ic: 'flashbang', name: 'Flashbang', desc: "Every hider's screen goes bright white for 30 s", role: 'seeker' },
   fog: { ic: 'fog', name: 'Fog', desc: "Hiders' maps go dark for 30 s", role: 'seeker' },
   silencer: { ic: 'silencer', name: 'Silencer', desc: "Hiders' seeker alarms go quiet for 45 s", role: 'seeker' },
   tax: { ic: 'tax', name: 'Tax', desc: 'Take 15 points from every hider still in', role: 'seeker' },
@@ -188,7 +188,7 @@ const charOf = (icon) => typeof icon === 'string' && icon.startsWith('c:') && CH
 const isLook = (icon) => BADGES.includes(icon) || !!charOf(icon);
 // what goes inside an avatar circle: a character, a shape, or nothing (caller shows the initial)
 const lookHtml = (icon) => { const c = charOf(icon); return c ? `<img class="ch" src="chars/${c}.png" alt="">` : icon && ICONS[icon] ? ic(icon) : ''; };
-const SABOTAGE_DIRECT = ['mirror', 'firewall', 'scramble', 'phantoms', 'butter', 'fastfwd', 'siren', 'fog', 'silencer', 'tax', 'truth', 'overtime'];
+const SABOTAGE_DIRECT = ['mirror', 'firewall', 'scramble', 'phantoms', 'butter', 'fastfwd', 'siren', 'fog', 'silencer', 'tax', 'truth', 'overtime', 'flashbang'];
 const shopInfo = (k) => ({ ...(ITEM_INFO[k] || {}), ...SHOP[k] });
 function giveShop(w, k) { const item = k === 'powerup' ? pick(BASICS.hider) : k; w.inv = w.inv || {}; w.inv[item] = (w.inv[item] || 0) + 1; return item; }
 function credit(s, id, pts) { s.wallet = s.wallet || {}; s.wallet[id] = (s.wallet[id] || 0) + pts; const w = s.players[id]; if (w) w.banked = (w.banked || 0) + pts; }
@@ -743,7 +743,16 @@ function useSabotage(s, q, by, item, target, now) {
     case 'spotlight': return false; // the normal spotlight code runs
     case 'mirror': q.fx.mirror = 1; ev(); return true;
     case 'firewall': q.fx.firewall = 1; ev(); return true;
-    case 'snitch': case 'flashbang': ev({ target: victim, bounced }); return true;
+    case 'snitch': ev({ target: victim, bounced }); return true;
+    case 'flashbang': { // every hider still in; a Mirror spares that hider and flashes the seeker instead
+      const hit = [];
+      for (const [id, x] of hidersIn()) {
+        if (x.fx && x.fx.mirror) { x.fx.mirror = 0; bounced = true; s.events.push({ id: evId(), k: 'mirrorHit', who: id, by, item, t: now }); }
+        else hit.push(id);
+      }
+      if (bounced) hit.push(by);
+      ev({ targets: hit, bounced }); return true;
+    }
     case 'frame': {
       const w = s.players[bounced ? target : by]; w.fx = w.fx || {};
       w.fx.ghostUntil = Math.max(w.fx.ghostUntil || 0, nextPingAt(s, now) + 1500);
@@ -1751,11 +1760,16 @@ function sabotageEvent(e, p, self_) {
       break;
     case 'truth': if (self_(e.by)) { L_.truthUntil = hostNow() + 60000; toast('Truth lens: fake pings hidden for 60 s', 'seeker', 'truth'); renderMarks(); } break;
     case 'flashbang':
-      if (self_(e.target)) { if (fresh) { flashScreen(5000); buzz([400]); beep('alarm'); } toast(e.bounced ? 'Bounced! You flashbanged yourself.' : `<b>${nm(e.by)}</b> flashbanged you`, 'seeker', 'flashbang'); }
-      else if (self_(e.by) && !e.bounced) toast(`Flashbang on <b>${nm(e.target)}</b>`, 'seeker', 'flashbang');
+    { // every hider at once, for 30 s (someone who reconnects mid-flash gets the rest of it)
+      const hitMe = (e.targets || (e.target ? [e.target] : [])).includes(me.id), left = FLASH_MS - (hostNow() - e.t);
+      if (hitMe) { if (left > 1000) { flashScreen(left); buzz([400]); beep('alarm'); } toast(self_(e.by) ? 'A mirror bounced it. You flashbanged yourself.' : `<b>${nm(e.by)}</b> flashbanged every hider for 30 s`, 'seeker', 'flashbang'); }
+      else if (self_(e.by)) toast('Flashbang: every hider is blinded for 30 s', 'seeker', 'flashbang');
+      else if (iSeek) toast(`Flashbang by <b>${nm(e.by)}</b>: hiders are blinded for 30 s`, 'seeker', 'flashbang');
+    }
       break;
   }
 }
+const FLASH_MS = 30000;
 function flashScreen(ms) {
   document.body.classList.remove('flashed'); void document.body.offsetWidth; // restart the animation
   document.body.style.setProperty('--flash-ms', ms + 'ms');
