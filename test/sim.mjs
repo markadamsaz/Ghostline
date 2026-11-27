@@ -132,7 +132,7 @@ ok(await until(async () => (await G(hiders[2], (sp) => !!window.__gl.local.seeke
 // ---- seeker alarm (default 50 m): a hider 20 m from the seeker hears it, one 180 m away does not
 await setPos(hiders[1], off(0, 20));
 ok(await until(async () => (await G(hiders[1], () => window.__gl.local.alarmM)) <= 50, 8000, 'alarm range'), 'hider within the alarm range knows a seeker is close');
-ok(await until(async () => G(hiders[1], () => window.__gl.alarmOn), 8000, 'alarm sound'), 'the sprite cranberry alarm plays on the close hider');
+ok(await until(async () => G(hiders[1], () => window.__gl.alarmOn), 8000, 'alarm sound'), 'the seeker alarm plays on the close hider');
 ok(!(await G(hiders[0], () => window.__gl.alarmOn)) && (await G(hiders[0], () => window.__gl.local.alarmM)) > 50, 'a far hider hears nothing');
 ok((await Promise.all(all.map((ph) => G(ph, () => Object.keys(window.__gl.local.nearLocs))))).flat().every((id) => id === seekerPid), 'only seekers send their spot for the alarm, never hiders');
 await setPos(hiders[1], off(0, 300));

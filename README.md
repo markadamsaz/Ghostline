@@ -18,7 +18,7 @@ Tags: GPS range, honor tag (they confirm) or photo tag (snap them, they confirm)
 
 ## Seeker alarm
 
-When a seeker gets close, the hider's phone plays "wanna sprite cranberry?" on repeat (the clip from the mafia game, `public/audio/sprite-cranberry.m4a`). The closer the seeker, the louder it plays and the shorter the gap between plays, until it runs back to back. The host sets the range in the lobby under **Seeker alarm** (Off, or 20 to 200 m, default 50 m). Seekers' phones share their spot every 3 s for this, and it's never shown on anyone's map. Hiders never send their spot for it.
+When a seeker gets close, the hider's phone plays the alarm clip on repeat (`public/audio/seeker-alarm.m4a`). The closer the seeker, the louder it plays and the shorter the gap between plays, until it runs back to back. The host sets the range in the lobby under **Seeker alarm** (Off, or 20 to 200 m, default 50 m). Seekers' phones share their spot every 3 s for this, and it's never shown on anyone's map. Hiders never send their spot for it.
 
 ## Screens stay on
 
