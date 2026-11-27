@@ -315,6 +315,8 @@ input, select { font: inherit; color: var(--ink); }
 .map-pin.blue { color: var(--blue); }
 .map-pin.solid { background: var(--blue); color: #fff; border-color: #fff; }
 .map-pin.dark { background: var(--hider); color: #fff; border-color: #fff; }
+.map-pin.red { background: #ff3b30; color: #fff; border-color: #fff; }
+.mk .map-pin.red + .lbl { left: 40px; top: 6px; background: #ff3b30; color: #fff; }
 .map-pin.small { width: 26px; height: 26px; }
 .map-pin.small .i { width: 14px; height: 14px; }
 .map-pin.bob { animation: dropbob 1.2s ease-in-out infinite; }
@@ -375,7 +377,8 @@ body.flashed::before { content: ''; position: fixed; inset: 0; z-index: 9999; ba
 #outzone .oz-arrow { width: 150px; height: 150px; transition: transform .3s ease; filter: drop-shadow(0 6px 14px rgba(0,0,0,.35)); }
 #outzone .oz-arrow[hidden], #outzone .oz-dir[hidden] { display: none; }
 #outzone .oz-arrow svg { width: 100%; height: 100%; fill: #fff; stroke: none; }
-#outzone .oz-dir { font-size: 20px; font-weight: 800; background: rgba(0,0,0,.22); padding: 6px 14px; border-radius: 999px; }
+#outzone .oz-dir small { display: block; font-size: 13px; font-weight: 600; opacity: .85; margin-top: 2px; }
+#outzone .oz-dir { font-size: 20px; font-weight: 800; background: rgba(0,0,0,.22); padding: 8px 16px; border-radius: 18px; max-width: 330px; }
 @keyframes ozpulse { 50% { background: var(--blue-dark); } }
 
 @media (prefers-reduced-motion: reduce) {
