@@ -1420,3 +1420,23 @@ body.placing-pin #map { cursor: crosshair; }
 .im-pin small { font-size: 12px; opacity: .8; text-decoration: underline; }
 .toast.pin-toast { pointer-events: auto; }
 .toast.pin-toast .btn { margin-left: 6px; padding: 4px 12px; }
+
+/* ---------- map labels: solid, readable on satellite in light and dark ----------
+   Hider pings use the player's own color, seekers are blue, exact spots are red. Tap any mark for details. */
+.lbl { left: 50%; top: 21px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 1px;
+  background: rgba(20,20,22,.92); color: #fff; font-size: 13px; font-weight: 700; line-height: 1.15; padding: 3px 9px 4px; border-radius: 9px;
+  border: 2px solid var(--c, rgba(255,255,255,.6)); box-shadow: 0 2px 8px rgba(0,0,0,.5); -webkit-backdrop-filter: none; backdrop-filter: none; }
+.lbl b { color: #fff; font-weight: 700; }
+.lbl small { margin: 0; font-size: 10.5px; font-weight: 600; color: rgba(255,255,255,.8); }
+.blip .core { width: 18px; height: 18px; border: 3px solid #fff; box-shadow: 0 0 0 1.5px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.4); }
+.blip:not(.loud) .ring { display: none; }
+.blip.seeker .lbl { background: #007aff; border-color: #fff; }
+.blip.loud .lbl { background: #ff3b30; border-color: #fff; }
+.blip.loud .lbl small { color: #fff; }
+.blip.me .lbl { opacity: .75; font-size: 12px; }
+.upin .lbl { left: 15px; top: 40px; --c: var(--pc, #007aff); }
+.upin .lbl small { margin: 0; }
+/* tappable marks */
+.leaflet-marker-icon [data-mk], .leaflet-marker-icon .upin { pointer-events: auto; cursor: pointer; }
+.mk { width: 100%; height: 100%; }
+.key-tag { background: #ff3b30; }

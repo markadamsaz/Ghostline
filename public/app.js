@@ -649,9 +649,9 @@ function fitZone(z) {
   const tmp = l.addTo(map); const b = tmp.getBounds(); map.removeLayer(tmp);
   requestAnimationFrame(() => fitTo(b));
 }
-function blipIcon(color, label, sub, cls = '') {
+function blipIcon(color, label, sub, cls = '', key = '') {
   return L.divIcon({ className: '', iconSize: [16, 16], iconAnchor: [8, 8],
-    html: `<div class="blip ${cls}" style="color:${color}"><div class="ring"></div><div class="core"></div><div class="lbl">${label}${sub ? `<small>${sub}</small>` : ''}</div></div>` });
+    html: `<div class="blip ${cls}" style="color:${color};--c:${color}"${key ? ` data-mk="${key}"` : ''}><div class="ring"></div><div class="core"></div><div class="lbl"><b>${label}</b>${sub ? `<small>${sub}</small>` : ''}</div></div>` });
 }
 function updateMeMarker() {
   if (!myPos) return;
@@ -2282,17 +2282,21 @@ function renderMarks() {
   document.body.classList.toggle('fog', !!fogged);
   document.body.classList.toggle('scramble', !!(iSeek && S.phase === 'hunting' && now < ((p.fx || {}).scrambleUntil || 0)));
   const truth = iSeek && now < (L_.truthUntil || 0);
-  const pin = (pt, html, z = 700, size = 34) => L.marker(pt, { icon: L.divIcon({ className: '', html, iconSize: [size, size], iconAnchor: [size / 2, size / 2] }), zIndexOffset: z, interactive: false }).addTo(layers.marks);
-  const ring = (pt, color, r = REACH_M) => L.circle(pt, { radius: r, color, weight: 2, dashArray: '4 4', fillOpacity: .1, interactive: false }).addTo(layers.marks);
-  const BLUE = ROLE_INK.seeker, INK = ROLE_INK.hider;
+  markInfo.clear();
+  // every mark gets a stable key; tapping it opens markInfo.get(key)() (see openMark)
+  const info = (key, fn) => { markInfo.set(key, fn); return key; };
+  const pin = (pt, html, z = 700, size = 34, key = '') => L.marker(pt, { icon: L.divIcon({ className: '', html: key ? `<div class="mk" data-mk="${key}">${html}</div>` : html, iconSize: [size, size], iconAnchor: [size / 2, size / 2] }), zIndexOffset: z, interactive: false }).addTo(layers.marks);
+  const ring = (pt, color, r = REACH_M) => L.circle(pt, { radius: r, color, weight: 1.5, dashArray: '4 5', opacity: .7, fillOpacity: .06, interactive: false }).addTo(layers.marks);
+  const BLUE = ROLE_INK.seeker, INK = ROLE_INK.hider, RED = EXPOSED_INK;
+  const obj = (key, pt, icon, title, text) => info(key, () => ({ p: pt, icon, title, lines: [text] }));
   if (S.phase === 'hunting') {
-    for (const x of S.drops || []) if (!x.claimedBy) { ring(x.p, BLUE, dropR()); pin(x.p, `<div class="map-pin solid bob">${ic('drops')}</div>`, 700, 28); }
-    for (const f of S.flags || []) { ring(f.p, f.by ? INK : BLUE); pin(f.p, `<div class="map-pin ${f.by ? 'dark' : 'blue'}">${ic('capture')}</div>`); }
-    if (S.jail) { ring(S.jail.p, INK); pin(S.jail.p, `<div class="map-pin dark">${ic('jail')}</div>`); }
-    if (S.treasure) { ring(S.treasure.p, BLUE, dropR()); pin(S.treasure.p, `<div class="map-pin solid bob">${ic('treasure')}</div>`, 700, 28); }
-    if (S.potato && !S.potato.holder) { ring(S.potato.p, BLUE); pin(S.potato.p, `<div class="map-pin blue bob">${ic('potato')}</div>`); }
-    if (S.sprint && S.sprint.p) { ring(S.sprint.p, BLUE); pin(S.sprint.p, `<div class="map-pin solid bob">${ic('sprint')}</div>`, 800); }
-    if (p && p.mission && alive(p)) { ring(p.mission.p, INK); pin(p.mission.p, `<div class="map-pin">${ic('missions')}</div>`); }
+    for (const x of S.drops || []) if (!x.claimedBy) { ring(x.p, BLUE, dropR()); pin(x.p, `<div class="map-pin solid bob">${ic('drops')}</div>`, 700, 28, obj('drop:' + x.id, x.p, 'drops', 'Supply drop', 'A free power-up. Walk into the ring to grab it. Seekers can grab it too.')); }
+    S.flags?.forEach((f, i) => { ring(f.p, f.by ? INK : BLUE); pin(f.p, `<div class="map-pin ${f.by ? 'dark' : 'blue'}">${ic('capture')}</div>`, 700, 34, obj('flag:' + (f.id || i), f.p, 'capture', f.by ? 'Captured point' : 'Capture point', f.by ? `Captured by ${esc(P(f.by)?.name || 'a hider')}.` : 'Hiders: stand in the ring to capture it for points.')); });
+    if (S.jail) { ring(S.jail.p, INK); pin(S.jail.p, `<div class="map-pin dark">${ic('jail')}</div>`, 700, 34, obj('jail', S.jail.p, 'jail', 'Jail', 'Caught hiders wait here. A free hider who walks into the ring breaks them out.')); }
+    if (S.treasure) { ring(S.treasure.p, BLUE, dropR()); pin(S.treasure.p, `<div class="map-pin solid bob">${ic('treasure')}</div>`, 700, 28, obj('treasure', S.treasure.p, 'treasure', 'Treasure', 'Hiders: grab it for +30. Your exact spot pings to the seekers when you do.')); }
+    if (S.potato && !S.potato.holder) { ring(S.potato.p, BLUE); pin(S.potato.p, `<div class="map-pin blue bob">${ic('potato')}</div>`, 700, 34, obj('potato', S.potato.p, 'potato', 'Hot potato', 'Nobody is holding it. Whoever picks it up has to pass it on before it goes off.')); }
+    if (S.sprint && S.sprint.p) { ring(S.sprint.p, BLUE); pin(S.sprint.p, `<div class="map-pin solid bob">${ic('sprint')}</div>`, 800, 34, obj('sprint', S.sprint.p, 'sprint', 'Extraction point', 'Final sprint: hiders who reach the ring before time runs out get a bonus.')); }
+    if (p && p.mission && alive(p)) { ring(p.mission.p, INK); pin(p.mission.p, `<div class="map-pin">${ic('missions')}</div>`, 700, 34, obj('mission', p.mission.p, 'missions', 'Your mission', 'Only you can see this. Walk into the ring to finish it for points.')); }
   }
   if (blind || fogged) return;
   // latest ping per hider + a short faded trail (a Truth lens drops decoys and phantoms, and keeps only a swarm's real spot)
@@ -2310,28 +2314,67 @@ function renderMarks() {
     real.slice(-4, -1).forEach((x) => L.circleMarker(x.p, { radius: 4, color: INK, weight: 1, opacity: .35, fillOpacity: .2, interactive: false }).addTo(layers.marks));
     if (!last || (pl.caughtAt && S.phase !== 'ended')) continue;
     const loud = last.kind === 'breach' || last.kind === 'xray' || last.kind === 'snitch' || last.kind === 'live' || last.kind === 'away';
-    const sub = last.kind === 'live' ? 'LIVE · ' + ago(now - last.t) : last.kind === 'snitch' ? 'SNITCHED · ' + ago(now - last.t) : last.kind === 'breach' ? 'OUT OF ZONE' : last.kind === 'away' ? 'SCREEN OFF · ' + ago(now - last.t) : last.kind === 'xray' ? 'X-RAY · ' + ago(now - last.t) : (id === me.id ? 'your last ping · ' : '') + ago(now - last.t);
-    for (const spot of [last.p, ...(last.alts || [])]) {
-      if (last.blur) L.circle(spot, { radius: last.blur, color: loud ? BLUE : INK, weight: 1.5, opacity: .6, fillOpacity: .08, interactive: false }).addTo(layers.marks);
-      L.marker(spot, { icon: blipIcon(loud ? BLUE : INK, esc(pl.name), sub, loud ? 'loud' : ''), zIndexOffset: 500 }).addTo(layers.marks);
+    const isMe = id === me.id;
+    const tag = { live: 'LIVE', snitch: 'SNITCHED', breach: 'OUT OF ZONE', away: 'SCREEN OFF', xray: 'X-RAY' }[last.kind];
+    const sub = (tag ? tag + ' · ' : isMe ? 'last ping · ' : '') + ago(now - last.t);
+    const col = loud ? RED : pl.color || INK;
+    const spots = [last.p, ...(last.alts || [])];
+    const key = info('ping:' + id, () => pingInfo(id, last, spots.length));
+    for (const spot of spots) {
+      if (last.blur) L.circle(spot, { radius: last.blur, color: col, weight: 1.5, opacity: .55, fill: false, interactive: false }).addTo(layers.marks);
+      L.marker(spot, { icon: blipIcon(col, isMe ? 'You' : esc(pl.name), sub, (loud ? 'loud' : '') + (isMe ? ' me' : ''), key), zIndexOffset: loud ? 560 : isMe ? 450 : 500, interactive: false }).addTo(layers.marks);
     }
   }
   // catches
-  for (const e of S.events) if (e.k === 'catch' && e.p) pin(e.p, `<div class="map-pin small dark">${ic('caught')}</div>`, 400, 26);
+  for (const e of S.events) if (e.k === 'catch' && e.p) pin(e.p, `<div class="map-pin small dark">${ic('caught')}</div>`, 400, 26, info('catch:' + e.id, () => ({ p: e.p, icon: 'caught', title: `${esc(P(e.who)?.name || 'Someone')} was caught here`, lines: [`Tagged by ${esc(P(e.by)?.name || 'a seeker')} ${ago(hostNow() - e.t)}.`] })));
   // seekers visible to hiders via sonar, or to seeker teammates always
   for (const [id, s] of Object.entries(L_.seekerLocs)) {
     if (id === me.id || !P(id)) continue;
     if (now < L_.sonarUntil || iSeek || (now < L_.peekUntil && id === nearestSeeker())) {
       if (now - s.t > 45000) continue;
-      L.marker(s.p, { icon: blipIcon(BLUE, esc(P(id).name), ago(now - s.t), 'seeker'), zIndexOffset: 600 }).addTo(layers.marks);
+      L.marker(s.p, { icon: blipIcon(BLUE, esc(P(id).name), 'seeker · ' + ago(now - s.t), 'seeker', info('seek:' + id, () => ({ p: s.p, icon: 'radar', title: `${esc(P(id)?.name || 'Seeker')} (seeker)`, lines: [`Seen here ${ago(hostNow() - s.t)}.`, iSeek ? 'Your teammate.' : 'You can see them thanks to Sonar or Peek.'] }))), zIndexOffset: 600, interactive: false }).addTo(layers.marks);
     }
   }
   if (S.phase === 'hunting' && S.wire && S.wire.holder === me.id) for (const [id, x] of Object.entries(L_.wireLocs)) {
     const q = P(id); if (!q || q.role !== 'hider' || !alive(q) || now - x.t > 15000) continue;
-    L.marker(x.p, { icon: blipIcon(INK, esc(q.name), 'pass it here', 'loud'), zIndexOffset: 550 }).addTo(layers.marks);
+    L.marker(x.p, { icon: blipIcon(q.color || INK, esc(q.name), 'pass the wire here', 'loud', info('wire:' + id, () => ({ p: x.p, icon: 'wire', title: `${esc(q.name)} (hider)`, lines: ['You hold the Live Wire. Walk within 15 m of them to pass it on.'] }))), zIndexOffset: 550, interactive: false }).addTo(layers.marks);
   }
-  if (L_.decoyArmed) pin(L_.decoyArmed, `<div class="map-pin small">${ic('decoy')}</div>`, 650, 26);
+  if (L_.decoyArmed) pin(L_.decoyArmed, `<div class="map-pin small">${ic('decoy')}</div>`, 650, 26, info('decoy', () => ({ p: L_.decoyArmed, icon: 'decoy', title: 'Your decoy spot', lines: ['Only you see this. Your next ping shows the seekers this spot instead of where you are.'] })));
 }
+const EXPOSED_INK = '#ff3b30';
+const markInfo = new Map();
+const PING_KIND = {
+  live: 'Live Wire went off: this is their exact spot, updated live.',
+  snitch: 'Snitched by another hider: this is their exact spot.',
+  breach: 'They left the play zone: this is their exact spot.',
+  away: 'They turned their screen off or left the app: this is their exact spot.',
+  xray: 'Caught by X-ray: this is their exact spot.',
+  framed: 'Framed by another hider: they pinged early.',
+};
+function pingInfo(id, last, n) {
+  const pl = P(id), isMe = id === me.id;
+  const lines = [PING_KIND[last.kind] || (last.blur ? `A rough spot. They were somewhere inside the circle (within ${G.fmtDist(last.blur)}).` : 'Their exact spot when they pinged.')];
+  if (n > 1) lines.push(`This ping shows ${n} spots. Only one is real.`);
+  lines.push(`Pinged ${ago(hostNow() - last.t)}${pl && pl.role ? ' · ' + pl.role : ''}.`);
+  return { p: last.p, icon: 'pin', title: isMe ? 'Your last ping' : `${esc(pl?.name || 'Someone')}'s ping`, lines, color: pl?.color };
+}
+function openMark(key) {
+  const fn = markInfo.get(key); if (!fn) return;
+  const m = fn();
+  const away = myPos && m.p ? G.fmtDist(G.dist(myPos.p, m.p)) + ' from you' : '';
+  modal(`<h3>${ic(m.icon)} ${m.title}</h3>
+    ${m.lines.map((l) => `<p>${l}</p>`).join('')}${away ? `<p class="note">${away}</p>` : ''}
+    <div class="stack"><button class="btn" id="mk-center">${ic('pin')}Center the map on it</button><button class="btn ghost" data-act="closeModal">Close</button></div>`);
+  $('#mk-center').onclick = () => { closeModal(); map.setView(m.p, Math.max(map.getZoom(), 18)); };
+}
+// marks are redrawn every second, so a tap remembers the key on press and opens it on release
+let markTap = null, markTapAt = 0;
+$('#map').addEventListener('pointerdown', (e) => { const el = e.target.closest('[data-mk]'); markTap = el ? { key: el.dataset.mk, x: e.clientX, y: e.clientY, t: Date.now() } : null; });
+$('#map').addEventListener('pointerup', (e) => {
+  const t = markTap; markTap = null;
+  if (!t || Date.now() - t.t > 700 || Math.hypot(e.clientX - t.x, e.clientY - t.y) > 12) return;
+  markTapAt = Date.now(); openMark(t.key);
+});
 
 
 // ---------------- the bottom sheet ----------------
@@ -3471,6 +3514,7 @@ function hostRulingsTick() {
 }
 
 map.on('click', (e) => {
+  if (Date.now() - markTapAt < 600) return; // that tap opened a map mark
   const ll = [e.latlng.lat, e.latlng.lng];
   if (chatOpen) return; // chat covers the controls, so a stray tap shouldn't drop a point
   if (zoneDraft && isHost() && S.phase === 'lobby') {
@@ -3516,9 +3560,9 @@ function showMapKey() {
   modal(`<div class="sheet-h"><h2>Map key</h2><button class="icon-btn" data-act="closeModal" aria-label="Close">${ic('close')}</button></div>
     <div class="key">
       ${row(`<span class="key-me"><span class="me-cone"></span>${dot('#111')}</span>`, 'You', 'The blue beam shows which way your phone is facing. Round dot = hider, diamond = seeker.')}
-      ${row(dot(ROLE_INK.hider), 'Hider ping', "A hider's rough spot. The time says how old it is. The circle is how far off it could be.")}
+      ${row(dot(ROLE_INK.hider), 'Hider ping', "A hider's rough spot, in their color. The time says how old it is. The circle is how far off it could be. Tap any mark on the map to see what it is.")}
       ${row(dot(ROLE_INK.seeker, true), 'Seeker', 'Where a seeker is (only shown to teammates, or with Sonar/Peek).')}
-      ${row(`<span class="key-tag">LIVE</span>`, 'Blue label', 'Exact spot: out of zone, screen off, X-ray or Live Wire.')}
+      ${row(`<span class="key-tag">LIVE</span>`, 'Red label', 'Exact spot: out of zone, screen off, snitched, X-ray or Live Wire.')}
       ${row(`<span class="key-line"></span>`, 'Blue line', 'The play zone. Stay inside it.')}
       ${row(`<span class="key-pin">${ic('caught')}</span>`, 'Caught', 'Where someone got tagged.')}
       ${row(`<span class="key-pin upin-key">${ic('pin')}</span>`, 'Player pin', 'A spot someone dropped and sent you. Tap it to see the note, or drop your own with the pin button.')}
