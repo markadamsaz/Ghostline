@@ -77,6 +77,22 @@ const ICONS = {
   trail: '<circle cx="12" cy="12" r="9"/><path d="M12 6l3 7-3-1.5L9 13z"/>',
   spotlight: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>',
   lockdown: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  mirror: '<rect x="6" y="3" width="12" height="18" rx="6"/><path d="M10 8l-1.5 3M14 9l-3 6"/>',
+  snitch: '<path d="M4 10v4h3l6 4V6l-6 4z"/><path d="M17 9l3-2M17 12h4M17 15l3 2"/>',
+  frame: '<rect x="3" y="5" width="18" height="14" rx="1"/><circle cx="12" cy="11" r="2.5"/><path d="M7.5 19c.8-2.5 2.5-3.5 4.5-3.5s3.7 1 4.5 3.5"/>',
+  pickpocket: '<path d="M8 9h8l1 11H7z"/><path d="M10 9V7a2 2 0 0 1 4 0v2"/><path d="M14 3l4-1M18 2l1 4"/>',
+  scramble: '<path d="M3 7h4l10 10h4M3 17h4l3-3M14 10l3-3h4"/><path d="M19 4l2 3-2 3M19 14l2 3-2 3"/>',
+  phantoms: '<path d="M6 20V10a6 6 0 0 1 12 0v10l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5z"/><circle cx="10" cy="10" r="1"/><circle cx="14" cy="10" r="1"/>',
+  butter: '<path d="M7 11V5a1.5 1.5 0 0 1 3 0v5M10 10V4a1.5 1.5 0 0 1 3 0v6M13 10V5a1.5 1.5 0 0 1 3 0v8c0 4-2.5 7-6 7s-5-2-6.5-5L3 11a1.5 1.5 0 0 1 2.5-1.5L7 11"/><path d="M19 3l2 2M21 9h-2"/>',
+  fastfwd: '<path d="M3 6l8 6-8 6zM12 6l8 6-8 6z"/>',
+  siren: '<path d="M6 18v-6a6 6 0 0 1 12 0v6z"/><path d="M4 18h16v3H4zM12 2v2M4 6l1.5 1.5M20 6l-1.5 1.5"/>',
+  flashbang: '<circle cx="12" cy="12" r="3"/><path d="M12 1v5M12 18v5M1 12h5M18 12h5M4 4l3.5 3.5M16.5 16.5 20 20M4 20l3.5-3.5M16.5 7.5 20 4"/>',
+  fog: '<path d="M3 9h14M6 13h15M3 17h12"/><path d="M17 9a3 3 0 1 0-3-4"/>',
+  silencer: '<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M16 9l6 6M22 9l-6 6"/>',
+  tax: '<circle cx="12" cy="12" r="9"/><path d="M15 8.5c-.6-1-1.7-1.5-3-1.5-1.7 0-3 .9-3 2.3 0 3.2 6 1.8 6 5 0 1.4-1.3 2.4-3 2.4-1.4 0-2.6-.6-3.2-1.7M12 5v2M12 17v2"/>',
+  truth: '<circle cx="10" cy="10" r="6"/><path d="M14.5 14.5 21 21"/><path d="M7.5 10l2 2 3.5-4"/>',
+  overtime: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/><path d="M19 4l2 2"/>',
+  firewall: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M12 17c-2 0-3-1.3-3-3 0-2 2-3 2-5 1.5 1 4 3 4 5 0 1.7-1 3-3 3z"/>',
   chat: '<path d="M4 5h16v11H9l-5 4z"/>',
   shop: '<path d="M4 7h16l-1.5 12h-13z"/><path d="M9 7a3 3 0 0 1 6 0"/>',
   star: '<path d="M12 3l2.8 5.8 6.2.9-4.5 4.4 1 6.2L12 17.4 6.5 20.3l1-6.2L3 9.7l6.2-.9z"/>',
@@ -108,7 +124,25 @@ const ITEM_INFO = {
   trail: { ic: 'trail', name: 'Hot trail', desc: 'An arrow points to the nearest hider for 20 s', role: 'seeker' },
   spotlight: { ic: 'spotlight', name: 'Spotlight', desc: "Pick a hider and see their exact spot for 10 s", role: 'seeker' },
   lockdown: { ic: 'lockdown', name: 'Lockdown', desc: "Hiders can't use power-ups for 30 s", role: 'seeker' },
+  // sabotage (points shop). "Aimed" ones pick a hider; a Mirror bounces them back
+  mirror: { ic: 'mirror', name: 'Mirror', desc: 'The next power aimed at you bounces back to whoever used it', role: 'hider' },
+  snitch: { ic: 'snitch', name: 'Snitch', desc: "Pick a hider: their exact spot pings to the seekers, even through a cloak", role: 'hider', aim: true },
+  frame: { ic: 'frame', name: 'Frame', desc: 'Pick a hider: they ping now and your next ping is hidden', role: 'hider', aim: true },
+  pickpocket: { ic: 'pickpocket', name: 'Pickpocket', desc: 'Pick a hider: steal one of their power-ups (or 40 points if they have none)', role: 'hider', aim: true },
+  scramble: { ic: 'scramble', name: 'Scramble', desc: "Seekers' maps go blurry for 20 s", role: 'hider' },
+  phantoms: { ic: 'phantoms', name: 'Phantoms', desc: 'Seekers see 3 fake hider pings', role: 'hider' },
+  butter: { ic: 'butter', name: 'Butterfingers', desc: "Seekers can't tag for 20 s", role: 'hider' },
+  fastfwd: { ic: 'fastfwd', name: 'Fast forward', desc: 'Cut 1 minute off the round clock', role: 'hider' },
+  siren: { ic: 'siren', name: 'Siren', desc: "Every hider's phone blares the seeker alarm out loud for 6 s", role: 'seeker' },
+  flashbang: { ic: 'flashbang', name: 'Flashbang', desc: "Pick a hider: their screen flashes bright white for 5 s", role: 'seeker', aim: true },
+  fog: { ic: 'fog', name: 'Fog', desc: "Hiders' maps go dark for 30 s", role: 'seeker' },
+  silencer: { ic: 'silencer', name: 'Silencer', desc: "Hiders' seeker alarms go quiet for 45 s", role: 'seeker' },
+  tax: { ic: 'tax', name: 'Tax', desc: 'Take 15 points from every hider still in', role: 'seeker' },
+  truth: { ic: 'truth', name: 'Truth lens', desc: 'Fake pings (decoys, swarms, phantoms) vanish from your map for 60 s', role: 'seeker' },
+  overtime: { ic: 'overtime', name: 'Overtime', desc: 'Add 1 minute to the round clock', role: 'seeker' },
+  firewall: { ic: 'firewall', name: 'Firewall', desc: 'Blocks the next hider sabotage on you (Scramble, Phantoms or Butterfingers)', role: 'seeker' },
 };
+ITEM_INFO.spotlight.aim = true;
 // points shop: spend the points you earn. Bought in the lobby, an item waits until a round where you have that role
 const SHOP = {
   decoy: { cost: 50, role: 'hider' },
@@ -121,6 +155,22 @@ const SHOP = {
   trail: { cost: 75, role: 'seeker' },
   lockdown: { cost: 90, role: 'seeker' },
   spotlight: { cost: 100, role: 'seeker' },
+  pickpocket: { cost: 55, role: 'hider' },
+  mirror: { cost: 60, role: 'hider' },
+  phantoms: { cost: 65, role: 'hider' },
+  scramble: { cost: 70, role: 'hider' },
+  frame: { cost: 80, role: 'hider' },
+  butter: { cost: 90, role: 'hider' },
+  snitch: { cost: 110, role: 'hider' },
+  fastfwd: { cost: 120, role: 'hider' },
+  siren: { cost: 45, role: 'seeker' },
+  truth: { cost: 50, role: 'seeker' },
+  firewall: { cost: 50, role: 'seeker' },
+  flashbang: { cost: 55, role: 'seeker' },
+  tax: { cost: 60, role: 'seeker' },
+  fog: { cost: 70, role: 'seeker' },
+  silencer: { cost: 80, role: 'seeker' },
+  overtime: { cost: 120, role: 'seeker' },
   icon: { ic: 'star', name: 'Shape', desc: 'Your shape shows instead of your initial. Lasts all game', cost: 10 },
   color: { ic: 'star', name: 'Color', desc: 'Your color behind your initial, shape or character', cost: 5 },
 };
@@ -138,6 +188,7 @@ const charOf = (icon) => typeof icon === 'string' && icon.startsWith('c:') && CH
 const isLook = (icon) => BADGES.includes(icon) || !!charOf(icon);
 // what goes inside an avatar circle: a character, a shape, or nothing (caller shows the initial)
 const lookHtml = (icon) => { const c = charOf(icon); return c ? `<img class="ch" src="chars/${c}.png" alt="">` : icon && ICONS[icon] ? ic(icon) : ''; };
+const SABOTAGE_DIRECT = ['mirror', 'firewall', 'scramble', 'phantoms', 'butter', 'fastfwd', 'siren', 'fog', 'silencer', 'tax', 'truth', 'overtime'];
 const shopInfo = (k) => ({ ...(ITEM_INFO[k] || {}), ...SHOP[k] });
 function giveShop(w, k) { const item = k === 'powerup' ? pick(BASICS.hider) : k; w.inv = w.inv || {}; w.inv[item] = (w.inv[item] || 0) + 1; return item; }
 function credit(s, id, pts) { s.wallet = s.wallet || {}; s.wallet[id] = (s.wallet[id] || 0) + pts; const w = s.players[id]; if (w) w.banked = (w.banked || 0) + pts; }
@@ -661,6 +712,75 @@ document.addEventListener('click', () => { if (S) startHeading(); }, { passive: 
 function huntMs() { return S.settings.huntSec * 1000; }
 function pingMs() { return S.settings.pingSec * 1000; }
 function nextPingAt(s, now) { const ms = s.settings.pingSec * 1000; return s.huntStart + (Math.floor((now - s.huntStart) / ms) + 1) * ms; } // when the next regular ping goes out
+// sabotage powers from the points shop (host only). Returns true when it handled the item.
+// An aimed power that hits a Mirror bounces back onto a hider who used it; a seeker's just fizzles (a Flashbang still flashes them).
+function useSabotage(s, q, by, item, target, now) {
+  const info = ITEM_INFO[item];
+  let victim = target, bounced = false;
+  if (info.aim) {
+    const t = s.players[target];
+    if (t.fx && t.fx.mirror) {
+      t.fx.mirror = 0; bounced = true;
+      s.events.push({ id: evId(), k: 'mirrorHit', who: target, by, item, t: now });
+      if (info.role === 'seeker' && item !== 'flashbang') return true;
+      victim = by;
+    }
+  }
+  const ev = (extra = {}) => s.events.push({ id: evId(), k: item, by, t: now, ...extra });
+  // seekers a hider sabotage reaches: a Firewall eats it
+  const hitSeekers = () => Object.entries(s.players).filter(([, x]) => x.role === 'seeker' && !x.extracted).map(([id, x]) => {
+    x.fx = x.fx || {};
+    if (!x.fx.firewall) return id;
+    x.fx.firewall = 0; s.events.push({ id: evId(), k: 'firewallHit', who: id, by, item, t: now }); return null;
+  }).filter(Boolean);
+  const hidersIn = () => Object.entries(s.players).filter(([, x]) => x.role === 'hider' && alive(x));
+  switch (item) {
+    case 'spotlight': return false; // the normal spotlight code runs
+    case 'mirror': q.fx.mirror = 1; ev(); return true;
+    case 'firewall': q.fx.firewall = 1; ev(); return true;
+    case 'snitch': case 'flashbang': ev({ target: victim, bounced }); return true;
+    case 'frame': {
+      const w = s.players[bounced ? target : by]; w.fx = w.fx || {};
+      w.fx.ghostUntil = Math.max(w.fx.ghostUntil || 0, nextPingAt(s, now) + 1500);
+      ev({ target: victim, bounced }); return true;
+    }
+    case 'pickpocket': {
+      const thief = bounced ? target : by, v = s.players[victim], th = s.players[thief];
+      const ks = Object.keys(v.inv || {}).filter((k) => v.inv[k] > 0);
+      let got = null, pts = 0;
+      if (ks.length) { got = pick(ks); v.inv[got]--; if (!v.inv[got]) delete v.inv[got]; th.inv = th.inv || {}; th.inv[got] = (th.inv[got] || 0) + 1; }
+      else { s.wallet = s.wallet || {}; pts = Math.min(40, s.wallet[victim] || 0); s.wallet[victim] = (s.wallet[victim] || 0) - pts; s.wallet[thief] = (s.wallet[thief] || 0) + pts; }
+      ev({ target: victim, thief, got, pts, bounced }); return true;
+    }
+    case 'scramble': case 'butter': {
+      const hit = hitSeekers(), key = item === 'scramble' ? 'scrambleUntil' : 'butterUntil';
+      for (const id of hit) s.players[id].fx[key] = now + 20000;
+      ev({ hit }); return true;
+    }
+    case 'phantoms': {
+      const hit = hitSeekers(), hs = hidersIn().map(([id]) => id), z = currentZone(now) || s.zone;
+      const fakes = hs.length && z ? [0, 1, 2].map(() => ({ id: pick(hs), p: randomSpotIn(z) })) : [];
+      ev({ hit, fakes }); return true;
+    }
+    case 'fastfwd': {
+      const was = s.huntEnd;
+      s.huntEnd = Math.max(now + 60000, s.huntEnd - 60000);
+      if (s.sprint && !s.sprint.p) s.sprint.at = Math.min(s.sprint.at, Math.max(now, s.huntEnd - 60000));
+      ev({ cut: was - s.huntEnd }); return true;
+    }
+    case 'overtime': s.huntEnd += 60000; ev(); return true;
+    case 'fog': s.fogUntil = now + 30000; ev(); return true;
+    case 'silencer': s.silenceUntil = now + 45000; ev(); return true;
+    case 'siren': case 'truth': ev(); return true;
+    case 'tax': {
+      s.wallet = s.wallet || {}; let total = 0;
+      for (const [id] of hidersIn()) { const take = Math.min(15, s.wallet[id] || 0); s.wallet[id] = (s.wallet[id] || 0) - take; total += take; }
+      s.wallet[by] = (s.wallet[by] || 0) + total;
+      ev({ total }); return true;
+    }
+  }
+  return false;
+}
 function shrinkStep(t) {
   if (!S || S.phase !== 'hunting' || !S.settings.shrink) return 0;
   const K = Math.max(1, Math.floor(huntMs() / pingMs()));
@@ -816,7 +936,7 @@ function handle(m, self) {
       if (L_.pings.some((x) => x.id === m.from && x.n === d.n && x.kind === d.kind && d.kind !== 'breach')) return;
       const okPt = (q) => Array.isArray(q) && q.length === 2 && q.every(Number.isFinite);
       const alts = Array.isArray(d.alts) ? d.alts.filter(okPt).slice(0, 3) : null;
-      L_.pings.push({ id: m.from, p: okPt(d.p) ? d.p : null, alts, blur: Math.min(+d.blur || 0, 200), kind: d.kind, n: d.n, t: hostNow() });
+      L_.pings.push({ id: m.from, p: okPt(d.p) ? d.p : null, alts, blur: Math.min(+d.blur || 0, 200), kind: d.kind, n: d.n, t: hostNow(), fake: !!d.decoy, ri: Number.isInteger(d.ri) ? d.ri : null });
       if (!self && d.kind === 'away') { // everyone hears about it, seekers get the spot
         toast(`<b>${nm(m.from)}</b> turned off their screen.${mine()?.role === 'seeker' && okPt(d.p) ? ' Exact spot showing.' : ''}`, 'seeker', 'alert');
         if (mine()?.role === 'seeker') { beep('alarm'); buzz([80, 60, 80]); }
@@ -839,6 +959,7 @@ function handle(m, self) {
       if (self || !S || S.phase !== 'hunting') return;
       const p = mine();
       if (!p || p.role !== 'hider' || !alive(p) || !myPos) return;
+      if (hostNow() < ((P(m.from)?.fx || {}).butterUntil || 0)) return; // that seeker has butterfingers
       // both phones' GPS error counts: a good pair gets a few meters of slack, a weak fix only counts when clearly in range
       const a = myPos.acc || 0, b = +d.acc || 0, u = Math.hypot(a, b), R = S.settings.tagRadiusM;
       const weak = Math.max(a, b) > GPS_POOR;
@@ -906,11 +1027,12 @@ function handle(m, self) {
       if (!p.inv || (p.inv[item] || 0) < 1) return;
       if (needs === 'hider' && Date.now() < (S.lockdownUntil || 0)) return;
       const tgt = S.players[d.target];
-      if (item === 'spotlight' && !(tgt && tgt.role === 'hider' && alive(tgt))) return;
+      if (ITEM_INFO[item].aim && !(tgt && tgt.role === 'hider' && alive(tgt) && d.target !== m.from)) return;
       hostApply((s) => {
         const q = s.players[m.from], now = Date.now();
         q.inv[item]--; if (!q.inv[item]) delete q.inv[item];
         q.fx = q.fx || {};
+        if (useSabotage(s, q, m.from, item, d.target, now)) return;
         if (item === 'ghost') { const ms = s.settings.pingSec * 1000, n = Math.floor((now - s.huntStart) / ms) + 1; q.fx.ghostUntil = s.huntStart + (n + 1) * ms + 1500; }
         if (item === 'shield') q.fx.shield = 1;
         if (item === 'blackout') s.blackoutUntil = nextPingAt(s, now) + 1500;
@@ -1187,7 +1309,7 @@ function startRound() {
       }
     }
     s.wallet = s.wallet || {}; s.lockdownUntil = 0;
-    s.drops = []; s.flags = []; s.jail = null; s.potato = null; s.sprint = null; s.treasure = null; s.wire = null; s.duel = null; s.nextDuelAt = Infinity; s.nextTreasureAt = Infinity; s.nextWireAt = Infinity; s.blackoutUntil = 0; s.trackerUntil = 0; s.jailCooldownUntil = 0;
+    s.drops = []; s.flags = []; s.jail = null; s.potato = null; s.sprint = null; s.treasure = null; s.wire = null; s.duel = null; s.nextDuelAt = Infinity; s.nextTreasureAt = Infinity; s.nextWireAt = Infinity; s.blackoutUntil = 0; s.trackerUntil = 0; s.fogUntil = 0; s.silenceUntil = 0; s.jailCooldownUntil = 0;
     const now = Date.now();
     s.round++; s.phase = 'hiding';
     s.roundStart = now; s.huntStart = now + s.settings.hideSec * 1000; s.huntEnd = s.huntStart + s.settings.huntSec * 1000;
@@ -1484,23 +1606,113 @@ function onEvent(e) {
     if (p && p.role === 'seeker') { if (myPos) send('seekerLoc', { p: myPos.p }); toast('A hider used sonar: they see you for 30 s.', 'seeker', 'sonar'); }
     else { L_.sonarUntil = hostNow() + 30000; toast(`Sonar by <b>${nm(e.by)}</b>: seekers visible for 30 s`, 'hider', 'sonar'); }
   }
+  sabotageEvent(e, p, self_);
+}
+// what each sabotage power does on this phone. The player it hits is always told who did it
+function sabotageEvent(e, p, self_) {
+  const fresh = hostNow() - e.t < 15000; // don't blast a siren or flash for an old event (late join, reconnect)
+  const iHide = p && p.role === 'hider' && alive(p), iSeek = p && p.role === 'seeker';
+  const name = (k) => `<b>${ITEM_INFO[k]?.name || k}</b>`;
+  switch (e.k) {
+    case 'mirrorHit': {
+      const fizz = ITEM_INFO[e.item].role === 'seeker' && e.item !== 'flashbang';
+      if (self_(e.who)) { beep('tag'); buzz([60, 40, 160]); toast(`Your mirror bounced <b>${nm(e.by)}</b>'s ${name(e.item)}${fizz ? '' : ' back at them'}`, 'good', 'mirror'); }
+      else if (self_(e.by)) { beep('alarm'); toast(`<b>${nm(e.who)}</b> had a mirror. Your ${name(e.item)} ${fizz ? 'was wasted' : 'bounced back at you'}`, 'seeker', 'mirror'); }
+      break;
+    }
+    case 'firewallHit':
+      if (self_(e.who)) toast(`Your firewall blocked <b>${nm(e.by)}</b>'s ${name(e.item)}`, 'good', 'firewall');
+      else if (self_(e.by)) toast(`<b>${nm(e.who)}</b>'s firewall blocked your ${name(e.item)}`, 'hider', 'firewall');
+      break;
+    case 'mirror': if (self_(e.by)) toast('Mirror up: the next power aimed at you bounces back.', 'hider', 'mirror'); break;
+    case 'firewall': if (self_(e.by)) toast('Firewall up: the next hider sabotage on you is blocked.', 'seeker', 'firewall'); break;
+    case 'snitch':
+      if (self_(e.target) && iHide) { beep('alarm'); buzz([200, 80, 200]); toast(e.bounced ? 'Bounced! Your own exact spot pinged to the seekers. Move!' : `<b>${nm(e.by)}</b> snitched on you: your exact spot pinged to the seekers. Move!`, 'seeker', 'snitch'); sendPing('snitch'); }
+      else if (self_(e.by) && !e.bounced) toast(`You snitched on <b>${nm(e.target)}</b>`, 'hider', 'snitch');
+      else if (iSeek) toast(`A hider snitched on <b>${nm(e.target)}</b>. Exact spot incoming`, 'seeker', 'snitch');
+      break;
+    case 'frame':
+      if (self_(e.target) && iHide) { buzz([100, 50, 100]); toast(e.bounced ? 'Bounced! You pinged instead, and their next ping is hidden.' : `<b>${nm(e.by)}</b> framed you: you just pinged and their next ping is hidden`, 'seeker', 'frame'); sendPing('framed'); }
+      else if (self_(e.by) && !e.bounced) toast(`Framed <b>${nm(e.target)}</b>: they pinged, and your next ping is hidden`, 'hider', 'frame');
+      break;
+    case 'pickpocket': {
+      const what = e.got ? name(e.got) : `<b>${e.pts} points</b>`, empty = !e.got && !e.pts;
+      if (self_(e.target)) toast(empty ? `<b>${nm(e.thief)}</b> tried to pickpocket you but your pockets were empty` : `<b>${nm(e.thief)}</b> ${e.bounced ? 'got your pickpocket bounced and took' : 'pickpocketed'} your ${what}`, 'seeker', 'pickpocket');
+      else if (self_(e.thief)) toast(empty ? `<b>${nm(e.target)}</b>'s pockets were empty` : `You stole ${what} from <b>${nm(e.target)}</b>`, 'good', 'pickpocket');
+      if (self_(e.target) || self_(e.thief)) renderSheet();
+      break;
+    }
+    case 'scramble':
+      if ((e.hit || []).includes(me.id)) { buzz([80, 40, 80]); toast(`<b>${nm(e.by)}</b> scrambled your map for 20 s`, 'seeker', 'scramble'); }
+      else if (self_(e.by)) toast(`Seekers' maps scrambled for 20 s`, 'hider', 'scramble');
+      break;
+    case 'butter':
+      if ((e.hit || []).includes(me.id)) { buzz([80, 40, 80]); toast(`<b>${nm(e.by)}</b> gave you butterfingers: no tagging for 20 s`, 'seeker', 'butter'); }
+      else if (self_(e.by)) toast(`Butterfingers: seekers can't tag for 20 s`, 'hider', 'butter');
+      break;
+    case 'phantoms': // seekers aren't told: the fakes look like real pings
+      if ((e.hit || []).includes(me.id) && fresh) {
+        (e.fakes || []).forEach((f, i) => L_.pings.push({ id: f.id, p: f.p, alts: null, blur: S.settings.blurM, kind: 'scheduled', n: 'f' + e.id + i, t: e.t, fake: true }));
+        beep('ping'); buzz(60); renderMarks();
+      } else if (self_(e.by)) toast('3 phantom pings sent to the seekers', 'hider', 'phantoms');
+      break;
+    case 'fastfwd': beep('warn'); toast(`<b>${nm(e.by)}</b> fast-forwarded the clock: ${Math.round((e.cut || 0) / 60000) || 'less than 1'} min less`, 'hider', 'fastfwd'); break;
+    case 'overtime': beep('warn'); toast(`<b>${nm(e.by)}</b> called overtime: +1 min on the clock`, 'seeker', 'overtime'); break;
+    case 'fog':
+      if (iHide) { buzz([80, 40, 80]); toast(`<b>${nm(e.by)}</b> fogged your map for 30 s`, 'seeker', 'fog'); }
+      else if (iSeek) toast(`Fog by <b>${nm(e.by)}</b>: hiders' maps are dark for 30 s`, 'seeker', 'fog');
+      renderMarks(); break;
+    case 'silencer':
+      if (iHide) toast(`<b>${nm(e.by)}</b> silenced your seeker alarm for 45 s`, 'seeker', 'silencer');
+      else if (iSeek) toast(`Silencer by <b>${nm(e.by)}</b>: hiders' alarms are quiet for 45 s`, 'seeker', 'silencer');
+      break;
+    case 'siren':
+      if (iHide) { if (fresh) { sirenBlast(6); buzz([300, 100, 300, 100, 300]); } toast(`<b>${nm(e.by)}</b> set off your siren. Everyone nearby can hear you!`, 'seeker', 'siren'); }
+      else if (iSeek) toast(`Siren by <b>${nm(e.by)}</b>: listen for hiders' phones`, 'seeker', 'siren');
+      break;
+    case 'tax':
+      if (self_(e.by)) toast(`Tax collected: +${e.total} points`, 'good', 'tax');
+      else if (p && p.role === 'hider') toast(`<b>${nm(e.by)}</b> taxed every hider up to 15 points`, 'seeker', 'tax');
+      break;
+    case 'truth': if (self_(e.by)) { L_.truthUntil = hostNow() + 60000; toast('Truth lens: fake pings hidden for 60 s', 'seeker', 'truth'); renderMarks(); } break;
+    case 'flashbang':
+      if (self_(e.target)) { if (fresh) { flashScreen(5000); buzz([400]); beep('alarm'); } toast(e.bounced ? 'Bounced! You flashbanged yourself.' : `<b>${nm(e.by)}</b> flashbanged you`, 'seeker', 'flashbang'); }
+      else if (self_(e.by) && !e.bounced) toast(`Flashbang on <b>${nm(e.target)}</b>`, 'seeker', 'flashbang');
+      break;
+  }
+}
+function flashScreen(ms) {
+  document.body.classList.remove('flashed'); void document.body.offsetWidth; // restart the animation
+  document.body.style.setProperty('--flash-ms', ms + 'ms');
+  document.body.classList.add('flashed');
+  clearTimeout(L_.flashT); L_.flashT = setTimeout(() => document.body.classList.remove('flashed'), ms);
+}
+// plays the seeker alarm clip out loud, back to back, for a few seconds (the Siren)
+function sirenBlast(sec) {
+  if (!actx) return;
+  if (actx.state === 'suspended') actx.resume().catch(() => {});
+  if (!alarm.buf) { loadAlarm(); setTimeout(() => { if (alarm.buf) sirenBlast(sec); }, 1500); return; }
+  let t = actx.currentTime; const end = t + sec;
+  while (t < end) { const src = actx.createBufferSource(); src.buffer = alarm.buf; src.connect(actx.destination); src.start(t); src.stop(Math.min(end, t + alarm.buf.duration)); t += alarm.buf.duration + 0.1; }
 }
 
 // ---------------- hider pings ----------------
 function sendPing(kind = 'scheduled', n = null) {
   const s = S.settings;
   if (n === null) n = kind === 'scheduled' ? L_.lastPingN : 'r' + Date.now();
-  if (kind !== 'breach' && kind !== 'away' && hostNow() < ((mine()?.fx || {}).ghostUntil || 0)) { send('ping', { kind: 'ghost', n, p: null }); return; }
-  if (kind !== 'breach' && kind !== 'away' && hostNow() < (S.blackoutUntil || 0)) { send('ping', { kind: 'blackout', n, p: null }); return; }
+  const unblockable = kind === 'breach' || kind === 'away' || kind === 'snitch'; // a snitch gets through cloaks and blackouts
+  if (!unblockable && hostNow() < ((mine()?.fx || {}).ghostUntil || 0)) { send('ping', { kind: 'ghost', n, p: null }); return; }
+  if (!unblockable && hostNow() < (S.blackoutUntil || 0)) { send('ping', { kind: 'blackout', n, p: null }); return; }
   if (kind === 'away') { send('ping', { kind, n: 'a' + Date.now(), p: myPos ? myPos.p : null, blur: 0 }); return; } // power-ups can't hide it
   if (!myPos) { send('ping', { kind: 'nosignal', n, p: null }); return; }
   if (kind === 'breach') { send('ping', { kind, n: 'b' + Date.now(), p: myPos.p, blur: 0 }); return; }
-  if (kind === 'xray' || kind === 'capture' || kind === 'treasure' || kind === 'live') { send('ping', { kind, n, p: myPos.p, blur: 0 }); return; }
+  if (kind === 'xray' || kind === 'snitch' || kind === 'capture' || kind === 'treasure' || kind === 'live') { send('ping', { kind, n, p: myPos.p, blur: 0 }); return; }
   if (kind === 'scheduled' && L_.swarmArmed) {
     L_.swarmArmed = false;
     const z = currentZone() || S.zone;
-    const spots = shuffle([G.randomInDisk(myPos.p, s.blurM), randomSpotIn(z, myPos.p, 80), randomSpotIn(z, myPos.p, 80), randomSpotIn(z, myPos.p, 80)]);
-    send('ping', { kind, n, p: spots[0], alts: spots.slice(1), blur: s.blurM });
+    const realSpot = G.randomInDisk(myPos.p, s.blurM);
+    const spots = shuffle([realSpot, randomSpotIn(z, myPos.p, 80), randomSpotIn(z, myPos.p, 80), randomSpotIn(z, myPos.p, 80)]);
+    send('ping', { kind, n, p: spots[0], alts: spots.slice(1), blur: s.blurM, ri: spots.indexOf(realSpot) }); // ri: which spot is real (for a seeker's Truth lens)
     toast('Swarm ping sent: 4 spots, 1 real.', 'hider', 'swarm'); renderSheet(); return;
   }
   if (kind === 'scheduled' && L_.jamArmed) { L_.jamArmed = false; send('ping', { kind: 'jam', n, p: null }); toast('Jammer used. That ping was blocked.', 'hider', 'jammer'); renderSheet(); return; }
@@ -1601,7 +1813,7 @@ function shopHtml(card) {
   const btn = (k) => { const it = shopInfo(k); return `<button class="item shop" data-act="buy" data-k="${k}" ${bal < it.cost ? 'disabled' : ''}>${ic(it.ic)}${it.name}<span class="cost">${it.cost}</span><small>${k === 'pass' ? 'The next time you get caught, you get away' : it.desc}</small></button>`; };
   const saved = Object.entries(p.bank || {}).filter(([, n]) => n > 0).map(([k, n]) => `${shopInfo(k).name}${n > 1 ? ' ×' + n : ''}`);
   const body = shopOpen ? `
-    ${roles.map((r) => `${inRound ? '' : `<div class="section-t" style="margin-top:12px">${r === 'hider' ? 'If you hide' : 'If you seek'}</div>`}<div class="items">${Object.keys(SHOP).filter((k) => SHOP[k].role === r).map(btn).join('')}</div>`).join('')}
+    ${roles.map((r) => `${inRound ? '' : `<div class="section-t" style="margin-top:12px">${r === 'hider' ? 'If you hide' : 'If you seek'}</div>`}<div class="items">${Object.keys(SHOP).filter((k) => SHOP[k].role === r).sort((a, b) => SHOP[a].cost - SHOP[b].cost).map(btn).join('')}</div>`).join('')}
     <div class="section-t" style="margin-top:12px">Characters · yours forever once bought</div>
     <div class="chars">${Object.entries(CHARS).map(([id, c]) => { const own = (p.owned || []).includes(id), on = p.icon === 'c:' + id; return `<button class="char ${on ? 'on' : ''}" data-act="buy" data-k="char" data-opt="${id}" aria-label="${c.name}" ${on || (!own && bal < c.cost) ? 'disabled' : ''}><img src="chars/${id}.png" alt=""><span class="cn">${c.name}</span><span class="cost ${own ? 'own' : ''}">${on ? 'You' : own ? 'Owned' : c.cost}</span><small>${CHAR_TIERS[c.cost]}</small></button>`; }).join('')}</div>
     <div class="section-t" style="margin-top:12px">Shape · ${SHOP.icon.cost} pts</div>
@@ -1717,7 +1929,7 @@ function clientTick() {
     }
   }
   L_.alarmM = nearM;
-  alarmUpdate(nearM, range);
+  alarmUpdate(now < (S.silenceUntil || 0) ? Infinity : nearM, range); // a Silencer mutes it
   // shrink notices
   if (S.phase === 'hunting' && S.settings.shrink && !smoothShrink()) {
     const k = shrinkStep(now);
@@ -2020,7 +2232,11 @@ function renderMarks() {
   const p = mine();
   const iSeek = p && p.role === 'seeker';
   const blind = iSeek && S.phase === 'hunting' && now < (S.blackoutUntil || 0);
+  const fogged = p && p.role === 'hider' && alive(p) && S.phase === 'hunting' && now < (S.fogUntil || 0);
   document.body.classList.toggle('blackout', !!blind);
+  document.body.classList.toggle('fog', !!fogged);
+  document.body.classList.toggle('scramble', !!(iSeek && S.phase === 'hunting' && now < ((p.fx || {}).scrambleUntil || 0)));
+  const truth = iSeek && now < (L_.truthUntil || 0);
   const pin = (pt, html, z = 700, size = 34) => L.marker(pt, { icon: L.divIcon({ className: '', html, iconSize: [size, size], iconAnchor: [size / 2, size / 2] }), zIndexOffset: z, interactive: false }).addTo(layers.marks);
   const ring = (pt, color, r = REACH_M) => L.circle(pt, { radius: r, color, weight: 2, dashArray: '4 4', fillOpacity: .1, interactive: false }).addTo(layers.marks);
   const BLUE = ROLE_INK.seeker, INK = ROLE_INK.hider;
@@ -2033,10 +2249,14 @@ function renderMarks() {
     if (S.sprint && S.sprint.p) { ring(S.sprint.p, BLUE); pin(S.sprint.p, `<div class="map-pin solid bob">${ic('sprint')}</div>`, 800); }
     if (p && p.mission && alive(p)) { ring(p.mission.p, INK); pin(p.mission.p, `<div class="map-pin">${ic('missions')}</div>`); }
   }
-  if (blind) return;
-  // latest ping per hider + a short faded trail
+  if (blind || fogged) return;
+  // latest ping per hider + a short faded trail (a Truth lens drops decoys and phantoms, and keeps only a swarm's real spot)
   const byId = {};
-  for (const x of L_.pings) (byId[x.id] = byId[x.id] || []).push(x);
+  for (const x of L_.pings) {
+    if (truth && x.fake) continue;
+    const y = truth && x.alts && x.ri !== null && x.ri !== undefined ? { ...x, p: [x.p, ...x.alts][x.ri] || x.p, alts: null } : x;
+    (byId[x.id] = byId[x.id] || []).push(y);
+  }
   for (const [id, list] of Object.entries(byId)) {
     const pl = P(id);
     if (!pl) continue;
@@ -2044,8 +2264,8 @@ function renderMarks() {
     const last = real[real.length - 1];
     real.slice(-4, -1).forEach((x) => L.circleMarker(x.p, { radius: 4, color: INK, weight: 1, opacity: .35, fillOpacity: .2, interactive: false }).addTo(layers.marks));
     if (!last || (pl.caughtAt && S.phase !== 'ended')) continue;
-    const loud = last.kind === 'breach' || last.kind === 'xray' || last.kind === 'live' || last.kind === 'away';
-    const sub = last.kind === 'live' ? 'LIVE · ' + ago(now - last.t) : last.kind === 'breach' ? 'OUT OF ZONE' : last.kind === 'away' ? 'SCREEN OFF · ' + ago(now - last.t) : last.kind === 'xray' ? 'X-RAY · ' + ago(now - last.t) : (id === me.id ? 'your last ping · ' : '') + ago(now - last.t);
+    const loud = last.kind === 'breach' || last.kind === 'xray' || last.kind === 'snitch' || last.kind === 'live' || last.kind === 'away';
+    const sub = last.kind === 'live' ? 'LIVE · ' + ago(now - last.t) : last.kind === 'snitch' ? 'SNITCHED · ' + ago(now - last.t) : last.kind === 'breach' ? 'OUT OF ZONE' : last.kind === 'away' ? 'SCREEN OFF · ' + ago(now - last.t) : last.kind === 'xray' ? 'X-RAY · ' + ago(now - last.t) : (id === me.id ? 'your last ping · ' : '') + ago(now - last.t);
     for (const spot of [last.p, ...(last.alts || [])]) {
       if (last.blur) L.circle(spot, { radius: last.blur, color: loud ? BLUE : INK, weight: 1.5, opacity: .6, fillOpacity: .08, interactive: false }).addTo(layers.marks);
       L.marker(spot, { icon: blipIcon(loud ? BLUE : INK, esc(pl.name), sub, loud ? 'loud' : ''), zIndexOffset: 500 }).addTo(layers.marks);
@@ -2290,12 +2510,12 @@ function itemsHtml(role) {
   const inv = p.inv || {}, fx = p.fx || {}, now = hostNow();
   const locked = role === 'hider' && now < (S.lockdownUntil || 0);
   const armedOf = (k) => (k === 'decoy' && (L_.decoyArmed || L_.placingDecoy)) || (k === 'jammer' && L_.jamArmed) || (k === 'swarm' && L_.swarmArmed)
-    || (k === 'shield' && fx.shield) || (k === 'ghost' && now < (fx.ghostUntil || 0)) || (k === 'cloak' && now < (fx.ghostUntil || 0)) || (k === 'pass' && (inv.pass || 0) > 0);
+    || (k === 'shield' && fx.shield) || (k === 'mirror' && fx.mirror) || (k === 'firewall' && fx.firewall) || (k === 'ghost' && now < (fx.ghostUntil || 0)) || (k === 'cloak' && now < (fx.ghostUntil || 0)) || (k === 'pass' && (inv.pass || 0) > 0);
   const keys = Object.keys(ITEM_INFO).filter((k) => ITEM_INFO[k].role === role && ((inv[k] || 0) > 0 || armedOf(k)));
   const how = [S.settings.drops && 'grab a supply drop', role === 'seeker' && 'catch someone', role === 'hider' && S.settings.missions && 'finish a mission'].filter(Boolean).join(' or ');
   const head = '<div class="section-t" style="margin-top:18px">Power-ups</div>';
   if (!keys.length) return puOn(S.settings) ? `${head}<p class="hint" style="text-align:left;margin:0">None right now.${how ? ' To get one, ' + how + '.' : ''}</p>` : '';
-  const picker = L_.spotPick ? `<div class="section-t" style="margin-top:10px">Spotlight who?</div><div class="row">${Object.entries(S.players).filter(([, x]) => x.role === 'hider' && alive(x)).map(([id, x]) => `<button class="btn small" data-act="spotTarget" data-id="${id}">${esc(x.name)}</button>`).join('')}<button class="btn small ghost" data-act="spotCancel">Cancel</button></div>` : '';
+  const picker = L_.aimPick && ITEM_INFO[L_.aimPick] ? `<div class="section-t" style="margin-top:10px">${ITEM_INFO[L_.aimPick].name} who?</div><div class="row">${Object.entries(S.players).filter(([id, x]) => x.role === 'hider' && alive(x) && id !== me.id).map(([id, x]) => `<button class="btn small" data-act="spotTarget" data-id="${id}">${esc(x.name)}</button>`).join('')}<button class="btn small ghost" data-act="spotCancel">Cancel</button></div>` : '';
   return `${head}${locked ? `<p class="hint" style="text-align:left;margin:0;color:var(--blue);font-weight:700">Locked down: power-ups unusable for ${fmt(S.lockdownUntil - now)}</p>` : ''}${picker}<div class="items">${keys.map((k) => {
     const n = inv[k] || 0, armed = armedOf(k);
     return `<button class="item ${armed ? 'armed' : ''} ${ITEM_INFO[k].sup ? 'super' : ''}" data-act="item" data-item="${k}" ${(n <= 0 && !(k === 'decoy' && L_.placingDecoy)) || k === 'pass' || locked ? 'disabled' : ''}>${ic(k)}${ITEM_INFO[k].name}${n > 1 ? `<span class="n">×${n}</span>` : ''}<small>${armed && n <= 0 ? 'Active' : ITEM_INFO[k].desc}</small></button>`;
@@ -2951,6 +3171,8 @@ function act(a, el) {
     }
     case 'tag': {
       if (S.phase !== 'hunting') return;
+      const butter = ((p.fx || {}).butterUntil || 0) - hostNow();
+      if (butter > 0) { toast(`Butterfingers! You can't tag for ${Math.ceil(butter / 1000)} s.`, 'seeker', 'butter'); return; }
       if ((S.settings.tagMode || 'gps') !== 'gps') { pickTarget((target) => sendTagReq(target, null)); return; }
       if (!myPos) return;
       if (Date.now() < L_.tagCooldown) { toast('Tag recharging…'); return; }
@@ -2967,8 +3189,8 @@ function act(a, el) {
       if (item === 'decoy') { L_.placingDecoy = !L_.placingDecoy; renderSheet(); if (L_.placingDecoy) toast('Tap the map inside the zone to place your decoy', 'hider', 'decoy'); return; }
       if (item === 'jammer') { if (L_.jamArmed) return; L_.jamArmed = true; send('useItem', { item }); toast('Jammer armed. Your next ping is blocked.', 'hider', 'jammer'); }
       if (item === 'swarm') { if (L_.swarmArmed) return; L_.swarmArmed = true; send('useItem', { item }); toast('Swarm armed. Your next ping shows 4 spots.', 'hider', 'swarm'); }
-      if (['sonar', 'ghost', 'shield', 'blackout', 'xray', 'tracker', 'cloak', 'peek', 'trail', 'lockdown'].includes(item)) send('useItem', { item });
-      if (item === 'spotlight') { L_.spotPick = !L_.spotPick; renderSheet(); return; }
+      if (ITEM_INFO[item].aim) { L_.aimPick = L_.aimPick === item ? null : item; renderSheet(); return; } // pick who first
+      if (['sonar', 'ghost', 'shield', 'blackout', 'xray', 'tracker', 'cloak', 'peek', 'trail', 'lockdown'].includes(item) || SABOTAGE_DIRECT.includes(item)) send('useItem', { item });
       if (item === 'radar') { send('useItem', { item }); toast('Radar sweep. Every hider pings now.', 'seeker', 'radar'); }
       fx(item, ITEM_INFO[item].name, ITEM_INFO[item].role === 'seeker' ? 'blue' : '');
       setTimeout(renderSheet, 50);
@@ -2979,8 +3201,8 @@ function act(a, el) {
       if (inGame()) { L_.showShop = !L_.showShop; shopOpen = L_.showShop; if (L_.showShop) L_.showPU = L_.showMore = false; }
       else shopOpen = !shopOpen;
       renderSheet(); break;
-    case 'spotTarget': L_.spotPick = false; send('useItem', { item: 'spotlight', target: el.dataset.id }); setTimeout(renderSheet, 50); break;
-    case 'spotCancel': L_.spotPick = false; renderSheet(); break;
+    case 'spotTarget': { const item = L_.aimPick; L_.aimPick = null; if (!item) return; send('useItem', { item, target: el.dataset.id }); fx(item, ITEM_INFO[item].name, ITEM_INFO[item].role === 'seeker' ? 'blue' : ''); setTimeout(renderSheet, 50); break; }
+    case 'spotCancel': L_.aimPick = null; renderSheet(); break;
     case 'selfCaught': {
       const seekers = Object.entries(S.players).filter(([, x]) => x.role === 'seeker');
       modal(`<h3>Who caught you?</h3><p>Be honest. It gives them the points.</p><div class="stack">${seekers.map(([id, x]) => `<button class="btn" data-act2="caughtBy" data-id="${id}">${avatar(x, roleCls(x.role))}${esc(x.name)}</button>`).join('')}<button class="btn ghost" data-act="closeModal">Never mind</button></div>`);
