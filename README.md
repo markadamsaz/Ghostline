@@ -24,6 +24,10 @@ Under **Rules & settings**, **Seeker pick** is Random (the default: the Seekers 
 
 When a seeker gets close, the hider's phone plays the alarm clip on repeat (`public/audio/seeker-alarm.m4a`). The closer the seeker, the louder it plays and the shorter the gap between plays, until it runs back to back. The host sets the range in the lobby under **Seeker alarm** (Off, or 20 to 200 m, default 50 m). Seekers' phones share their spot every 3 s for this, and it's never shown on anyone's map. Hiders never send their spot for it.
 
+## Map pins
+
+Anyone (hider or seeker, in the lobby or during a round) can drop an exact pin: tap the pin button on the right of the map, tap the spot, add an optional note (up to 40 characters, like "meet here"), and pick who gets it: any players, or Everyone / Hiders / Seekers in one tap. Only the players you pick see it. It lands on their map with your name and note, and in chat (your private chat with them, or Everyone) with a Show on map button. Tap a pin for its note and distance. Pins stay until whoever dropped them removes them (Remove for everyone) or the game ends; anyone else can hide one from their own map. A player who reconnects gets the pins sent to them again. A pin can also be bait: it shows exactly where you tapped, not where you are.
+
 ## Screens stay on
 
 From the moment you join, the game keeps your screen from dimming or locking (Wake Lock, or a tiny silent looping video on phones without it). A web page can't block the power button, so during the hunt a hider who turns off their screen or leaves the app sends their exact spot to the seekers, and everyone is told. A seeker who does it is just called out.

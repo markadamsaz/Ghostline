@@ -327,6 +327,9 @@ let prevPhase = null, prevRound = 0;
 const processed = new Set();
 const chat = [];
 let chatOpen = false;
+// map pins players drop and send to each other: id -> { id, from, p, note, to: [ids], all, t }
+const pins = new Map(), hiddenPins = new Set();
+let placingPin = false;
 let chatConv = null, chatCompose = false; // chat screen: null = the inbox, else a conversation key (see convTitle)
 const unreadBy = {};
 let sheetCollapsed = false;
@@ -566,6 +569,7 @@ const layers = {
   draft: L.layerGroup().addTo(map),
   marks: L.layerGroup().addTo(map),
   replay: L.layerGroup().addTo(map),
+  pins: L.layerGroup().addTo(map),
 };
 let meMarker = null, meAcc = null, fittedZone = false;
 
@@ -923,6 +927,7 @@ function handle(m, self) {
       break;
     }
     case 'hello': {
+      if (!self) resendPins([m.from]); // they just (re)joined and may have missed pins sent to them
       if (!isHost()) return;
       if (S.kicked.includes(m.from)) return;
       if (S.players[m.from]) {
@@ -1238,6 +1243,33 @@ function handle(m, self) {
       if (chatOpen) renderChat();
       break;
     }
+    case 'pin': {
+      if (!S) return;
+      const pn = cleanPin(d, m.from); if (!pn) return;
+      if (!self && !pn.to.includes(me.id)) return; // only the players it was sent to keep it
+      if (pins.has(pn.id) || hiddenPins.has(pn.id)) return; // a resend after a reconnect
+      pins.set(pn.id, pn); renderPins();
+      const text = pn.note || 'Dropped a pin';
+      const add = (conv) => pushChat({ conv, from: m.from, name: P(m.from)?.name || 'Someone', text, pin: pn.id, t: Date.now() });
+      if (self) { if (pn.all) add('all'); else pn.to.forEach((id) => add('dm:' + id)); }
+      else {
+        const conv = pn.all ? 'all' : 'dm:' + m.from;
+        add(conv); bumpUnread(conv); playRecv(); buzz([30, 60, 30]);
+        const pre = `<b>${nm(m.from)}</b> sent you a pin${pn.note ? ': ' + esc(pn.note) : ''}`;
+        if (inGame()) { L_.lastUp = { html: pre, icon: 'pin', t: Date.now(), conv }; showLastUp(); }
+        else toast(pre + ` <button class="btn small" data-pin-go="${esc(pn.id)}">Show</button>`, 'pin-toast', 'pin');
+      }
+      if (chatOpen) renderChat();
+      break;
+    }
+    case 'pinDel': {
+      const pn = pins.get(String(d.id || ''));
+      if (!pn || pn.from !== m.from) return; // only whoever dropped it can take it down
+      pins.delete(pn.id); renderPins();
+      if (!self) toast(`<b>${nm(m.from)}</b> removed their pin${pn.note ? ' "' + esc(pn.note) + '"' : ''}.`, '', 'pin');
+      if (chatOpen) renderChat();
+      break;
+    }
     case 'track': {
       if (!Array.isArray(d.pts)) return;
       L_.tracks[m.from] = d.pts.slice(0, 1500);
@@ -1251,7 +1283,20 @@ function handle(m, self) {
   }
 }
 
+// someone who reconnects may have missed pins sent to them: send those again a moment later, once their phone
+// has the game again (phones drop pins they already have)
+let pinPeers = new Set();
+const pinResendAt = {};
+function resendPins(ids) {
+  for (const id of ids) {
+    if (!pins.size || Date.now() - (pinResendAt[id] || 0) < 2000) continue;
+    pinResendAt[id] = Date.now();
+    setTimeout(() => { for (const pn of pins.values()) if (pn.from === me.id && pn.to.includes(id)) send('pin', pinWire(pn)); }, 2500);
+  }
+}
 function onPeers() {
+  resendPins([...peers].filter((id) => id !== me.id && !pinPeers.has(id)));
+  pinPeers = new Set(peers);
   if (S) {
     const hostHere = peers.has(S.hostId);
     if (!hostHere) {
@@ -2173,7 +2218,7 @@ function showAwayWarning() {
 }
 
 // ---------------- rendering ----------------
-function renderAll() { renderHud(); renderSheet(); renderZone(); renderMarks(); updateMeMarker(); }
+function renderAll() { renderHud(); renderSheet(); renderZone(); renderMarks(); renderPins(); updateMeMarker(); }
 
 function renderHud() {
   if (!S) return;
@@ -2746,7 +2791,7 @@ function convSub(k) {
   return `${n} ${n === 1 ? 'person' : 'people'}`;
 }
 const stripTags = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.textContent || ''; };
-const msgPreview = (c) => (c.sys ? stripTags(c.html) : c.audio ? 'Audio Message' : c.text);
+const msgPreview = (c) => (c.sys ? stripTags(c.html) : c.audio ? 'Audio Message' : c.pin ? 'Pin: ' + c.text : c.text);
 const imTime = (t) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 const secs = (x) => { x = Math.max(0, Math.round(x)); return `${Math.floor(x / 60)}:${String(x % 60).padStart(2, '0')}`; };
 function dataToUrl(d) {
@@ -2804,8 +2849,8 @@ function threadLog(k) {
     const first = !prev || prev.sys || prev.from !== c.from || c.t - prev.t > 15 * 60e3;
     const lastR = !next || next.sys || next.from !== c.from || next.t - c.t > 15 * 60e3;
     if (group && !mineM && first) out += `<div class="im-name">${esc(c.name)}</div>`;
-    const jumbo = !c.audio && JUMBO.test(c.text);
-    out += `<div class="im-row ${mineM ? 'me' : 'them'} ${lastR ? 'tail' : ''} ${first ? 'first' : ''}">${group && !mineM ? `<span class="im-av">${lastR ? avatar(P(c.from)) : ''}</span>` : ''}<div class="im-b ${c.audio ? 'aud' : ''} ${jumbo ? 'jumbo' : ''}">${c.audio ? audioBubble(c) : esc(c.text)}</div></div>`;
+    const jumbo = !c.audio && !c.pin && JUMBO.test(c.text);
+    out += `<div class="im-row ${mineM ? 'me' : 'them'} ${lastR ? 'tail' : ''} ${first ? 'first' : ''}">${group && !mineM ? `<span class="im-av">${lastR ? avatar(P(c.from)) : ''}</span>` : ''}<div class="im-b ${c.audio ? 'aud' : ''} ${c.pin ? 'pinb' : ''} ${jumbo ? 'jumbo' : ''}">${c.audio ? audioBubble(c) : c.pin ? pinBubble(c) : esc(c.text)}</div></div>`;
     prev = c;
   });
   if (prev && !prev.sys && prev.from === me.id) out += `<div class="im-dlv">Delivered</div>`;
@@ -2969,6 +3014,117 @@ function playAudioMsg(cid) {
   setAud(cid, 0, true);
 }
 
+// ---------------- map pins ----------------
+// Anyone can drop an exact pin and send it to any players (a meetup spot, or bait). It goes out over the game's
+// broadcast like chat, each phone keeps only the pins sent to it, and a pin stays until whoever dropped it removes it
+// (or the game ends). Recipients can hide one from their own map.
+const PIN_NOTE = 40;
+function cleanPin(d, from) {
+  const p = Array.isArray(d.p) && d.p.length === 2 && d.p.every(Number.isFinite) && Math.abs(d.p[0]) <= 90 && Math.abs(d.p[1]) <= 180 ? [d.p[0], d.p[1]] : null;
+  const id = String(d.id || '').slice(0, 40);
+  const to = Array.isArray(d.to) ? [...new Set(d.to.map(String))].filter((x) => x !== from).slice(0, 60) : [];
+  if (!p || !id || !to.length) return null;
+  return { id, from, p, note: String(d.note || '').replace(/\s+/g, ' ').trim().slice(0, PIN_NOTE), to, all: !!d.all, t: Date.now() };
+}
+const pinWire = (pn) => ({ id: pn.id, p: pn.p, note: pn.note, to: pn.to, all: pn.all });
+function setPinMode(on) {
+  placingPin = !!on;
+  const b = $('#btn-pin'); if (b) { b.classList.toggle('on', placingPin); b.setAttribute('aria-pressed', String(placingPin)); }
+  document.body.classList.toggle('placing-pin', placingPin);
+}
+function startPinMode() {
+  if (!S) return;
+  if (placingPin) { setPinMode(false); toast('Pin cancelled'); return; }
+  if (replay) { toast('Close the replay to drop a pin'); return; }
+  if (Object.keys(S.players).length < 2) { toast('Nobody else is in the game yet'); return; }
+  if (chatOpen) { stopPlaying(); chatOpen = false; chatCompose = false; renderSheet(); updateChatBadges(); setMapBtn(); }
+  if (S.phase === 'lobby' && !mapView) setMapView(true);
+  L_.placingDecoy = false;
+  setPinMode(true);
+  toast('Tap the map where you want the pin', '', 'pin');
+}
+function renderPins() {
+  layers.pins.clearLayers();
+  if (!S) return;
+  for (const pn of pins.values()) {
+    if (hiddenPins.has(pn.id)) continue;
+    const pl = P(pn.from), mineP = pn.from === me.id;
+    const col = pl?.color || '#007aff';
+    const label = (mineP ? 'Your pin' : esc(pl?.name || 'Someone')) + (pn.note ? `<small>${esc(pn.note)}</small>` : '');
+    L.marker(pn.p, {
+      icon: L.divIcon({ className: '', iconSize: [30, 40], iconAnchor: [15, 38],
+        html: `<div class="upin" data-pin="${esc(pn.id)}" style="--pc:${col}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s-8-7-8-13a8 8 0 0 1 16 0c0 6-8 13-8 13z"/><circle cx="12" cy="9" r="3"/></svg><div class="lbl">${label}</div></div>` }),
+      zIndexOffset: 900, title: 'Pin' + (pn.note ? ': ' + pn.note : ''),
+    }).on('click', () => pinInfoModal(pn.id)).addTo(layers.pins);
+  }
+}
+function pinBubble(c) {
+  const live = pins.has(c.pin) || hiddenPins.has(c.pin);
+  return `<button class="im-pin" data-act="showPin" data-pin="${esc(c.pin)}">${ic('pin')}<span><b>${esc(c.text)}</b><small>${live ? 'Show on map' : 'Pin removed'}</small></span></button>`;
+}
+function showPin(id) {
+  const pn = pins.get(id);
+  if (!pn) { toast(hiddenPins.has(id) ? 'You hid that pin.' : 'That pin was removed.'); return; }
+  if (chatOpen) { stopPlaying(); chatOpen = false; chatCompose = false; renderSheet(); updateChatBadges(); setMapBtn(); }
+  if (S && S.phase === 'lobby' && !mapView) mapView = true, renderSheet(), setMapBtn();
+  requestAnimationFrame(() => {
+    map.setView(pn.p, Math.max(map.getZoom(), 18));
+    setTimeout(() => { const el = document.querySelector(`.upin[data-pin="${CSS.escape(id)}"]`); if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } }, 350);
+  });
+}
+function pinInfoModal(id) {
+  const pn = pins.get(id); if (!pn) return;
+  const mineP = pn.from === me.id;
+  const away = myPos ? G.fmtDist(G.dist(myPos.p, pn.p)) + ' from you' : '';
+  const toNames = pn.all ? 'everyone' : pn.to.map((x) => P(x)?.name || 'someone').join(', ');
+  modal(`<h3>${ic('pin')} ${mineP ? 'Your pin' : esc(P(pn.from)?.name || 'Someone') + "'s pin"}</h3>
+    ${pn.note ? `<p class="pin-note">"${esc(pn.note)}"</p>` : ''}
+    <p>${[away, mineP ? 'Sent to ' + esc(toNames) : (pn.all ? 'Sent to everyone' : 'Sent to you' + (pn.to.length > 1 ? ' and ' + (pn.to.length - 1) + ' more' : ''))].filter(Boolean).join(' · ')}</p>
+    <div class="stack">
+      <button class="btn" id="pin-center">${ic('pin')}Center the map on it</button>
+      ${mineP ? `<button class="btn danger" id="pin-del">Remove for everyone</button>` : `<button class="btn" id="pin-hide">Hide from my map</button>`}
+      <button class="btn ghost" data-act="closeModal">Close</button>
+    </div>`);
+  $('#pin-center').onclick = () => { closeModal(); showPin(id); };
+  const del = $('#pin-del'); if (del) del.onclick = () => { closeModal(); send('pinDel', { id }); toast('Pin removed', '', 'pin'); };
+  const hide = $('#pin-hide'); if (hide) hide.onclick = () => { closeModal(); hiddenPins.add(id); pins.delete(id); renderPins(); if (chatOpen) renderChat(); toast('Pin hidden from your map', '', 'pin'); };
+}
+function pinSendModal(ll) {
+  if (!S) return;
+  const others = Object.entries(S.players).filter(([id]) => id !== me.id);
+  if (!others.length) { toast('Nobody else is in the game yet'); return; }
+  const teams = S.phase !== 'lobby';
+  const roleOf = (x) => (teams ? (x.role === 'seeker' ? 'Seeker' : 'Hider') : 'Player');
+  const away = myPos ? G.fmtDist(G.dist(myPos.p, ll)) + ' from you' : 'Exact spot';
+  modal(`<h3>${ic('pin')} Send a pin</h3>
+    <p>${away}. Only the players you pick see it.</p>
+    <input id="pin-note" class="pin-in" maxlength="${PIN_NOTE}" placeholder="Add a note (optional), like &quot;meet here&quot;" autocomplete="off">
+    <div class="pin-quick seg"><button type="button" data-pq="all">Everyone</button>${teams ? '<button type="button" data-pq="hider">Hiders</button><button type="button" data-pq="seeker">Seekers</button>' : ''}<button type="button" data-pq="none">None</button></div>
+    <div class="pin-to">${others.map(([id, x]) => `<label class="pin-to-row"><input type="checkbox" value="${esc(id)}" data-role="${x.role === 'seeker' ? 'seeker' : 'hider'}">${avatar(x)}<span><b>${esc(x.name)}</b><small>${roleOf(x)}${peers.has(id) ? '' : ' · offline'}</small></span><i class="pin-chk"></i></label>`).join('')}</div>
+    <p id="pin-err" class="err" hidden>Pick at least one player.</p>
+    <div class="stack"><button class="btn primary big" id="pin-send">Send pin</button><button class="btn ghost" data-act="closeModal">Cancel</button></div>`);
+  const boxes = [...document.querySelectorAll('.pin-to input')];
+  const sync = () => { const n = boxes.filter((b) => b.checked).length; $('#pin-send').textContent = n ? `Send pin to ${n === boxes.length ? 'everyone' : n === 1 ? P(boxes.find((b) => b.checked).value)?.name || '1 player' : n + ' players'}` : 'Send pin'; if (n) $('#pin-err').hidden = true; };
+  boxes.forEach((b) => b.addEventListener('change', sync));
+  document.querySelectorAll('.pin-quick [data-pq]').forEach((b) => b.addEventListener('click', () => {
+    const k = b.dataset.pq;
+    boxes.forEach((x) => { x.checked = k === 'all' || x.dataset.role === k; });
+    sync();
+  }));
+  $('#pin-send').onclick = () => {
+    const to = boxes.filter((b) => b.checked).map((b) => b.value);
+    if (!to.length) { $('#pin-err').hidden = false; return; }
+    const note = $('#pin-note').value;
+    const id = me.id.slice(0, 12) + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    closeModal();
+    send('pin', { id, p: [+ll[0].toFixed(7), +ll[1].toFixed(7)], note, to, all: to.length === boxes.length && boxes.length > 1 });
+    playSend(); buzz(15);
+    toast(`Pin sent to ${to.length === boxes.length ? 'everyone' : to.length === 1 ? esc(P(to[0])?.name || '1 player') : to.length + ' players'}`, '', 'pin');
+  };
+}
+$('#btn-pin').addEventListener('click', () => { unlockAudio(); startPinMode(); });
+document.addEventListener('click', (e) => { const b = e.target.closest('[data-pin-go]'); if (b) { e.stopPropagation(); b.closest('.toast')?.remove(); showPin(b.dataset.pinGo); } });
+
 // ---------------- modal ----------------
 function modal(html) {
   const m = $('#modal');
@@ -3121,6 +3277,7 @@ function act(a, el) {
     case 'modeMap': stopPlaying(); chatOpen = false; chatCompose = false; renderSheet(); updateChatBadges(); break;
     case 'modeChat': chatOpen = true; chatCompose = false; if (el.dataset.conv) openConv(el.dataset.conv); else renderSheet(); break;
     case 'openConv': openConv(el.dataset.conv); break;
+    case 'showPin': showPin(el.dataset.pin); break;
     case 'chatBack': stopPlaying(); chatConv = null; chatCompose = false; renderChat(); break;
     case 'compose': chatCompose = true; renderChat(); setTimeout(() => $('#to-in')?.focus(), 50); break;
     case 'composeCancel': chatCompose = false; renderChat(); break;
@@ -3322,6 +3479,7 @@ map.on('click', (e) => {
     drawDraft(); renderSheet();
     return;
   }
+  if (placingPin) { setPinMode(false); pinSendModal(ll); return; }
   if (L_.placingDecoy) {
     const z = currentZone();
     if (z && !G.inZone(ll, z)) { toast('Decoy has to be inside the zone'); return; }
@@ -3363,9 +3521,10 @@ function showMapKey() {
       ${row(`<span class="key-tag">LIVE</span>`, 'Blue label', 'Exact spot: out of zone, screen off, X-ray or Live Wire.')}
       ${row(`<span class="key-line"></span>`, 'Blue line', 'The play zone. Stay inside it.')}
       ${row(`<span class="key-pin">${ic('caught')}</span>`, 'Caught', 'Where someone got tagged.')}
+      ${row(`<span class="key-pin upin-key">${ic('pin')}</span>`, 'Player pin', 'A spot someone dropped and sent you. Tap it to see the note, or drop your own with the pin button.')}
       ${row(`<span class="key-pin">${ic('treasure')}</span>`, 'Pins with a dashed ring', 'Treasure, supply drops, flags, jail and missions. Walk into the ring to use them.')}
     </div>
-    <p class="note" style="margin-top:12px">Buttons on the right: see the whole zone, turn the map (or twist with two fingers), and jump to you.</p>
+    <p class="note" style="margin-top:12px">Buttons on the right: see the whole zone, turn the map (or twist with two fingers), drop a pin, and jump to you.</p>
     <button class="btn primary" data-act="closeModal" style="width:100%;margin-top:10px">Got it</button>`);
 }
 $('#btn-locate').addEventListener('click', () => { if (myPos) map.setView(myPos.p, Math.max(map.getZoom(), 17)); else toast('No location yet'); });
@@ -3581,6 +3740,7 @@ function leave(msg) {
   releaseWake();
   net = null; S = null; code = null; prevPhase = null; prevRound = 0; zoneDraft = null; replay = null; fittedZone = false;
   processed.clear(); chat.length = 0; resetLocal();
+  pins.clear(); hiddenPins.clear(); setPinMode(false); layers.pins.clearLayers();
   layers.zone.clearLayers(); layers.marks.clearLayers(); layers.replay.clearLayers(); layers.draft.clearLayers();
   mapView = false; $('#home').hidden = false; $('#hud').hidden = true; sheet.hidden = true; document.body.classList.remove('chat-full'); banner(null);
   $('#blindfold')?.remove();
@@ -3593,7 +3753,7 @@ setInterval(() => { clientTick(); const u = $('#last-up'); if (u && !u.hidden) s
 // test and debug hooks
 window.__gl = {
   get S() { return S; }, get map() { return map; }, get bear() { return mapBear; }, feed: () => chat.map((c) => (c.sys ? c.html : c.text)).join('\n'), setBearing, get me() { return me; }, get peers() { return [...peers]; }, get local() { return L_; },
-  get myPos() { return myPos; }, get alarmOn() { return alarm.on; }, get awake() { return !!wakeLock || !!(wakeVideo && !wakeVideo.paused); }, hostNow, currentZone,
+  get myPos() { return myPos; }, get pins() { return [...pins.values()]; }, get alarmOn() { return alarm.on; }, get awake() { return !!wakeLock || !!(wakeVideo && !wakeVideo.paused); }, hostNow, currentZone,
   ...(DEBUG ? {
     setPos, act, send, feedFix: (lat, lng, acc) => onPos({ coords: { latitude: lat, longitude: lng, accuracy: acc } }),
     setSettings: (o) => hostApply((s) => { Object.assign(s.settings, o); if (o.jail) s.settings.infection = false; if (o.infection) s.settings.jail = false; }),

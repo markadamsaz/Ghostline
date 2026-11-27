@@ -66,6 +66,60 @@ const all = [host, ...others];
 ok(await until(async () => Object.keys((await state(host)).players).length === 4, 10000, 'joins'), 'all 4 players in the lobby');
 ok(await until(async () => (await Promise.all(others.map(state))).every((s) => s && Object.keys(s.players).length === 4), 8000, 'sync'), 'every phone sees the same lobby');
 
+// ---- map pins: drop an exact spot and send it to chosen players
+{
+  const [ana, ben, cy] = others;
+  const pinsOf = (ph) => G(ph, () => window.__gl.pins);
+  const spot = off(60, 40);
+  await host.page.click('#btn-map'); // the lobby map
+  await host.page.click('#btn-pin');
+  ok(await G(host, () => document.body.classList.contains('placing-pin')), 'pin button starts placing a pin');
+  await G(host, ([a, b]) => window.__gl.tapMap(a, b), spot);
+  ok(await until(async () => G(host, () => !!document.querySelector('#pin-send')), 3000, 'pin modal'), 'tapping the map opens the send-a-pin sheet');
+  ok((await G(host, () => document.querySelectorAll('.pin-to input').length)) === 3, 'every other player is listed as a recipient');
+  await host.page.click('#pin-send');
+  ok(await G(host, () => !document.querySelector('#pin-err').hidden), 'sending with nobody picked asks for a player');
+  await host.page.fill('#pin-note', 'meet here');
+  await host.page.click('.pin-to-row:has(input[value="p2"])');
+  await host.page.click('#pin-send');
+  ok(await until(async () => (await pinsOf(ana)).length === 1, 5000, 'ana pin'), 'the picked player gets the pin');
+  const ap = (await pinsOf(ana))[0];
+  ok(ap && ap.note === 'meet here' && Math.abs(ap.p[0] - spot[0]) < 1e-6 && Math.abs(ap.p[1] - spot[1]) < 1e-6, 'pin keeps the exact spot and the note');
+  await sleep(600);
+  ok((await pinsOf(ben)).length === 0 && (await pinsOf(cy)).length === 0, 'players who were not picked never see it');
+  ok(await G(ana, () => window.__gl.feed().includes('meet here')), 'the pin shows up in chat for the receiver');
+  ok(await G(ana, () => document.querySelectorAll('.upin').length === 1), 'the pin is drawn on the receiver\'s map');
+  ok((await pinsOf(host)).length === 1, 'the sender sees their own pin');
+  // the receiver opens it from chat
+  await G(ana, () => window.__gl.act('modeChat', { dataset: { conv: 'dm:host' } }));
+  await until(async () => G(ana, () => !!document.querySelector('.im-pin')), 3000, 'pin bubble');
+  await ana.page.click('.im-pin');
+  ok(await G(ana, () => !document.body.classList.contains('chat-full') && !!document.querySelector('.upin')), '"Show on map" leaves chat and shows the pin');
+  // a pin to everyone, with the quick button
+  await ana.page.click('#btn-pin');
+  await G(ana, ([a, b]) => window.__gl.tapMap(a, b), off(-30, 10));
+  await until(async () => G(ana, () => !!document.querySelector('#pin-send')), 3000, 'pin modal 2');
+  await ana.page.click('.pin-quick [data-pq="all"]');
+  await ana.page.click('#pin-send');
+  ok(await until(async () => (await Promise.all([host, ben, cy].map(pinsOf))).every((l) => l.some((x) => x.from === 'p2' && x.all)), 5000, 'pin all'), 'Everyone sends the pin to every player');
+  // the sender removes their pin for everyone
+  const hid = (await pinsOf(host)).find((x) => x.from === 'host').id;
+  await G(host, (id) => document.querySelector(`.upin[data-pin="${id}"]`).click(), hid);
+  await until(async () => G(host, () => !!document.querySelector('#pin-del')), 3000, 'pin info');
+  await host.page.click('#pin-del');
+  ok(await until(async () => !(await pinsOf(ana)).some((x) => x.id === hid), 5000, 'pin removed'), 'removing a pin takes it off the receiver\'s map');
+  // a receiver can hide a pin just for themselves
+  const aid = (await pinsOf(ben)).find((x) => x.from === 'p2').id;
+  await G(ben, () => window.__gl.act('openMap'));
+  await G(ben, (id) => document.querySelector(`.upin[data-pin="${id}"]`).click(), aid);
+  await until(async () => G(ben, () => !!document.querySelector('#pin-hide')), 3000, 'pin hide');
+  await ben.page.click('#pin-hide');
+  await sleep(300);
+  ok(!(await pinsOf(ben)).some((x) => x.id === aid) && (await pinsOf(cy)).some((x) => x.id === aid), 'hiding a pin only hides it on your own map');
+  await G(ana, () => { const a = window.__gl.act; a('modeChat', { dataset: {} }); a('chatBack'); a('modeMap'); }); // back to the inbox for the chat tests
+  for (const ph of [host, ana, ben]) await G(ph, () => window.__gl.act('mapDone'));
+}
+
 // zone tools: draw a circle by tapping the map
 await G(host, () => window.__gl.act('drawCircle'));
 await G(host, ([a, b]) => window.__gl.tapMap(a, b), C);
@@ -311,6 +365,21 @@ ok(await until(async () => (await state(host)).phase === 'hunting', 6000, 'hunti
 st = await state(host);
 ok(!!st.jail && st.flags.length === 2 && !!st.potato && !!st.sprint && [A, B, Cc].every((h) => st.players[h.pid].mission), 'jail, 2 flags, hot potato, extraction timer and a secret mission per hider all set up');
 ok([A, B, Cc].every((h) => st.players[h.pid].inv.decoy === 1) && st.players[sk2.pid].inv.radar === 1, 'starter power-ups handed out');
+
+// a pin mid-hunt: the seeker sends one to hider A only
+{
+  await sk2.page.click('#btn-pin');
+  await G(sk2, ([a, b]) => window.__gl.tapMap(a, b), ring(45));
+  await until(async () => G(sk2, () => !!document.querySelector('#pin-send')), 3000, 'pin modal hunt');
+  ok((await G(sk2, () => [...document.querySelectorAll('.pin-quick [data-pq]')].map((b) => b.dataset.pq).join())) === 'all,hider,seeker,none', 'during a round the pin sheet has Hiders and Seekers buttons');
+  await sk2.page.fill('#pin-note', 'trade?');
+  await sk2.page.click(`.pin-to-row:has(input[value="${A.pid}"])`);
+  await sk2.page.click('#pin-send');
+  ok(await until(async () => (await G(A, () => window.__gl.pins)).some((x) => x.from === sk2.pid && x.note === 'trade?'), 5000, 'hunt pin'), 'a seeker can pin one hider mid-round');
+  ok(await G(A, () => { const u = document.querySelector('#last-up'); return !!u && !u.hidden && u.textContent.includes('sent you a pin'); }), 'mid-round the receiver gets the in-game alert');
+  await sleep(400);
+  ok(!(await G(B, () => window.__gl.pins)).some((x) => x.from === sk2.pid), 'other hiders never see it');
+}
 
 // mission
 const mOld = st.players[A.pid].mission;
