@@ -1578,7 +1578,7 @@ function onEvent(e) {
   const IN = (k) => `<b>${ITEM_INFO[k].name}</b>`;
   bigAlertFor(e, p);
   if (e.k === 'catch') {
-    if (e.who === me.id) { beep('caught'); buzz([500]); fx('caught', 'Caught!', 'blue'); toast(S.settings.infection ? 'You got caught. You\'re a seeker now.' : 'You got caught.', 'seeker', 'caught'); }
+    if (e.who === me.id) { L_.lastNearSend = 0; beep('caught'); buzz([500]); fx('caught', 'Caught!', 'blue'); toast(S.settings.infection ? 'You got caught. You\'re a seeker now.' : 'You got caught.', 'seeker', 'caught'); }
     else if (e.by === me.id) { beep('tag'); buzz([60, 40, 160]); fx('check', 'Got them! +50', 'blue'); toast(`You caught <b>${nm(e.who)}</b>. +50${e.reward ? ` and ${IN(e.reward)}` : ''}`, 'good', 'check'); }
     else toast(e.how === 'zone' ? `<b>${nm(e.who)}</b> left the zone and is out` : `<b>${nm(e.who)}</b> was caught${e.by ? ' by ' + nm(e.by) : ''}`, '', e.how === 'zone' ? 'strictZone' : 'caught');
     if (e.who === me.id && S.jail) setTimeout(() => toast('Go to the jail. A free hider can break you out.', 'hider', 'jail'), 2500);
@@ -1988,22 +1988,6 @@ function clientTick() {
     if (toNext <= 10000 && L_.warnedN !== n + 1) { L_.warnedN = n + 1; beep('warn'); buzz([60, 80, 60]); toast('<b>Ping in 10 s.</b> Get under cover.', 'hider', 'clock'); }
   }
   if (S.phase === 'hunting' && p) reachThings(p, now);
-  // seeker alarm: seekers quietly share their spot, hiders' phones play the alarm when one is close
-  const range = +S.settings.alarmM || 0;
-  // every seeker counts, including hiders who got caught in Infection and joined them (they keep caughtAt)
-  if (range && S.phase === 'hunting' && p && p.role === 'seeker' && !p.extracted && myPos && now - L_.lastNearSend >= ALARM_SEND_MS) {
-    L_.lastNearSend = now; send('seekerNear', { p: myPos.p });
-  }
-  let nearM = Infinity;
-  if (range && S.phase === 'hunting' && p && p.role === 'hider' && alive(p) && myPos) {
-    for (const [id, x] of Object.entries(L_.nearLocs)) {
-      const q = P(id);
-      if (id === me.id || !q || q.role !== 'seeker' || q.extracted || now - x.t > ALARM_STALE_MS) continue;
-      nearM = Math.min(nearM, G.dist(myPos.p, x.p));
-    }
-  }
-  L_.alarmM = nearM;
-  alarmUpdate(now < (S.silenceUntil || 0) ? Infinity : nearM, range); // a Silencer mutes it
   // shrink notices
   if (S.phase === 'hunting' && S.settings.shrink && !smoothShrink()) {
     const k = shrinkStep(now);
@@ -2014,6 +1998,29 @@ function clientTick() {
   if (Math.floor(now / 1000) !== clientTick.lastSec) { clientTick.lastSec = Math.floor(now / 1000); renderMarks(); if (S.phase === 'hunting' || S.phase === 'hiding') renderDynamicSheet(); }
 }
 
+// Seeker alarm, run on its own so nothing else in the game loop can stop it.
+// Every seeker shares their spot every few seconds, including hiders who got caught in Infection and
+// joined them (they keep caughtAt). A hider's phone plays the alarm when any of them is in range.
+function alarmTick() {
+  if (!S) return;
+  const now = hostNow(), p = mine();
+  const range = +S.settings.alarmM || 0;
+  const hunting = range && S.phase === 'hunting';
+  if (hunting && p && p.role === 'seeker' && !p.extracted && myPos && !(now - L_.lastNearSend < ALARM_SEND_MS)) {
+    L_.lastNearSend = now; send('seekerNear', { p: myPos.p });
+  }
+  let nearM = Infinity;
+  if (hunting && p && p.role === 'hider' && alive(p) && myPos) {
+    for (const [id, x] of Object.entries(L_.nearLocs || {})) {
+      const q = P(id);
+      // only seekers ever send this, so trust the message even if this phone hasn't heard about a catch yet
+      if (id === me.id || !q || q.extracted || now - x.t > ALARM_STALE_MS) continue;
+      nearM = Math.min(nearM, G.dist(myPos.p, x.p));
+    }
+  }
+  L_.alarmM = nearM;
+  alarmUpdate(now < (S.silenceUntil || 0) ? Infinity : nearM, range); // a Silencer mutes it
+}
 function near(pt, r = REACH_M) { return myPos && pt && G.dist(myPos.p, pt) <= r + Math.min(10, (myPos.acc || 0) / 2); }
 function sendOnce(key, t, d, now, gap = 4000) { if ((L_.sentAt[key] || 0) > now - gap) return; L_.sentAt[key] = now; send(t, { ...d, p: myPos.p, acc: myPos.acc }); }
 function reachThings(p, now) {
@@ -2224,7 +2231,7 @@ document.addEventListener('pointerdown', () => { if (S) requestWake(); unlockAud
 document.addEventListener('touchend', unlockAudio, { passive: true });
 document.addEventListener('keydown', unlockAudio);
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') { requestWake(); unlockAudio(); if (L_.wentAway) { L_.wentAway = false; showAwayWarning(); } }
+  if (document.visibilityState === 'visible') { requestWake(); unlockAudio(); L_.lastNearSend = 0; if (L_.wentAway) { L_.wentAway = false; showAwayWarning(); } }
   else screenWentAway();
 });
 window.addEventListener('pagehide', screenWentAway);
@@ -2233,7 +2240,7 @@ window.addEventListener('pagehide', screenWentAway);
 function screenWentAway() {
   if (!S || S.phase !== 'hunting') return;
   const p = mine();
-  if (!p || !alive(p)) return;
+  if (!p || p.extracted || (p.role === 'hider' && p.caughtAt)) return; // infected seekers count: they keep caughtAt
   const now = Date.now();
   if (now - (L_.lastAway || 0) < 5000) return; // visibilitychange and pagehide can both fire
   L_.lastAway = now; L_.wentAway = true;
@@ -3821,7 +3828,7 @@ function leave(msg) {
   if (msg) showHomeErr(msg);
 }
 
-setInterval(() => { clientTick(); const u = $('#last-up'); if (u && !u.hidden) showLastUp(); }, 500);
+setInterval(() => { try { alarmTick(); } catch (e) { console.error(e); } clientTick(); const u = $('#last-up'); if (u && !u.hidden) showLastUp(); }, 500);
 
 // test and debug hooks
 window.__gl = {

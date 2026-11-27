@@ -333,6 +333,10 @@ await setPos(seeker, off(0, -600));
 await setPos(hiders[0], off(60, -230)); // 20 m from hiders[2]
 ok(await until(async () => (await G(hiders[2], (id) => !!window.__gl.local.nearLocs[id], hiders[0].pid)), 8000, 'infected near'), 'a hider who joined the seekers shares their spot for the alarm');
 ok(await until(async () => G(hiders[2], () => window.__gl.alarmOn), 8000, 'infected alarm'), 'the alarm plays when a seeker who started as a hider gets close');
+// an infected seeker who turns off their screen is called out like any seeker (so they can't quietly drop off the alarm)
+await G(hiders[0], () => { Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true }); document.dispatchEvent(new Event('visibilitychange')); });
+ok(await until(async () => (await G(hiders[2], () => document.body.innerText)).includes('turned off their screen'), 5000, 'infected away'), 'an infected seeker turning off their screen is called out to everyone');
+await G(hiders[0], () => { Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true }); document.dispatchEvent(new Event('visibilitychange')); });
 await setPos(hiders[0], off(60, 100));
 ok(await until(async () => !(await G(hiders[2], () => window.__gl.alarmOn)), 8000, 'infected alarm off'), 'and stops when they walk away');
 await setPos(seeker, off(0, 0));
