@@ -577,8 +577,12 @@ ok(await G(sk2, (id) => window.__gl.local.pings.some((x) => x.id === id && x.alt
   ok(await until(async () => (await Wl(sk2.pid)) === 100 + 15 * inNow && (await Wl(A.pid)) === 85, 4000, 'tax'), `tax takes 15 from each of the ${inNow} hiders still in`);
   await G(host, (w) => Object.entries(w).forEach(([id, n]) => window.__gl.setWallet(id, n)), wallets0); // put back so later wallet checks hold
   await until(async () => (await Wl(sk2.pid)) === (wallets0[sk2.pid] || 0), 4000, 'unfund');
-  await give(sk2, 'flashbang'); await aim(sk2, 'flashbang', A);
-  ok(await until(async () => A.page.evaluate(() => document.body.classList.contains('flashed')), 4000, 'flash'), "flashbang whites out the hider's screen");
+  await give(sk2, 'flashbang'); await use(sk2, 'flashbang');
+  { const hidersNow = Object.entries((await state(host)).players).filter(([, x]) => x.role === 'hider' && !x.caughtAt && !x.extracted).map(([id]) => all.find((ph) => ph.pid === id)).filter(Boolean);
+    ok(hidersNow.length > 1 && await until(async () => (await Promise.all(hidersNow.map((ph) => ph.page.evaluate(() => document.body.classList.contains('flashed'))))).every(Boolean), 4000, 'flash'), `flashbang whites out every hider's screen (${hidersNow.length})`);
+    ok(!(await sk2.page.evaluate(() => document.body.classList.contains('flashed'))), 'but not the seeker who used it');
+    ok(/30000ms/.test(await A.page.evaluate(() => document.body.style.getPropertyValue('--flash-ms'))) || +(await A.page.evaluate(() => parseInt(document.body.style.getPropertyValue('--flash-ms')))) > 25000, 'and it lasts 30 s');
+    await Promise.all(hidersNow.map((ph) => ph.page.evaluate(() => document.body.classList.remove('flashed')))); } // clear it so later screenshots aren't white
   const end0 = (await state(host)).huntEnd;
   await give(sk2, 'overtime'); await use(sk2, 'overtime');
   ok(await until(async () => (await state(host)).huntEnd === end0 + 60000, 4000, 'overtime'), 'overtime adds a minute');
