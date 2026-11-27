@@ -179,6 +179,7 @@ const OPTS = {
   wireSec: [[60, '1 min'], [120, '2 min'], [180, '3 min'], [300, '5 min'], [600, '10 min']],
   alarmM: [[0, 'Off'], [20, 'Within 20 m'], [30, 'Within 30 m'], [50, 'Within 50 m'], [75, 'Within 75 m'], [100, 'Within 100 m'], [150, 'Within 150 m'], [200, 'Within 200 m']],
   seekers: [[1, '1'], [2, '2'], [3, '3']],
+  seekPick: [['random', 'Random'], ['choose', 'Host picks']],
   dropM: [[5, '5 m'], [10, '10 m'], [15, '15 m'], [20, '20 m'], [30, '30 m']],
   dropSec: [[60, 'Every 1 min'], [120, 'Every 2 min'], [180, 'Every 3 min'], [300, 'Every 5 min'], [600, 'Every 10 min']],
   shrinkStyle: [['smooth', 'Closes in smoothly'], ['steps', 'Jumps in at each ping']],
@@ -191,12 +192,27 @@ const TAG_HINT = {
   photo: () => 'Snap a clear photo of them. They confirm it is them, or the host decides.',
 };
 const DEFAULT_SETTINGS = {
-  hideSec: 120, huntSec: 1200, pingSec: 300, blurM: 25, tagRadiusM: 20, seekers: 1,
+  hideSec: 120, huntSec: 1200, pingSec: 300, blurM: 25, tagRadiusM: 20, seekers: 1, seekPick: 'random',
   tagMode: 'gps', infection: true, fugitive: false, jail: false, starter: true, drops: true, dropSec: 180, dropM: 10,
   missions: false, capture: false, potato: false, sprint: false, treasure: false, duel: false, duelSec: 180, wire: false, wireSec: 180,
   shrink: true, shrinkStyle: 'smooth', shrinkTo: 0.4, strictZone: true, graceSec: 15,
   alarmM: 50, // seeker alarm: hiders hear the alarm clip on repeat when a seeker is this close (0 = off)
 };
+// host-picked seekers (or the runner in Fugitive): only counts for the matching mode, only players still online
+const pickKind = (s) => (s.settings.fugitive ? 'run' : 'seek');
+function pickedIds(s, online) {
+  const pk = s.picks;
+  if (s.settings.seekPick !== 'choose' || !pk || pk.kind !== pickKind(s)) return [];
+  return pk.ids.filter((id) => s.players[id] && online.includes(id));
+}
+function pickProblem(s, online) { // why the host can't start yet, or '' if the pick is fine
+  if (s.settings.seekPick !== 'choose') return '';
+  const ids = pickedIds(s, online);
+  if (s.settings.fugitive) return ids.length === 1 ? '' : 'Pick the runner to start.';
+  if (!ids.length) return 'Pick at least one seeker to start.';
+  if (ids.length >= online.length) return 'Leave at least one player as a hider.';
+  return '';
+}
 const ALARM_SEND_MS = 3000, ALARM_STALE_MS = 10000, ALARM_HYST_M = 5;
 
 // ---------------- identity ----------------
@@ -1146,11 +1162,15 @@ function startRound() {
   hostApply((s) => {
     const ids = Object.keys(s.players).filter((id) => peers.has(id));
     const n = s.settings.fugitive ? Math.max(1, ids.length - 1) : Math.max(1, Math.min(s.settings.seekers, ids.length - 1));
-    // favour people who have sought the least
-    const order = s.settings.fugitive
+    const picked = pickedIds(s, ids);
+    // host picked: the picked players seek (in Fugitive, the one picked runs and everyone else seeks)
+    // random: favour people who have sought the least
+    const order = picked.length ? (s.settings.fugitive ? ids.filter((id) => id !== picked[0]) : picked)
+      : s.settings.fugitive
       ? shuffle(ids.slice()).sort((a, b) => (s.players[b].runnerCount || 0) - (s.players[a].runnerCount || 0)) // the runner is last: whoever ran least
       : shuffle(ids.slice()).sort((a, b) => (s.players[a].seekerCount || 0) - (s.players[b].seekerCount || 0));
-    const seekers = new Set(order.slice(0, n));
+    const seekers = new Set(picked.length ? order : order.slice(0, n));
+    s.picks = null; // picks reset every round
     for (const [id, p] of Object.entries(s.players)) {
       p.role = seekers.has(id) ? 'seeker' : 'hider';
       p.startRole = p.role;
@@ -2165,7 +2185,8 @@ function renderLobby() {
   const s = S.settings;
   const ids = Object.keys(S.players).sort((a, b) => S.players[a].joinedAt - S.players[b].joinedAt);
   const online = ids.filter((id) => peers.has(id));
-  const canStart = host && S.zone && online.length >= 2;
+  const pickWhy = online.length >= 2 ? pickProblem(S, online) : '';
+  const canStart = host && S.zone && online.length >= 2 && !pickWhy;
   const { zoneInfo, zoneTools } = zonePanel(host, false);
   const g = gpsInfo();
   const n = ids.length;
@@ -2216,7 +2237,8 @@ function renderLobby() {
   const rulesBody = host ? `<div class="st-grid">
     ${set('How tags work', 'tagMode', s.tagMode, 's4')}
     ${set('Hide time', 'hideSec', s.hideSec)}${set('Round length', 'huntSec', s.huntSec)}${set('Ping every', 'pingSec', s.pingSec)}${set('Ping fuzz', 'blurM', s.blurM)}
-    ${s.fugitive ? '' : set('Seekers', 'seekers', s.seekers)}
+    ${set(s.fugitive ? 'Runner' : 'Seeker pick', 'seekPick', s.seekPick || 'random')}
+    ${s.fugitive || s.seekPick === 'choose' ? '' : set('Seekers', 'seekers', s.seekers)}
     ${s.tagMode === 'gps' ? set('Tag range', 'tagRadiusM', s.tagRadiusM) : ''}
     ${set("Seeker alarm (hiders' phones)", 'alarmM', s.alarmM ?? 0, 's2')}
     ${s.shrink ? set('Zone', 'shrinkStyle', s.shrinkStyle || 'steps', 's2') + set('Final zone', 'shrinkTo', s.shrinkTo, 's2') : ''}
@@ -2228,19 +2250,32 @@ function renderLobby() {
     <div>${ic('clock')}<span class="txt"><b>${optLabel('hideSec', s.hideSec)}</b> to hide, then a <b>${optLabel('huntSec', s.huntSec)}</b> hunt</span></div>
     <div>${ic('pin')}<span class="txt">Hiders ping every <b>${optLabel('pingSec', s.pingSec)}</b>${+s.blurM ? `, fuzzed by ${optLabel('blurM', s.blurM)}` : ', exact spot'}</span></div>
     <div>${ic('tag')}<span class="txt">${s.tagMode === 'gps' ? `Tag by getting within <b>${optLabel('tagRadiusM', s.tagRadiusM)}</b>` : s.tagMode === 'honor' ? 'Honor tags: tag them for real, they confirm' : 'Photo tags: snap them, they confirm'}</span></div>
-    <div>${ic('eye')}<span class="txt">${s.fugitive ? 'One runner, everyone else seeks' : `<b>${s.seekers}</b> seeker${s.seekers > 1 ? 's' : ''} to start`}</span></div>
+    <div>${ic('eye')}<span class="txt">${s.fugitive ? `One runner${s.seekPick === 'choose' ? ' (the host picks)' : ''}, everyone else seeks` : s.seekPick === 'choose' ? 'The host picks the seekers' : `<b>${s.seekers}</b> random seeker${s.seekers > 1 ? 's' : ''} to start`}</span></div>
     ${+s.alarmM ? `<div>${ic('sonar')}<span class="txt">Hiders' phones play an alarm when a seeker is within <b>${s.alarmM} m</b>. It gets louder the closer they get</span></div>` : ''}
   </div>`;
   const rulesSum = `${optLabel('hideSec', s.hideSec)} to hide · ${optLabel('huntSec', s.huntSec)} hunt · ping every ${optLabel('pingSec', s.pingSec)}`;
   const rules = `<div class="card"><button class="card-tap" data-act="toggleRules" aria-expanded="${rulesOpen || !host}">${ic('sliders')}<span class="ct">Rules &amp; settings${host ? '' : ' <small>· set by the host</small>'}</span>${host ? ic('chevD', 'chev' + (rulesOpen ? ' up' : '')) : ''}</button>${rulesOpen || !host ? rulesBody : `<p class="more-sum">${esc(rulesSum)}</p>`}</div>`;
 
+  // 6. host-picked seekers / runner
+  let pickCard = '';
+  if (s.seekPick === 'choose') {
+    const run = !!s.fugitive;
+    const picked = pickedIds(S, online);
+    const title = run ? 'Pick the runner' : 'Pick the seekers';
+    const note = run ? 'Tap the player who runs this round. Everyone else seeks.' : 'Tap everyone who starts as a seeker. Picks reset after each round.';
+    pickCard = host
+      ? `<div class="card pick-card"><div class="card-h">${ic('eye')}<span class="ct">${title}</span><span class="cnt">${picked.length ? picked.length + ' picked' : ''}</span></div><p class="card-note">${note}</p>
+        <div class="pick-list">${online.map((id) => { const on = picked.includes(id); return `<button class="pick ${on ? 'on' : ''}" data-act="pick" data-id="${id}" aria-pressed="${on}">${avatar(S.players[id], on && !run ? 'seeker' : '')}<span class="nm">${esc(S.players[id].name)}${id === me.id ? ' <small>(you)</small>' : ''}</span>${on ? `<span class="tagw">${run ? 'Runner' : 'Seeker'}</span>` : ''}</button>`; }).join('')}</div></div>`
+      : `<div class="card pick-card"><div class="card-h">${ic('eye')}<span class="ct">${run ? 'Runner' : 'Seekers'} <small>· picked by the host</small></span></div>${picked.length ? `<div class="mchips">${picked.map((id) => `<span class="mchip">${esc(S.players[id].name)}${id === me.id ? ' (you)' : ''}</span>`).join('')}</div>` : '<p class="card-note" style="margin:0">Not picked yet</p>'}</div>`;
+  }
+
   const noLocIds = online.filter(noLoc);
   setSheet(`<div class="lob">
     ${geoNote()}
-    ${summary}${duo}${zone}${modes}${more}${rules}
+    ${summary}${duo}${zone}${modes}${more}${rules}${pickCard}
     ${noLocIds.length ? `<p class="note warn">${ic('pin')}<span>${noLocIds.map((id) => esc(S.players[id].name)).join(', ')} ${noLocIds.length > 1 ? "haven't" : "hasn't"} shared location. They can tap the settings button at the top.</span></p>` : ''}
     <div class="lob-foot">
-      ${host && !canStart ? `<p class="hint">${!S.zone ? 'Set a play zone to start.' : 'Need at least 2 players.'}</p>` : ''}
+      ${host && !canStart ? `<p class="hint">${!S.zone ? 'Set a play zone to start.' : online.length < 2 ? 'Need at least 2 players.' : pickWhy}</p>` : ''}
       <div class="lob-btns"><button class="btn big lv" data-act="leave">Leave</button>
       ${host ? `<button class="btn primary big" data-act="start" ${canStart ? '' : 'disabled'}>Start round</button>` : `<button class="btn big" disabled>Waiting for host</button>`}</div>
     </div>
@@ -2896,6 +2931,12 @@ function act(a, el) {
       break;
     }
     case 'start': startRound(); break;
+    case 'pick': if (isHost()) hostApply((s) => {
+      const kind = pickKind(s), id = el.dataset.id;
+      const cur = s.picks && s.picks.kind === kind ? s.picks.ids.filter((x) => s.players[x]) : [];
+      const ids = kind === 'run' ? (cur.includes(id) ? [] : [id]) : cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+      s.picks = { kind, ids };
+    }); break;
     case 'again': hostApply((s) => { s.phase = 'lobby'; s.events = []; s.results = null; for (const x of Object.values(s.players)) { x.role = 'hider'; x.caughtAt = null; x.inv = {}; x.fx = {}; x.extracted = null; x.mission = null; } s.drops = []; s.flags = []; s.jail = null; s.potato = null; s.sprint = null; s.treasure = null; s.wire = null; s.duel = null; for (const x of Object.values(s.players)) x.live = false; }); break;
     case 'endNow': if (confirm('End this round now?')) hostApply((s) => endRound(s, 'host')); break;
     case 'duelOpen': openDuel(); break;
