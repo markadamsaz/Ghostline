@@ -195,7 +195,7 @@ const DEFAULT_SETTINGS = {
   tagMode: 'gps', infection: true, fugitive: false, jail: false, starter: true, drops: true, dropSec: 180, dropM: 10,
   missions: false, capture: false, potato: false, sprint: false, treasure: false, duel: false, duelSec: 180, wire: false, wireSec: 180,
   shrink: true, shrinkStyle: 'smooth', shrinkTo: 0.4, strictZone: true, graceSec: 15,
-  alarmM: 50, // seeker alarm: hiders hear "wanna sprite cranberry?" on repeat when a seeker is this close (0 = off)
+  alarmM: 50, // seeker alarm: hiders hear the alarm clip on repeat when a seeker is this close (0 = off)
 };
 const ALARM_SEND_MS = 3000, ALARM_STALE_MS = 10000, ALARM_HYST_M = 5;
 
@@ -427,13 +427,13 @@ function playRecv() {
 }
 const buzz = (p) => { if (!prefs.haptics) return; try { navigator.vibrate && navigator.vibrate(p); } catch {} };
 
-// Seeker alarm: "wanna sprite cranberry?" loops on a hider's phone while a seeker is in range.
+// Seeker alarm: the alarm clip loops on a hider's phone while a seeker is in range.
 // The closer the seeker, the louder it plays and the shorter the gap between plays.
 const alarm = { buf: null, loading: false, src: null, gain: null, nextAt: 0, on: false };
 function loadAlarm() {
   if (alarm.buf || alarm.loading || !actx) return;
   alarm.loading = true;
-  fetch('audio/sprite-cranberry.m4a').then((r) => r.arrayBuffer())
+  fetch('audio/seeker-alarm.m4a').then((r) => r.arrayBuffer())
     .then((b) => new Promise((ok, no) => actx.decodeAudioData(b, ok, no)))
     .then((buf) => { alarm.buf = buf; })
     .catch(() => {})
