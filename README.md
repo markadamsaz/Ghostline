@@ -1,6 +1,6 @@
 # Ghostline
 
-Real-world hide and seek for phones. The host draws a play zone, friends join with a 4-letter code, a seeker is picked at random, and hiders' phones ping a fuzzy spot to the seekers on a timer.
+Real-world hide and seek for phones. The host draws a play zone, friends join with a 4-letter code, seekers are picked at random (or by the host), and hiders' phones ping a fuzzy spot to the seekers on a timer.
 
 ## Play
 Open the game link on your phone, allow location, create a game and share the code or QR.
@@ -15,6 +15,10 @@ Tags: GPS range, honor tag (they confirm) or photo tag (snap them, they confirm)
 - **Treasure drops:** a chest pops up in the open about every 90 s. A hider who grabs it gets +30, but their exact spot pings to the seekers.
 - **Showdown:** every few minutes (the host picks how often) two random hiders, anywhere in the zone, face off in a quick game: rock paper scissors, a tap race, a reaction test or a memory pattern. The winner gets +25 and the loser loses nothing. With an odd number of hiders one sits it out; a hider who doesn't play in 45 s, or gets caught, loses.
 - **Live Wire:** one hider holds the wire and sees where the other hiders are. Walking within 15 m of one passes it. Passing doesn't reset the fuse (1 to 10 min, set in the lobby). Whoever holds it when the fuse runs out goes live: seekers see their exact spot for the rest of the round. A new wire goes to someone else a minute later.
+
+## Picking the seekers
+
+Under **Rules & settings**, **Seeker pick** is Random (the default: the Seekers count picks that many, favouring whoever has sought least) or Host picks. With Host picks, a **Pick the seekers** card lists everyone in the lobby: the host taps each player who starts as a seeker (any number, as long as one player is left to hide). In Fugitive mode the host taps the one runner instead. Other phones see who was picked. Picks reset after each round.
 
 ## Seeker alarm
 

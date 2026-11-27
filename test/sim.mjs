@@ -498,8 +498,14 @@ await G(A, () => window.__gl.send('buy', { k: 'spotlight' }));
 await sleep(800);
 ok((await Wl(A.pid)) === 30 && !((await state(host)).players[A.pid].bank || {}).spotlight, "you can't buy what you can't afford");
 for (const ph of all) await setPos(ph, C);
+// ---- host picks the runner
+await G(host, () => window.__gl.setSettings({ seekPick: 'choose' }));
+ok(await until(async () => await host.page.isDisabled('[data-act="start"]'), 4000, 'pick gate'), "with 'Host picks' on, the round can't start until the runner is picked");
+await host.page.click(`[data-act="pick"][data-id="${A.pid}"]`);
+ok(await until(async () => (await host.page.isEnabled('[data-act="start"]')) && (await others[0].page.isVisible('.pick-card .mchip')), 4000, 'picked'), 'picking the runner unlocks Start, and other phones see the pick');
 await host.page.click('[data-act="start"]');
 ok(await until(async () => (await state(host)).phase === 'hunting', 8000, 'hunting3'), 'fugitive round starts');
+{ const s3 = await state(host); ok(s3.players[A.pid].role === 'hider' && Object.values(s3.players).filter((p) => p.role === 'hider').length === 1 && !s3.picks, 'the picked player is the runner, and the pick resets for the next round'); }
 st = await state(host);
 const runners = all.filter((p) => st.players[p.pid].role === 'hider');
 ok(runners.length === 1, `fugitive: one runner (${runners[0]?.name}), everyone else hunts`);
