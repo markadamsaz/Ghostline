@@ -266,7 +266,7 @@ function pickProblem(s, online) { // why the host can't start yet, or '' if the 
   if (ids.length >= online.length) return 'Leave at least one player as a hider.';
   return '';
 }
-const ALARM_SEND_MS = 3000, ALARM_STALE_MS = 10000, ALARM_HYST_M = 5;
+const ALARM_SEND_MS = 2000, ALARM_MOVE_M = 8, ALARM_SLACK_M = 15, ALARM_STALE_MS = 10000, ALARM_HYST_M = 5;
 
 // ---------------- identity ----------------
 function loadMe() {
@@ -446,15 +446,73 @@ function unlockAudio() {
     if (actx.state !== 'running') actx.resume().catch(() => {});
     if (!L_unlocked) { L_unlocked = true; const b = actx.createBuffer(1, 1, 22050), src = actx.createBufferSource(); src.buffer = b; src.connect(actx.destination); src.start(0); } // iOS needs a sound played inside a tap
   } catch {}
+  primeMedia();
   if (typeof loadAlarm === 'function' && S) loadAlarm();
   if (typeof loadSfx === 'function') loadSfx();
 }
 let L_unlocked = false;
+const audioOk = () => !!actx && actx.state === 'running';
+// Backup player for when web audio is shut off. iPhones stop web audio when the screen dims, a
+// notification or call comes in, or the app comes back from the background, and only a tap starts it
+// again, so a hider sitting still would hear nothing. A media element that has played once inside a
+// tap can play again later without one, so every tap primes it with a moment of silence, and any
+// sound that can't go through web audio plays through it instead.
+const media = { el: null, mode: null, silent: null, urls: {} };
+function wavUrl(seq, wave = 'square', vol = 0.3) { // beeps (or silence, f = 0) as a WAV file
+  const rate = 22050, gap = Math.round(0.04 * rate);
+  let n = 0; for (const [, d] of seq) n += Math.round(d * rate) + gap;
+  const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const w = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+  let o = 44;
+  for (const [f, d] of seq) {
+    const len = Math.round(d * rate);
+    for (let k = 0; k < len; k++) {
+      const ph = Math.sin(2 * Math.PI * f * k / rate), x = wave === 'square' ? (ph >= 0 ? 1 : -1) : ph;
+      v.setInt16(o, f ? Math.round(x * vol * Math.exp(-5 * k / len) * 32767) : 0, true); o += 2;
+    }
+    o += gap * 2;
+  }
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+}
+function mediaEl() {
+  if (!media.el) { const a = new Audio(); a.preload = 'auto'; a.setAttribute('playsinline', ''); a.setAttribute('webkit-playsinline', ''); media.el = a; }
+  return media.el;
+}
+function primeMedia() { // call inside a tap
+  try {
+    if (media.mode) return; // it's playing something real
+    const a = mediaEl();
+    if (!media.silent) media.silent = wavUrl([[0, 0.05]]);
+    a.loop = false; a.src = media.silent;
+    const pr = a.play(); if (pr && pr.catch) pr.catch(() => {});
+  } catch {}
+}
+function mediaPlay(url, loop, mode) {
+  try {
+    const a = mediaEl();
+    media.mode = mode;
+    if (a.getAttribute('src') !== url) a.src = url;
+    a.loop = loop; try { a.currentTime = 0; } catch {}
+    a.onended = () => { if (media.mode === mode && !a.loop) media.mode = null; };
+    const pr = a.play();
+    if (pr && pr.catch) pr.catch(() => { if (media.mode === mode) media.mode = null; }); // not primed yet: the next tick tries again
+    return true;
+  } catch { if (media.mode === mode) media.mode = null; return false; }
+}
+function mediaStop(mode) { if (media.mode !== mode) return; media.mode = null; try { media.el.pause(); } catch {} }
+// a short sound through the backup player (never over the seeker alarm)
+function mediaSfx(key, make) {
+  if (media.mode === 'alarm' || media.mode === 'siren') return;
+  try { if (!media.urls[key]) media.urls[key] = make(); mediaPlay(media.urls[key], false, 'sfx'); } catch {}
+}
 function beep(kind) {
   try {
     if (!actx) unlockAudio();
     if (actx.state !== 'running') actx.resume().catch(() => {});
     const seq = { ping: [[880, .08], [1320, .12]], warn: [[660, .1], [660, .1]], caught: [[300, .2], [200, .35]], tag: [[1000, .05], [1500, .08]], alarm: [[900, .15], [600, .15], [900, .15]], start: [[523, .1], [659, .1], [784, .2]] }[kind] || [[700, .1]];
+    if (!audioOk()) { mediaSfx('beep:' + kind, () => wavUrl(seq)); return; }
     let t = actx.currentTime;
     for (const [f, d] of seq) {
       const o = actx.createOscillator(), g = actx.createGain();
@@ -480,7 +538,7 @@ function playSend() {
   try {
     if (!actx) unlockAudio();
     if (actx.state !== 'running') actx.resume().catch(() => {});
-    if (!sfx.send) { loadSfx(); return; }
+    if (!audioOk() || !sfx.send) { loadSfx(); mediaSfx('send', () => 'audio/send.m4a'); return; }
     const src = actx.createBufferSource(); src.buffer = sfx.send; src.connect(actx.destination); src.start();
   } catch {}
 }
@@ -488,6 +546,7 @@ function playRecv() {
   if (!prefs.chatSounds) return;
   try {
     if (!actx) unlockAudio();
+    if (!audioOk()) { actx && actx.resume().catch(() => {}); mediaSfx('recv', () => wavUrl([[1175, .09], [1568, .16]], 'sine', 0.4)); return; }
     let t = actx.currentTime;
     for (const [f, d] of [[1175, .09], [1568, .16]]) {
       const o = actx.createOscillator(), g = actx.createGain();
@@ -501,11 +560,12 @@ const buzz = (p) => { if (!prefs.haptics) return; try { navigator.vibrate && nav
 
 // Seeker alarm: the alarm clip loops on a hider's phone while a seeker is in range.
 // The closer the seeker, the louder it plays and the shorter the gap between plays.
-const alarm = { buf: null, loading: false, src: null, gain: null, nextAt: 0, on: false };
+const ALARM_URL = 'audio/seeker-alarm.m4a';
+const alarm = { buf: null, loading: false, src: null, gain: null, nextAt: 0, on: false, lastBuzz: 0 };
 function loadAlarm() {
   if (alarm.buf || alarm.loading || !actx) return;
   alarm.loading = true;
-  fetch('audio/seeker-alarm.m4a').then((r) => r.arrayBuffer())
+  fetch(ALARM_URL).then((r) => r.arrayBuffer())
     .then((b) => new Promise((ok, no) => actx.decodeAudioData(b, ok, no)))
     .then((buf) => { alarm.buf = buf; })
     .catch(() => {})
@@ -513,6 +573,7 @@ function loadAlarm() {
 }
 function stopAlarm() {
   alarm.on = false; alarm.nextAt = 0;
+  mediaStop('alarm');
   if (alarm.src) { try { alarm.gain.gain.setTargetAtTime(0, actx.currentTime, 0.05); alarm.src.stop(actx.currentTime + 0.3); } catch {} }
   alarm.src = null; alarm.gain = null;
 }
@@ -520,12 +581,17 @@ function stopAlarm() {
 function alarmUpdate(d, range) {
   const inRange = range > 0 && d <= range + (alarm.on ? ALARM_HYST_M : 0);
   if (!inRange) { if (alarm.on) stopAlarm(); return; }
-  if (!actx) return;
-  if (actx.state === 'suspended') actx.resume().catch(() => {});
-  if (!alarm.buf) { loadAlarm(); return; }
   const k = Math.max(0, Math.min(1, 1 - d / range)); // 0 at the edge of the range, 1 right on top of you
   const vol = 0.3 + 0.7 * k;
-  if (!alarm.on) { alarm.on = true; buzz([120, 80, 120]); }
+  if (!alarm.on) { alarm.on = true; alarm.nextAt = 0; alarm.lastBuzz = 0; }
+  const nowMs = Date.now();
+  if (nowMs - alarm.lastBuzz > 2500) { alarm.lastBuzz = nowMs; buzz([150, 80, 150]); }
+  if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch {} }
+  if (actx && actx.state !== 'running') actx.resume().catch(() => {});
+  if (actx && !alarm.buf) loadAlarm();
+  // web audio is off (or the clip isn't decoded yet): the backup player loops the clip until they leave
+  if (!audioOk() || !alarm.buf) { if (media.mode !== 'alarm' || media.el.paused) mediaPlay(ALARM_URL, true, 'alarm'); return; }
+  if (media.mode === 'alarm') { mediaStop('alarm'); alarm.nextAt = 0; } // web audio is back: hand over
   if (alarm.gain) alarm.gain.gain.setTargetAtTime(vol, actx.currentTime, 0.1); // gets louder mid-clip as they close in
   const t = actx.currentTime;
   if (t < alarm.nextAt) return;
@@ -1222,7 +1288,7 @@ function handle(m, self) {
       break;
     }
     case 'seekerNear': { // for the seeker alarm only: never drawn on the map
-      if (Array.isArray(d.p) && d.p.length === 2 && d.p.every(Number.isFinite)) L_.nearLocs[m.from] = { p: d.p, t: hostNow() };
+      if (Array.isArray(d.p) && d.p.length === 2 && d.p.every(Number.isFinite)) L_.nearLocs[m.from] = { p: d.p, acc: Math.min(100, Math.max(0, +d.acc || 0)), t: hostNow() };
       break;
     }
     case 'chat': {
@@ -1778,9 +1844,12 @@ function flashScreen(ms) {
 }
 // plays the seeker alarm clip out loud, back to back, for a few seconds (the Siren)
 function sirenBlast(sec) {
-  if (!actx) return;
-  if (actx.state === 'suspended') actx.resume().catch(() => {});
-  if (!alarm.buf) { loadAlarm(); setTimeout(() => { if (alarm.buf) sirenBlast(sec); }, 1500); return; }
+  if (actx && actx.state !== 'running') actx.resume().catch(() => {});
+  if (actx && !alarm.buf) loadAlarm();
+  if (!audioOk() || !alarm.buf) {
+    if (media.mode === 'alarm') return; // already blaring
+    mediaPlay(ALARM_URL, true, 'siren'); setTimeout(() => mediaStop('siren'), sec * 1000); return;
+  }
   let t = actx.currentTime; const end = t + sec;
   while (t < end) { const src = actx.createBufferSource(); src.buffer = alarm.buf; src.connect(actx.destination); src.start(t); src.stop(Math.min(end, t + alarm.buf.duration)); t += alarm.buf.duration + 0.1; }
 }
@@ -2021,8 +2090,11 @@ function alarmTick() {
   const now = hostNow(), p = mine();
   const range = +S.settings.alarmM || 0;
   const hunting = range && S.phase === 'hunting';
-  if (hunting && p && p.role === 'seeker' && !p.extracted && myPos && !(now - L_.lastNearSend < ALARM_SEND_MS)) {
-    L_.lastNearSend = now; send('seekerNear', { p: myPos.p });
+  if (hunting && p && p.role === 'seeker' && !p.extracted && myPos) {
+    const since = now - (L_.lastNearSend || 0), moved = L_.lastNearP ? G.dist(L_.lastNearP, myPos.p) : Infinity;
+    if (!(since < ALARM_SEND_MS) || (since >= 800 && moved >= ALARM_MOVE_M)) { // every 2 s, and right away when they move
+      L_.lastNearSend = now; L_.lastNearP = myPos.p; send('seekerNear', { p: myPos.p, acc: myPos.acc });
+    }
   }
   let nearM = Infinity;
   if (hunting && p && p.role === 'hider' && alive(p) && myPos) {
@@ -2030,7 +2102,9 @@ function alarmTick() {
       const q = P(id);
       // only seekers ever send this, so trust the message even if this phone hasn't heard about a catch yet
       if (id === me.id || !q || q.extracted || now - x.t > ALARM_STALE_MS) continue;
-      nearM = Math.min(nearM, G.dist(myPos.p, x.p));
+      // GPS can be off by a few meters either way, so give the hider the benefit of the doubt
+      const slack = Math.min(ALARM_SLACK_M, ((myPos.acc || 0) + (x.acc || 0)) / 2);
+      nearM = Math.min(nearM, Math.max(0, G.dist(myPos.p, x.p) - slack));
     }
   }
   L_.alarmM = nearM;
@@ -3878,7 +3952,7 @@ setInterval(() => { try { alarmTick(); } catch (e) { console.error(e); } clientT
 // test and debug hooks
 window.__gl = {
   get S() { return S; }, get map() { return map; }, get bear() { return mapBear; }, feed: () => chat.map((c) => (c.sys ? c.html : c.text)).join('\n'), setBearing, get me() { return me; }, get peers() { return [...peers]; }, get local() { return L_; },
-  get myPos() { return myPos; }, get pins() { return [...pins.values()]; }, get alarmOn() { return alarm.on; }, get awake() { return !!wakeLock || !!(wakeVideo && !wakeVideo.paused); }, hostNow, currentZone,
+  get myPos() { return myPos; }, get pins() { return [...pins.values()]; }, get alarmOn() { return alarm.on; }, get alarmVia() { return !alarm.on ? null : media.mode === 'alarm' && !media.el.paused ? 'media' : audioOk() ? 'web' : null; }, cutAudio: () => { actx.onstatechange = null; return actx.suspend(); }, get awake() { return !!wakeLock || !!(wakeVideo && !wakeVideo.paused); }, hostNow, currentZone,
   ...(DEBUG ? {
     setPos, act, send, feedFix: (lat, lng, acc) => onPos({ coords: { latitude: lat, longitude: lng, accuracy: acc } }),
     setSettings: (o) => hostApply((s) => { Object.assign(s.settings, o); if (o.jail) s.settings.infection = false; if (o.infection) s.settings.jail = false; }),
