@@ -189,6 +189,11 @@ await setPos(hiders[1], off(0, 20));
 ok(await until(async () => (await G(hiders[1], () => window.__gl.local.alarmM)) <= 50, 8000, 'alarm range'), 'hider within the alarm range knows a seeker is close');
 ok(await until(async () => G(hiders[1], () => window.__gl.alarmOn), 8000, 'alarm sound'), 'the seeker alarm plays on the close hider');
 ok(!(await G(hiders[0], () => window.__gl.alarmOn)) && (await G(hiders[0], () => window.__gl.local.alarmM)) > 50, 'a far hider hears nothing');
+// iPhones shut web audio off when the screen dims or a notification comes in: the backup player takes over
+await G(hiders[1], () => window.__gl.cutAudio());
+ok(await until(async () => (await G(hiders[1], () => window.__gl.alarmVia)) === 'media', 8000, 'alarm backup'), 'the alarm still plays when the phone shuts web audio off');
+await G(hiders[1], () => document.dispatchEvent(new PointerEvent('pointerdown')));
+ok(await until(async () => (await G(hiders[1], () => window.__gl.alarmVia)) === 'web', 8000, 'alarm back'), 'and goes back to web audio after a tap');
 ok((await Promise.all(all.map((ph) => G(ph, () => Object.keys(window.__gl.local.nearLocs))))).flat().every((id) => id === seekerPid), 'only seekers send their spot for the alarm, never hiders');
 await setPos(hiders[1], off(0, 300));
 ok(await until(async () => !(await G(hiders[1], () => window.__gl.alarmOn)), 8000, 'alarm off'), 'the alarm stops once the seeker is out of range');
